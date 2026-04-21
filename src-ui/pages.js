@@ -1032,7 +1032,17 @@ function StrategyView() {
   </div>`;
 }
 
-function EmbeddedDualAgentsPanel({ tab = "room" }) {
+function normalizeDuoPanelTab(value) {
+  const next = String(value || "collaborate")
+    .trim()
+    .toLowerCase();
+  if (next === "room") return "collaborate";
+  if (next === "work" || next === "reviews") return "execute";
+  if (next === "execute" || next === "chat") return next;
+  return "collaborate";
+}
+
+function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
   const [todoProject, setTodoProject] = useState("");
   const [todoTitle, setTodoTitle] = useState("");
   const [todoTask, setTodoTask] = useState("");
@@ -1089,7 +1099,31 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
   );
   const attentionSignals = linkedSignals.length + linkedInboxItems.length;
   const codex = permData.value?.provider_status?.providers?.codex || {};
+  const activeTab = normalizeDuoPanelTab(tab);
   const byId = Object.fromEntries(participants.map((p) => [p.id, p]));
+  const activeParticipants = participants.filter((participant) => {
+    const state = presence[participant.id] || "idle";
+    return state && state !== "idle";
+  });
+  const latestDisagreement = [...events]
+    .reverse()
+    .find(
+      (evt) =>
+        evt.kind === "challenge_requested" || evt.kind === "rebuttal_requested",
+    );
+  const collaborationStatus = activeParticipants.length
+    ? activeParticipants
+        .map((participant) => {
+          const state = presence[participant.id] || "idle";
+          return `${participant.label} ${state}`;
+        })
+        .join(" · ")
+    : "quiet";
+  const conflictSummary = writeConflicts.length
+    ? `blocked on ${writeConflicts.length} write scope${writeConflicts.length > 1 ? "s" : ""}`
+    : activeLeases.length
+      ? `${activeLeases.length} active lease${activeLeases.length > 1 ? "s" : ""}`
+      : "no write conflicts";
   useEffect(() => {
     if (!todoProject) {
       setTodoProject(session?.project || currentProject.value || "");
@@ -1179,6 +1213,238 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
       return "var(--green)";
     return "var(--cyan)";
   };
+  const shortTs = (value) => {
+    const ts = String(value || "").trim();
+    if (!ts) return "";
+    if (ts.includes("T") && ts.length >= 16) return ts.slice(11, 16);
+    return ts.slice(0, 16);
+  };
+  const compactText = (value, max = 140) => {
+    const text = String(value || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!text) return "";
+    return text.length > max ? text.slice(0, max - 3) + "..." : text;
+  };
+  const eventKindLabel = (kind) => {
+    switch (kind) {
+      case "agent_presence":
+        return "presence";
+      case "challenge_requested":
+        return "challenge";
+      case "rebuttal_requested":
+        return "rebuttal";
+      case "review_verdict":
+        return "review";
+      case "gate_result":
+        return "gate";
+      case "delegation_linked":
+        return "delegation";
+      case "plan_linked":
+        return "plan";
+      case "lease_acquired":
+        return "lease";
+      case "lease_released":
+        return "release";
+      case "session_created":
+        return "session";
+      default:
+        return String(kind || "event").replaceAll("_", " ");
+    }
+  };
+  const presenceTone = (state) => {
+    if (state === "replying") return "var(--green)";
+    if (state === "thinking") return "var(--yellow)";
+    if (state === "blocked") return "var(--accent)";
+    return "var(--t3)";
+  };
+  const workTone = (status) => {
+    if (status === "running") return "var(--green)";
+    if (status === "ready") return "var(--cyan)";
+    if (status === "blocked" || status === "failed") return "var(--accent)";
+    if (status === "done") return "var(--green)";
+    return "var(--t3)";
+  };
+  const reviewTone = (status) => {
+    if (status === "approve") return "var(--green)";
+    if (status === "warn") return "var(--yellow)";
+    if (status === "fail") return "var(--accent)";
+    return "var(--t3)";
+  };
+  const participantTelemetry = participants.map((participant) => {
+    const provider = participant.provider || "";
+    const state = presence[participant.id] || "idle";
+    const canWrite = activeWriters.some(
+      (writer) => writer.participant_id === participant.id,
+    );
+    const executorItems = linkedWorkItems.filter(
+      (item) => item.executor_provider === provider,
+    );
+    const reviewerItems = linkedWorkItems.filter(
+      (item) => item.reviewer_provider === provider,
+    );
+    const recentEvent =
+      [...events].reverse().find((evt) => evt.actor === participant.id) || null;
+    const recentMessage =
+      [...sharedRoomMessages]
+        .reverse()
+        .find((msg) => msg.participant === participant.id) || null;
+    const lastEventTs = recentEvent?.ts || "";
+    const lastMessageTs = recentMessage?.ts || "";
+    const preferMessage =
+      lastMessageTs && (!lastEventTs || lastMessageTs >= lastEventTs);
+    return {
+      participant,
+      provider,
+      state,
+      canWrite,
+      readyCount: executorItems.filter((item) => item.status === "ready")
+        .length,
+      runningCount: executorItems.filter((item) => item.status === "running")
+        .length,
+      blockedCount: executorItems.filter(
+        (item) => item.status === "blocked" || item.status === "failed",
+      ).length,
+      reviewCount: reviewerItems.filter((item) => !item.review_verdict?.status)
+        .length,
+      eventCount: events.filter((evt) => evt.actor === participant.id).length,
+      messageCount: sharedRoomMessages.filter(
+        (msg) => msg.participant === participant.id,
+      ).length,
+      lastLabel: preferMessage
+        ? "last reply"
+        : recentEvent
+          ? eventKindLabel(recentEvent.kind)
+          : "waiting",
+      lastSummary: preferMessage
+        ? compactText(recentMessage?.msg || "", 120)
+        : compactText(
+            (recentEvent ? eventBody(recentEvent) : "") ||
+              recentEvent?.payload?.summary ||
+              "",
+            120,
+          ),
+      lastTs: preferMessage ? lastMessageTs : lastEventTs,
+    };
+  });
+  const activityFeed = [
+    ...events.map((evt) => ({
+      id: evt.id,
+      ts: evt.ts || "",
+      actor:
+        evt.actor === "user"
+          ? "You"
+          : evt.actor === "system"
+            ? "System"
+            : participantLabel(evt.actor),
+      label: eventKindLabel(evt.kind),
+      summary: compactText(
+        eventBody(evt) || JSON.stringify(evt.payload || {}),
+        160,
+      ),
+      tone: toneFor(evt),
+      surface: "event",
+    })),
+    ...sharedRoomMessages.map((msg) => ({
+      id: `msg-${msg.ts || ""}-${msg.role}-${msg.participant || "user"}`,
+      ts: msg.ts || "",
+      actor: msg.role === "user" ? "You" : participantLabel(msg.participant),
+      label: msg.role === "user" ? "instruction" : "reply",
+      summary: compactText(msg.msg || "", 160),
+      tone: msg.role === "user" ? "var(--text)" : "var(--cyan)",
+      surface: msg.round_id ? "round" : "direct",
+    })),
+  ]
+    .filter((entry) => entry.summary)
+    .sort((a, b) => (b.ts || "").localeCompare(a.ts || ""))
+    .slice(0, 12);
+  const pipelineCounts = [
+    { label: "ready", count: readyWorkItems.length, color: "var(--cyan)" },
+    { label: "running", count: runningWorkItems.length, color: "var(--green)" },
+    { label: "review", count: pendingReviews.length, color: "var(--yellow)" },
+    {
+      label: "approved",
+      count: reviewApprovals.length,
+      color: "var(--green)",
+    },
+    {
+      label: "risk",
+      count:
+        reviewWarnings.length + reviewFailures.length + blockedWorkItems.length,
+      color: "var(--accent)",
+    },
+  ];
+  const executionHighlights = [
+    ...linkedWorkItems
+      .filter(
+        (item) =>
+          item.status === "running" ||
+          item.status === "blocked" ||
+          item.status === "failed" ||
+          !!item.review_verdict?.status,
+      )
+      .map((item) => ({
+        id: `work-${item.id}`,
+        ts: item.updated_at || item.created_at || "",
+        actor:
+          item.executor_provider ||
+          item.reviewer_provider ||
+          item.assignee ||
+          "task",
+        label: item.review_verdict?.status
+          ? `review ${item.review_verdict.status}`
+          : item.status,
+        summary: compactText(item.title || item.task || item.id, 80),
+        detail: compactText(
+          item.review_verdict?.summary || item.result || item.task || "",
+          140,
+        ),
+        tone: item.review_verdict?.status
+          ? reviewTone(item.review_verdict.status)
+          : workTone(item.status),
+      })),
+    ...linkedSignals.map((signal, index) => ({
+      id: `signal-${index}`,
+      ts: signal.created_at || "",
+      actor: signal.source || "signal",
+      label: signal.level || "signal",
+      summary: compactText(signal.title || signal.message || "signal", 80),
+      detail: compactText(signal.message || signal.title || "", 140),
+      tone:
+        signal.level === "error" || signal.level === "critical"
+          ? "var(--accent)"
+          : "var(--yellow)",
+    })),
+    ...linkedInboxItems.map((item, index) => ({
+      id: `inbox-${index}`,
+      ts: item.created_at || item.ts || "",
+      actor: item.project || "inbox",
+      label: "attention",
+      summary: compactText(item.message || "inbox item", 80),
+      detail: compactText(item.message || "", 140),
+      tone: "var(--accent)",
+    })),
+    ...activeLeases.map((lease) => ({
+      id: `lease-${lease.id}`,
+      ts: lease.updated_at || lease.created_at || "",
+      actor: participantLabel(lease.participant_id),
+      label: "lease",
+      summary: compactText(lease.work_item_id || lease.id, 80),
+      detail: compactText((lease.paths || []).join(", ") || "no paths", 140),
+      tone: "var(--yellow)",
+    })),
+    ...parallelBatches.map((batch) => ({
+      id: `batch-${batch.batch_id}`,
+      ts: batch.updated_at || batch.created_at || "",
+      actor: "parallel",
+      label: batch.status || "batch",
+      summary: compactText(batch.batch_id || "safe parallel", 80),
+      detail: `queued ${batch.pending || 0} | running ${batch.running || 0} | done ${batch.done || 0} | failed ${(batch.failed || 0) + (batch.rejected || 0)}`,
+      tone: batch.failed || batch.rejected ? "var(--accent)" : "var(--cyan)",
+    })),
+  ]
+    .sort((a, b) => (b.ts || "").localeCompare(a.ts || ""))
+    .slice(0, 10);
   const createTodo = async () => {
     const project = (
       todoProject ||
@@ -1347,7 +1613,7 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
       No active duo session for this context.
     </div>`;
   }
-  if (tab === "room") {
+  if (activeTab === "collaborate") {
     return html`<div style="display:flex;flex-direction:column;gap:var(--sp-s)">
       <div class="panel">
         <div
@@ -1357,19 +1623,18 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
             <div
               style="font-family:var(--font-mono);font-size:var(--fs-s);color:var(--cyan)"
             >
-              duo room: ${session.project || "_orchestrator"}
+              collaborate
             </div>
             <div style="font-size:var(--fs-s);color:var(--t3)">
-              ${activeDualSession.value || "no session id"}${codex.ready
-                ? ""
-                : " · Codex not ready"}
+              visible second-agent workflow for
+              ${session.project || "_orchestrator"}
             </div>
           </div>
           <div
             style="font-size:var(--fs-s);color:var(--t3);max-width:320px;text-align:right"
           >
-            use the shared composer in the chat shell for ask both, mentions,
-            and challenge turns. The same messages continue in Chat mode.
+            Use the shared composer in Collaborate for ask both, challenge, and
+            secondary actions. The same history continues in Chat mode.
           </div>
         </div>
         <div
@@ -1381,7 +1646,15 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
               activeRoomTab.value = "chat";
             }}
           >
-            continue in chat
+            back to chat
+          </button>
+          <button
+            class="action-btn"
+            onClick=${() => {
+              activeRoomTab.value = "execute";
+            }}
+          >
+            open execute
           </button>
           <button
             class="action-btn"
@@ -1396,21 +1669,131 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
         <div
           style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--sp-xs);margin-top:var(--sp-s)"
         >
-          ${participants.map((participant) => {
-            const state = presence[participant.id] || "idle";
-            const canWrite = activeWriters.some(
-              (writer) => writer.participant_id === participant.id,
-            );
+          ${[
+            ["status", collaborationStatus, "var(--cyan)"],
+            [
+              "working set",
+              workingSet.length
+                ? `${workingSet.length} path${workingSet.length > 1 ? "s" : ""}`
+                : "empty",
+              "var(--yellow)",
+            ],
+            [
+              "disagreement",
+              latestDisagreement?.payload?.summary || "none",
+              latestDisagreement ? "var(--yellow)" : "var(--t3)",
+            ],
+            [
+              "conflicts",
+              conflictSummary,
+              writeConflicts.length ? "var(--accent)" : "var(--t3)",
+            ],
+            [
+              "codex",
+              codex.ready ? "ready" : "needs setup",
+              codex.ready ? "var(--green)" : "var(--accent)",
+            ],
+          ].map(
+            ([label, value, color]) =>
+              html`<div
+                style="padding:var(--sp-s);border:1px solid var(--border);background:var(--bg-soft)"
+              >
+                <div
+                  style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+                >
+                  ${label}
+                </div>
+                <div
+                  style="font-size:var(--fs-s);color:${color};margin-top:4px;white-space:pre-wrap"
+                >
+                  ${value}
+                </div>
+              </div>`,
+          )}
+        </div>
+        <div
+          style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--sp-xs);margin-top:var(--sp-s)"
+        >
+          ${participantTelemetry.map((entry) => {
             return html`<div
               style="padding:var(--sp-s);border:1px solid var(--border);background:var(--bg-soft)"
             >
-              <div style="font-size:var(--fs-s);color:var(--text)">
-                ${participant.label}
+              <div
+                style="display:flex;justify-content:space-between;gap:var(--sp-xs);align-items:flex-start"
+              >
+                <div style="font-size:var(--fs-s);color:var(--text)">
+                  ${entry.participant.label}
+                </div>
+                <div
+                  style="font-size:var(--fs-s);color:${presenceTone(
+                    entry.state,
+                  )};font-family:var(--font-mono)"
+                >
+                  ${entry.lastTs ? shortTs(entry.lastTs) : "waiting"}
+                </div>
               </div>
               <div
-                style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+                style="font-size:var(--fs-s);color:${presenceTone(
+                  entry.state,
+                )};font-family:var(--font-mono)"
               >
-                ${participant.provider} · ${state}${canWrite ? " · write" : ""}
+                ${entry.provider} |
+                ${entry.state}${entry.canWrite ? " | writer" : ""}
+              </div>
+              <div
+                style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:var(--sp-xs)"
+              >
+                ${[
+                  ["ready", entry.readyCount, "var(--cyan)"],
+                  ["running", entry.runningCount, "var(--green)"],
+                  ["review", entry.reviewCount, "var(--yellow)"],
+                  ["blocked", entry.blockedCount, "var(--accent)"],
+                ].map(
+                  ([label, count, color]) =>
+                    html`<div
+                      style="padding:6px;border:1px solid var(--border);background:var(--bg)"
+                    >
+                      <div
+                        style="font-size:11px;color:var(--t3);font-family:var(--font-mono)"
+                      >
+                        ${label}
+                      </div>
+                      <div
+                        style="font-size:var(--fs-s);color:${color};font-family:var(--font-mono)"
+                      >
+                        ${count}
+                      </div>
+                    </div>`,
+                )}
+              </div>
+              <div
+                style="margin-top:var(--sp-xs);padding:var(--sp-xs);border:1px solid var(--border);background:var(--bg)"
+              >
+                <div
+                  style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+                >
+                  ${entry.lastLabel}
+                </div>
+                <div
+                  style="margin-top:4px;font-size:var(--fs-s);color:var(--text);white-space:pre-wrap"
+                >
+                  ${entry.lastSummary || "No visible activity yet."}
+                </div>
+              </div>
+              <div
+                style="display:flex;gap:6px;flex-wrap:wrap;margin-top:var(--sp-xs)"
+              >
+                ${[
+                  `${entry.messageCount} repl${entry.messageCount === 1 ? "y" : "ies"}`,
+                  `${entry.eventCount} event${entry.eventCount === 1 ? "" : "s"}`,
+                ].map(
+                  (label) =>
+                    html`<span
+                      style="padding:3px 8px;border:1px solid var(--border);background:var(--bg);font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+                    >
+                      ${label}
+                    </span>`,
+                )}
               </div>
             </div>`;
           })}
@@ -1422,12 +1805,59 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
           Collaborate no longer split history.
         </div>
       </div>
+      <div class="panel">
+        <div
+          style="font-family:var(--font-mono);font-size:var(--fs-s);color:var(--yellow);margin-bottom:var(--sp-xs)"
+        >
+          activity stream
+        </div>
+        <div
+          style="display:flex;flex-direction:column;gap:var(--sp-xs);max-height:320px;overflow:auto"
+        >
+          ${activityFeed.length
+            ? activityFeed.map(
+                (entry) =>
+                  html`<div
+                    style="padding:var(--sp-xs);border:1px solid var(--border);background:var(--bg-soft)"
+                  >
+                    <div
+                      style="display:flex;justify-content:space-between;gap:var(--sp-xs);align-items:flex-start"
+                    >
+                      <div
+                        style="font-size:var(--fs-s);color:${entry.tone};font-family:var(--font-mono)"
+                      >
+                        ${entry.actor} | ${entry.label}
+                      </div>
+                      <div
+                        style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+                      >
+                        ${shortTs(entry.ts)}${entry.surface
+                          ? ` | ${entry.surface}`
+                          : ""}
+                      </div>
+                    </div>
+                    <div
+                      style="margin-top:4px;font-size:var(--fs-s);color:var(--text);white-space:pre-wrap"
+                    >
+                      ${entry.summary}
+                    </div>
+                  </div>`,
+              )
+            : html`<div style="font-size:var(--fs-s);color:var(--t3)">
+                No activity yet.
+              </div>`}
+        </div>
+      </div>
       ${workingSet.length
         ? html`<details class="panel">
-            <div style="font-family:var(--font-mono);font-size:var(--fs-s);color:var(--yellow);margin-bottom:var(--sp-xs)">
+            <summary
+              style="cursor:pointer;font-family:var(--font-mono);font-size:var(--fs-s);color:var(--yellow)"
+            >
               working set
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:var(--sp-xs)">
+            </summary>
+            <div
+              style="display:flex;flex-wrap:wrap;gap:var(--sp-xs);margin-top:var(--sp-s)"
+            >
               ${workingSet.map(
                 (path) =>
                   html`<span
@@ -1437,13 +1867,13 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
                   </span>`,
               )}
             </div>
-          </div>`
+          </details>`
         : null}
       <div class="panel">
         <div
           style="font-family:var(--font-mono);font-size:var(--fs-s);color:var(--yellow);margin-bottom:var(--sp-xs)"
         >
-          collaboration rounds
+          room feed
         </div>
         <div
           style="display:flex;flex-direction:column;gap:var(--sp-xs);max-height:420px;overflow:auto"
@@ -1538,7 +1968,7 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
         : null}
     </div>`;
   }
-  if (tab === "work") {
+  if (activeTab === "execute") {
     return html`<div style="display:flex;flex-direction:column;gap:var(--sp-s)">
       <div class="panel">
         <div
@@ -1575,7 +2005,10 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
               disabled=${!!dualBusy.value}
               onClick=${queueParallelBatch}
             >
-              run safe parallel
+              run safe
+              parallel${selectedParallelItems.length
+                ? ` (${selectedParallelItems.length})`
+                : ""}
             </button>
           </div>
         </div>
@@ -1606,6 +2039,99 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
               </div>`,
           )}
         </div>
+        <div style="margin-top:var(--sp-s)">
+          <div
+            style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+          >
+            execution pulse
+          </div>
+          <div
+            style="display:flex;gap:6px;align-items:stretch;margin-top:var(--sp-xs)"
+          >
+            ${pipelineCounts.map(
+              (segment) =>
+                html`<div
+                  style="flex:${Math.max(
+                    segment.count,
+                    1,
+                  )};min-height:14px;border:1px solid var(--border);background:${segment.count
+                    ? segment.color
+                    : "var(--bg)"};opacity:${segment.count ? 1 : 0.2}"
+                  title=${`${segment.label}: ${segment.count}`}
+                ></div>`,
+            )}
+          </div>
+          <div
+            style="display:flex;gap:6px;flex-wrap:wrap;margin-top:var(--sp-xs)"
+          >
+            ${pipelineCounts.map(
+              (segment) =>
+                html`<span
+                  style="padding:3px 8px;border:1px solid var(--border);background:var(--bg-soft);font-size:var(--fs-s);color:${segment.color};font-family:var(--font-mono)"
+                >
+                  ${segment.label} ${segment.count}
+                </span>`,
+            )}
+          </div>
+        </div>
+        <div
+          style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--sp-xs);margin-top:var(--sp-s)"
+        >
+          ${participantTelemetry.map(
+            (entry) =>
+              html`<div
+                style="padding:var(--sp-s);border:1px solid var(--border);background:var(--bg-soft)"
+              >
+                <div
+                  style="display:flex;justify-content:space-between;gap:var(--sp-xs);align-items:flex-start"
+                >
+                  <div style="font-size:var(--fs-s);color:var(--text)">
+                    ${entry.participant.label}
+                  </div>
+                  <div
+                    style="font-size:var(--fs-s);color:${presenceTone(
+                      entry.state,
+                    )};font-family:var(--font-mono)"
+                  >
+                    ${entry.state}
+                  </div>
+                </div>
+                <div
+                  style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+                >
+                  ${entry.provider}${entry.canWrite
+                    ? " | writer"
+                    : ""}${entry.lastTs ? " | " + shortTs(entry.lastTs) : ""}
+                </div>
+                <div
+                  style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:var(--sp-xs)"
+                >
+                  ${[
+                    ["ready", entry.readyCount, "var(--cyan)"],
+                    ["running", entry.runningCount, "var(--green)"],
+                    ["review", entry.reviewCount, "var(--yellow)"],
+                    ["blocked", entry.blockedCount, "var(--accent)"],
+                  ].map(
+                    ([label, count, color]) =>
+                      html`<div
+                        style="padding:6px;border:1px solid var(--border);background:var(--bg)"
+                      >
+                        <div
+                          style="font-size:11px;color:var(--t3);font-family:var(--font-mono)"
+                        >
+                          ${label}
+                        </div>
+                        <div
+                          style="font-size:var(--fs-s);color:${color};font-family:var(--font-mono)"
+                        >
+                          ${count}
+                        </div>
+                      </div>`,
+                  )}
+                </div>
+              </div>`,
+          )}
+        </div>
         ${writeConflicts.length
           ? html`<div
               style="margin-top:var(--sp-s);padding:var(--sp-s);border:1px solid var(--accent);background:var(--accent-dim);font-size:var(--fs-s);color:var(--accent)"
@@ -1618,7 +2144,7 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
           <summary
             style="cursor:pointer;font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
           >
-            advanced controls
+            advanced runtime controls
           </summary>
           ${writeConflicts.length
             ? html`<div
@@ -1672,6 +2198,152 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
             })}
           </div>
         </details>
+      </div>
+      <div class="panel">
+        <div
+          style="font-family:var(--font-mono);font-size:var(--fs-s);color:var(--yellow);margin-bottom:var(--sp-xs)"
+        >
+          execution watch
+        </div>
+        <div
+          style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--sp-xs)"
+        >
+          <div
+            style="padding:var(--sp-s);border:1px solid var(--border);background:var(--bg-soft)"
+          >
+            <div
+              style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+            >
+              write watch
+            </div>
+            <div
+              style="margin-top:4px;font-size:var(--fs-s);color:${writeConflicts.length
+                ? "var(--accent)"
+                : activeLeases.length
+                  ? "var(--yellow)"
+                  : "var(--green)"};white-space:pre-wrap"
+            >
+              ${writeConflicts.length
+                ? writeConflicts
+                    .slice(0, 3)
+                    .map(
+                      (conflict) =>
+                        `${conflict.left?.title || conflict.left?.id} vs ${conflict.right?.title || conflict.right?.id}`,
+                    )
+                    .join("\n")
+                : activeLeases.length
+                  ? activeLeases
+                      .slice(0, 3)
+                      .map(
+                        (lease) =>
+                          `${participantLabel(lease.participant_id)} -> ${(lease.paths || []).join(", ") || lease.work_item_id}`,
+                      )
+                      .join("\n")
+                  : "No active write contention."}
+            </div>
+          </div>
+          <div
+            style="padding:var(--sp-s);border:1px solid var(--border);background:var(--bg-soft)"
+          >
+            <div
+              style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+            >
+              review watch
+            </div>
+            <div
+              style="display:flex;flex-direction:column;gap:6px;margin-top:var(--sp-xs)"
+            >
+              ${(reviewFailures.length
+                ? reviewFailures
+                : reviewWarnings.length
+                  ? reviewWarnings
+                  : reviewApprovals
+              )
+                .slice(0, 3)
+                .map(
+                  (item) =>
+                    html`<div
+                      style="padding:6px;border:1px solid var(--border);background:var(--bg)"
+                    >
+                      <div style="font-size:var(--fs-s);color:var(--text)">
+                        ${compactText(item.title || item.id, 72)}
+                      </div>
+                      <div
+                        style="font-size:var(--fs-s);color:${reviewTone(
+                          item.review_verdict?.status,
+                        )};font-family:var(--font-mono)"
+                      >
+                        ${item.review_verdict?.status || item.status}
+                      </div>
+                      ${item.review_verdict?.summary
+                        ? html`<div
+                            style="font-size:var(--fs-s);color:var(--t3);margin-top:4px"
+                          >
+                            ${compactText(item.review_verdict.summary, 96)}
+                          </div>`
+                        : null}
+                    </div>`,
+                )}
+              ${!reviewFailures.length &&
+              !reviewWarnings.length &&
+              !reviewApprovals.length
+                ? html`<div style="font-size:var(--fs-s);color:var(--t3)">
+                    No review outcomes yet.
+                  </div>`
+                : null}
+            </div>
+          </div>
+          <div
+            style="padding:var(--sp-s);border:1px solid var(--border);background:var(--bg-soft)"
+          >
+            <div
+              style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+            >
+              attention
+            </div>
+            <div
+              style="display:flex;flex-direction:column;gap:6px;margin-top:var(--sp-xs)"
+            >
+              ${executionHighlights.length
+                ? executionHighlights.slice(0, 4).map(
+                    (entry) =>
+                      html`<div
+                        style="padding:6px;border:1px solid var(--border);background:var(--bg)"
+                      >
+                        <div
+                          style="display:flex;justify-content:space-between;gap:var(--sp-xs)"
+                        >
+                          <div
+                            style="font-size:var(--fs-s);color:${entry.tone};font-family:var(--font-mono)"
+                          >
+                            ${entry.actor} | ${entry.label}
+                          </div>
+                          <div
+                            style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+                          >
+                            ${shortTs(entry.ts)}
+                          </div>
+                        </div>
+                        <div
+                          style="margin-top:4px;font-size:var(--fs-s);color:var(--text)"
+                        >
+                          ${entry.summary}
+                        </div>
+                        ${entry.detail
+                          ? html`<div
+                              style="margin-top:4px;font-size:var(--fs-s);color:var(--t3)"
+                            >
+                              ${entry.detail}
+                            </div>`
+                          : null}
+                      </div>`,
+                  )
+                : html`<div style="font-size:var(--fs-s);color:var(--t3)">
+                    No execution signals yet.
+                  </div>`}
+            </div>
+          </div>
+        </div>
       </div>
       <details class="panel">
         <summary
@@ -1844,12 +2516,37 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
                       <div
                         style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
                       >
-                        ${item.project} · ${item.assignee} ·
+                        ${item.project} | ${item.assignee} |
                         ${item.status}${item.executor_provider
-                          ? " · exec " + item.executor_provider
+                          ? " | exec " + item.executor_provider
                           : ""}${item.reviewer_provider
-                          ? " · review " + item.reviewer_provider
+                          ? " | review " + item.reviewer_provider
+                          : ""}${item.updated_at
+                          ? " | " + shortTs(item.updated_at)
                           : ""}
+                      </div>
+                      <div
+                        style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"
+                      >
+                        ${[
+                          `scope ${String(item.write_intent || "read_only").replaceAll("_", " ")}`,
+                          item.declared_paths?.length
+                            ? `${item.declared_paths.length} path${item.declared_paths.length === 1 ? "" : "s"}`
+                            : "",
+                          lease
+                            ? `lease ${(lease.paths || []).length || 0} path${(lease.paths || []).length === 1 ? "" : "s"}`
+                            : "",
+                          selected ? "parallel selected" : "",
+                        ]
+                          .filter(Boolean)
+                          .map(
+                            (label) =>
+                              html`<span
+                                style="padding:3px 8px;border:1px solid var(--border);background:var(--bg);font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+                              >
+                                ${label}
+                              </span>`,
+                          )}
                       </div>
                       ${item.declared_paths?.length ||
                       item.write_intent !== "read_only"
@@ -1857,7 +2554,7 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
                             <summary
                               style="cursor:pointer;font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
                             >
-                              advanced scope
+                              scope detail
                             </summary>
                             <div
                               style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono);margin-top:4px"
@@ -1880,18 +2577,6 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
                           </div>`
                         : null}
                     </div>
-                    ${canQueue
-                      ? html`<label
-                          style="display:flex;align-items:center;gap:6px;font-size:var(--fs-s);color:var(--t3)"
-                        >
-                          <input
-                            type="checkbox"
-                            checked=${selected}
-                            onInput=${() => toggleParallelItem(item.id)}
-                          />
-                          parallel
-                        </label>`
-                      : null}
                   </div>
                   <div
                     style="display:flex;gap:var(--sp-xs);flex-wrap:wrap;margin-top:var(--sp-xs)"
@@ -1914,25 +2599,48 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
                           mark done
                         </button>`
                       : null}
-                    ${item.write_intent !== "read_only" && !lease
-                      ? html`<details>
-                          <summary
-                            style="cursor:pointer;font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
-                          >
-                            advanced
-                          </summary>
-                          <div style="margin-top:var(--sp-xs)">
-                            <button
-                              class="action-btn"
-                              disabled=${!!dualBusy.value}
-                              onClick=${() => acquireLease(item)}
-                            >
-                              acquire lease
-                            </button>
-                          </div>
-                        </details>`
-                      : null}
                   </div>
+                  ${selected
+                    ? html`<div
+                        style="margin-top:var(--sp-xs);font-size:var(--fs-s);color:var(--cyan);font-family:var(--font-mono)"
+                      >
+                        selected for safe parallel
+                      </div>`
+                    : null}
+                  ${canQueue || (item.write_intent !== "read_only" && !lease)
+                    ? html`<details style="margin-top:var(--sp-xs)">
+                        <summary
+                          style="cursor:pointer;font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+                        >
+                          advanced
+                        </summary>
+                        <div
+                          style="display:flex;gap:var(--sp-xs);flex-wrap:wrap;margin-top:var(--sp-xs)"
+                        >
+                          ${canQueue
+                            ? html`<label
+                                style="display:flex;align-items:center;gap:6px;font-size:var(--fs-s);color:var(--t3)"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked=${selected}
+                                  onInput=${() => toggleParallelItem(item.id)}
+                                />
+                                select for safe parallel
+                              </label>`
+                            : null}
+                          ${item.write_intent !== "read_only" && !lease
+                            ? html`<button
+                                class="action-btn"
+                                disabled=${!!dualBusy.value}
+                                onClick=${() => acquireLease(item)}
+                              >
+                                acquire lease
+                              </button>`
+                            : null}
+                        </div>
+                      </details>`
+                    : null}
                 </div>`;
               })
             : html`<div style="font-size:var(--fs-s);color:var(--t3)">
@@ -1977,6 +2685,107 @@ function EmbeddedDualAgentsPanel({ tab = "room" }) {
                 </div>
               </div>`,
           )}
+        </div>
+        <div
+          style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--sp-xs);margin-bottom:var(--sp-s)"
+        >
+          <div
+            style="padding:var(--sp-s);border:1px solid var(--border);background:var(--bg-soft)"
+          >
+            <div
+              style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+            >
+              latest review decisions
+            </div>
+            <div
+              style="display:flex;flex-direction:column;gap:6px;margin-top:var(--sp-xs)"
+            >
+              ${[...reviewFailures, ...reviewWarnings, ...reviewApprovals]
+                .slice(0, 4)
+                .map(
+                  (item) =>
+                    html`<div
+                      style="padding:6px;border:1px solid var(--border);background:var(--bg)"
+                    >
+                      <div style="font-size:var(--fs-s);color:var(--text)">
+                        ${compactText(item.title || item.id, 72)}
+                      </div>
+                      <div
+                        style="font-size:var(--fs-s);color:${reviewTone(
+                          item.review_verdict?.status,
+                        )};font-family:var(--font-mono)"
+                      >
+                        ${item.review_verdict?.status || item.status}
+                      </div>
+                      ${item.review_verdict?.summary
+                        ? html`<div
+                            style="font-size:var(--fs-s);color:var(--t3);margin-top:4px"
+                          >
+                            ${compactText(item.review_verdict.summary, 96)}
+                          </div>`
+                        : null}
+                    </div>`,
+                )}
+              ${!reviewFailures.length &&
+              !reviewWarnings.length &&
+              !reviewApprovals.length
+                ? html`<div style="font-size:var(--fs-s);color:var(--t3)">
+                    No review decisions yet.
+                  </div>`
+                : null}
+            </div>
+          </div>
+          <div
+            style="padding:var(--sp-s);border:1px solid var(--border);background:var(--bg-soft)"
+          >
+            <div
+              style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+            >
+              live results + alerts
+            </div>
+            <div
+              style="display:flex;flex-direction:column;gap:6px;margin-top:var(--sp-xs)"
+            >
+              ${executionHighlights.slice(0, 4).map(
+                (entry) =>
+                  html`<div
+                    style="padding:6px;border:1px solid var(--border);background:var(--bg)"
+                  >
+                    <div
+                      style="display:flex;justify-content:space-between;gap:var(--sp-xs)"
+                    >
+                      <div
+                        style="font-size:var(--fs-s);color:${entry.tone};font-family:var(--font-mono)"
+                      >
+                        ${entry.actor} | ${entry.label}
+                      </div>
+                      <div
+                        style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+                      >
+                        ${shortTs(entry.ts)}
+                      </div>
+                    </div>
+                    <div
+                      style="margin-top:4px;font-size:var(--fs-s);color:var(--text)"
+                    >
+                      ${entry.summary}
+                    </div>
+                    ${entry.detail
+                      ? html`<div
+                          style="margin-top:4px;font-size:var(--fs-s);color:var(--t3)"
+                        >
+                          ${entry.detail}
+                        </div>`
+                      : null}
+                  </div>`,
+              )}
+              ${!executionHighlights.length
+                ? html`<div style="font-size:var(--fs-s);color:var(--t3)">
+                    No execution highlights yet.
+                  </div>`
+                : null}
+            </div>
+          </div>
         </div>
         <details>
           <summary
@@ -2276,7 +3085,7 @@ function DualAgentsView() {
         This compatibility view is deprecated. Use the main chat with the
         Solo/Duo toggle instead.
       </div>
-      <${EmbeddedDualAgentsPanel} tab="room" />
+      <${EmbeddedDualAgentsPanel} tab="collaborate" />
     </div>
   </div>`;
 }

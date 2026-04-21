@@ -87,6 +87,17 @@ import {
 const inpHist = [];
 let hIdx = -1;
 let draftT = null;
+
+function normalizeDuoView(value) {
+  const next = String(value || "chat")
+    .trim()
+    .toLowerCase();
+  if (next === "room") return "collaborate";
+  if (next === "work" || next === "reviews") return "execute";
+  if (next === "collaborate" || next === "execute") return next;
+  return "chat";
+}
+
 function Tile({ a }) {
   const act = activities.value[a.name];
   const isActive = !!act;
@@ -541,7 +552,9 @@ function ChatSidebar() {
   const prevCount = useRef(0);
   const showScrollBtn = signal(false);
   const duoEnabled = chatCollabMode.value === "duo";
-  const duoChatMode = duoEnabled && activeRoomTab.value !== "work";
+  const duoView = duoEnabled ? normalizeDuoView(activeRoomTab.value) : "chat";
+  const duoCollaborateMode = duoEnabled && duoView === "collaborate";
+  const duoExecuteMode = duoEnabled && duoView === "execute";
   const soloProvider =
     !currentProject.value &&
     permData.value?.provider_status?.roles?.orchestrator_provider === "codex"
@@ -571,7 +584,7 @@ function ChatSidebar() {
   const roomTarget =
     participants.find((p) => p.id === duoComposerTarget) || null;
   const latestDuoRound = (() => {
-    if (!duoEnabled || activeRoomTab.value === "work" || isStreaming.value) {
+    if (!duoCollaborateMode || isStreaming.value) {
       return null;
     }
     const sessionId =
@@ -596,7 +609,7 @@ function ChatSidebar() {
     setDuoComposerAction("mention");
     setDuoComposerTarget(participantId);
     setDuoAdvancedOpen(true);
-    activeRoomTab.value = "chat";
+    activeRoomTab.value = "collaborate";
   };
   const setDuoNextAction = (action) => {
     setDuoComposerAction(action);
@@ -607,7 +620,15 @@ function ChatSidebar() {
         action === "promote_plan" ||
         action === "child_session",
     );
-    activeRoomTab.value = "chat";
+    activeRoomTab.value = "collaborate";
+  };
+  const setDuoView = (nextView) => {
+    activeRoomTab.value = nextView;
+    if (nextView !== "chat") {
+      ensureDualSession(currentProject.value || "").catch((e) =>
+        showToast("Duo init error: " + e, "error"),
+      );
+    }
   };
   useEffect(() => {
     const cnt = sideMessages.value.length;
@@ -632,12 +653,14 @@ function ChatSidebar() {
     );
   }, [duoEnabled, currentProject.value]);
   useEffect(() => {
-    if (duoEnabled && activeRoomTab.value === "reviews") {
-      activeRoomTab.value = "work";
+    if (!duoEnabled) return;
+    const normalized = normalizeDuoView(activeRoomTab.value);
+    if (normalized !== activeRoomTab.value) {
+      activeRoomTab.value = normalized;
     }
   }, [duoEnabled, activeRoomTab.value]);
   useEffect(() => {
-    if (!duoEnabled || !duoChatMode) return;
+    if (!duoEnabled || !duoCollaborateMode) return;
     if (
       duoComposerAction === "mention" ||
       duoComposerAction === "challenge" ||
@@ -654,7 +677,7 @@ function ChatSidebar() {
     }
   }, [
     duoEnabled,
-    duoChatMode,
+    duoCollaborateMode,
     duoComposerAction,
     duoComposerTarget,
     participants,
@@ -694,7 +717,7 @@ function ChatSidebar() {
     const v = inputRef.current?.value;
     if (!v?.trim()) return;
     if (
-      (!duoEnabled || !duoChatMode) &&
+      (!duoEnabled || duoView === "chat") &&
       v.startsWith("/") &&
       execSlash(v.trim())
     ) {
@@ -709,13 +732,15 @@ function ChatSidebar() {
     if (pastedImg.value) {
       pastedImg.value = null;
     }
-    if (!duoEnabled || !duoChatMode) {
+    if (!duoEnabled || duoView === "chat") {
       sendMessage(v);
       return;
     }
     try {
       await ensureDualSession(currentProject.value || "");
-      if (duoComposerAction === "mention") {
+      if (duoComposerAction === "send") {
+        sendMessage(msg);
+      } else if (duoComposerAction === "mention") {
         if (!duoComposerTarget) {
           showToast("Pick a room target", "error");
           return;
@@ -841,7 +866,7 @@ function ChatSidebar() {
               : "var(--t3)"};border:none;font-size:var(--fs-s);padding:2px 6px;cursor:pointer;font-family:var(--font-mono)"
             onClick=${() => {
               chatCollabMode.value = "duo";
-              activeRoomTab.value = "chat";
+              activeRoomTab.value = "collaborate";
               ensureDualSession(currentProject.value || "").catch((e) =>
                 showToast("Duo init error: " + e, "error"),
               );
@@ -930,37 +955,59 @@ function ChatSidebar() {
           <div
             style="display:flex;justify-content:space-between;gap:var(--sp-s);align-items:center;flex-wrap:wrap"
           >
-            <div
-              style="font-size:var(--fs-s);color:var(--cyan);font-family:var(--font-mono)"
-            >
-              duo mode for ${currentProject.value || "_orchestrator"}
-            </div>
-            <div style="font-size:var(--fs-s);color:var(--t3)">
-              same chat canvas with two visible agents
+            <div>
+              <div
+                style="font-size:var(--fs-s);color:var(--cyan);font-family:var(--font-mono)"
+              >
+                duo for ${currentProject.value || "_orchestrator"}
+              </div>
+              <div style="font-size:var(--fs-s);color:var(--t3)">
+                ${duoView === "chat"
+                  ? "Chat stays primary. Switch to Collaborate when you want both agents visible."
+                  : duoView === "collaborate"
+                    ? "Compare Claude and Codex, ask both, or challenge one side."
+                    : "Run work and inspect results without leaving the shared context."}
+              </div>
             </div>
           </div>
           <div
             style="display:flex;gap:var(--sp-xs);flex-wrap:wrap;margin-top:var(--sp-xs)"
           >
             <button
-              style="background:${activeRoomTab.value === "work"
+              style="background:${duoView === "chat"
                 ? "var(--cyan)"
-                : "transparent"};color:${activeRoomTab.value === "work"
+                : "transparent"};color:${duoView === "chat"
                 ? "var(--bg)"
-                : "var(--t3)"};border:1px solid ${activeRoomTab.value === "work"
+                : "var(--t3)"};border:1px solid ${duoView === "chat"
                 ? "var(--cyan)"
                 : "var(--border)"};font-size:var(--fs-s);padding:4px 8px;cursor:pointer;font-family:var(--font-mono)"
-              onClick=${() => {
-                activeRoomTab.value =
-                  activeRoomTab.value === "work" ? "chat" : "work";
-                if (activeRoomTab.value === "work") {
-                  ensureDualSession(currentProject.value || "").catch((e) =>
-                    showToast("Duo init error: " + e, "error"),
-                  );
-                }
-              }}
+              onClick=${() => setDuoView("chat")}
             >
-              ${activeRoomTab.value === "work" ? "hide execute" : "execute"}
+              chat
+            </button>
+            <button
+              style="background:${duoView === "collaborate"
+                ? "var(--cyan)"
+                : "transparent"};color:${duoView === "collaborate"
+                ? "var(--bg)"
+                : "var(--t3)"};border:1px solid ${duoView === "collaborate"
+                ? "var(--cyan)"
+                : "var(--border)"};font-size:var(--fs-s);padding:4px 8px;cursor:pointer;font-family:var(--font-mono)"
+              onClick=${() => setDuoView("collaborate")}
+            >
+              collaborate
+            </button>
+            <button
+              style="background:${duoView === "execute"
+                ? "var(--cyan)"
+                : "transparent"};color:${duoView === "execute"
+                ? "var(--bg)"
+                : "var(--t3)"};border:1px solid ${duoView === "execute"
+                ? "var(--cyan)"
+                : "var(--border)"};font-size:var(--fs-s);padding:4px 8px;cursor:pointer;font-family:var(--font-mono)"
+              onClick=${() => setDuoView("execute")}
+            >
+              execute
             </button>
           </div>
         </div>`
@@ -974,7 +1021,9 @@ function ChatSidebar() {
       style="position:relative"
     >
       ${sideMessages.value.map((m, i) => html`<${ChatMsg} key=${i} m=${m} />`)}
-      ${duoChatMode ? html`<${DuoLiveStatus} session=${duoSession} />` : null}
+      ${duoCollaborateMode
+        ? html`<${DuoLiveStatus} session=${duoSession} />`
+        : null}
       <${StreamBubble} />
     </div>
     ${latestDuoRound
@@ -1022,10 +1071,7 @@ function ChatSidebar() {
             <button
               class="action-btn"
               onClick=${() => {
-                activeRoomTab.value = "work";
-                ensureDualSession(currentProject.value || "").catch((e) =>
-                  showToast("Duo init error: " + e, "error"),
-                );
+                setDuoView("execute");
               }}
             >
               open execute
@@ -1067,11 +1113,12 @@ function ChatSidebar() {
           >
         </div>`
       : null}
-    ${duoChatMode
+    ${duoCollaborateMode
       ? html`<div
           style="display:flex;gap:var(--sp-xs);flex-wrap:wrap;padding:var(--sp-s);border-top:1px solid var(--border);background:var(--bg-soft)"
         >
           ${[
+            ["send", "send"],
             ["ask_both", "ask both"],
             ["challenge", "challenge"],
           ].map(
@@ -1119,7 +1166,7 @@ function ChatSidebar() {
           </button>
         </div>`
       : null}
-    ${duoChatMode && duoAdvancedOpen
+    ${duoCollaborateMode && duoAdvancedOpen
       ? html`<div
           style="display:flex;gap:var(--sp-xs);flex-wrap:wrap;padding:0 var(--sp-s) var(--sp-s);background:var(--bg-soft)"
         >
@@ -1187,8 +1234,11 @@ function ChatSidebar() {
         ref=${inputRef}
         placeholder=${isStreaming.value
           ? "waiting for response..."
-          : duoChatMode
+          : duoCollaborateMode
             ? (() => {
+                if (duoComposerAction === "send") {
+                  return "continue with the main chat...";
+                }
                 if (duoComposerAction === "mention") {
                   return (
                     "message " + (roomTarget?.label || "selected agent") + "..."
@@ -1257,7 +1307,7 @@ function ChatSidebar() {
           </button>`
         : html`<button class="send-btn" onClick=${send}>↑</button>`}
     </div>
-    ${duoEnabled && activeRoomTab.value === "work"
+    ${duoExecuteMode || duoCollaborateMode
       ? duoErr
         ? html`<div class="panel" style="margin:var(--sp-s)">
             <div
@@ -1275,7 +1325,7 @@ ${duoErr}</pre
           ? html`<div
               style="padding:var(--sp-s);border-top:1px solid var(--border);overflow:auto;max-height:40vh"
             >
-              <${EmbeddedDualAgentsPanel} tab=${activeRoomTab.value} />
+              <${EmbeddedDualAgentsPanel} tab=${duoView} />
             </div>`
           : html`<div class="panel" style="margin:var(--sp-s);color:var(--t3)">
               Loading duo panels...

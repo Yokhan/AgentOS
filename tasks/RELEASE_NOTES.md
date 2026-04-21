@@ -1,11 +1,9 @@
-# Agent OS 0.2.1
+# Agent OS 0.2.2
 
-- Tauri desktop app with installers for Windows (`NSIS` and `MSI`).
-- Auto-update pipeline wired for installed builds via GitHub Releases.
-- Installed binaries can recover the working repo root using bootstrap state.
-- Mixed-provider orchestration foundation for Claude and Codex.
-- Updated release tooling:
-  - signed updater artifacts
-  - `latest.json` generation
-  - GitHub Actions release workflow
-- Unified GitHub tag-based release flow enabled for future updater builds.
+- Dual-agent UX reframed around `Chat`, `Collaborate`, and `Execute`.
+- Observability-first duo panels:
+  - participant telemetry cards with visible activity state
+  - mixed activity stream of agent events and replies
+  - execution pulse, review watch, and alert summaries
+- Execution controls reduced on the main surface while preserving metadata visibility.
+- Signed Windows updater artifacts for `NSIS` and `MSI`.

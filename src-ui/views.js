@@ -238,7 +238,7 @@ function Header() {
         onClick=${() => {
           const next = chatCollabMode.value !== "duo";
           chatCollabMode.value = next ? "duo" : "solo";
-          activeRoomTab.value = next ? "room" : "chat";
+          activeRoomTab.value = next ? "collaborate" : "chat";
           if (next) ensureDualSession(currentProject.value || "");
         }}
       >

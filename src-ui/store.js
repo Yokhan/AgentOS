@@ -115,12 +115,26 @@ const chatCollabMode = signal(
 effect(() =>
   localStorage.setItem("agentos_chat_collab_mode", chatCollabMode.value),
 );
+function normalizeDuoView(value) {
+  const next = String(value || "chat")
+    .trim()
+    .toLowerCase();
+  if (next === "room") return "collaborate";
+  if (next === "work" || next === "reviews") return "execute";
+  if (next === "collaborate" || next === "execute") return next;
+  return "chat";
+}
 const activeRoomTab = signal(
-  localStorage.getItem("agentos_active_room_tab") || "chat",
+  normalizeDuoView(localStorage.getItem("agentos_active_room_tab")),
 );
-effect(() =>
-  localStorage.setItem("agentos_active_room_tab", activeRoomTab.value),
-);
+effect(() => {
+  const normalized = normalizeDuoView(activeRoomTab.value);
+  if (normalized !== activeRoomTab.value) {
+    activeRoomTab.value = normalized;
+    return;
+  }
+  localStorage.setItem("agentos_active_room_tab", normalized);
+});
 const activeDualSession = signal(null);
 const dualSessionData = signal(null);
 const dualHistories = signal({});
