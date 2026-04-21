@@ -92,6 +92,16 @@ function Read-NormalizedText {
     return [string]::Concat((Get-Content $Path -Raw))
 }
 
+function Write-Utf8NoBom {
+    param(
+        [string]$Path,
+        [string]$Content
+    )
+
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
 $platforms = [ordered]@{}
 
 if ($nsisInstaller) {
@@ -140,7 +150,7 @@ $json = [ordered]@{
 }
 
 $latestJsonPath = Join-Path $bundleRoot "latest.json"
-$json | ConvertTo-Json -Depth 8 | Set-Content -Path $latestJsonPath -Encoding UTF8
+Write-Utf8NoBom -Path $latestJsonPath -Content ($json | ConvertTo-Json -Depth 8)
 
 Write-Host ""
 Write-Host "Prepared updater release manifest:"

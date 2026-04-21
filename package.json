@@ -1,7 +1,7 @@
 {
   "name": "agent-os",
-  "version": "0.2.2",
-  "description": "Agent OS — Desktop command center for AI agents",
+  "version": "0.2.3",
+  "description": "Agent OS - Desktop command center for AI agents",
   "private": true,
   "scripts": {
     "tauri": "npx @tauri-apps/cli",

@@ -8,7 +8,7 @@ static RE_BLOCKERS: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(r"(?m)^## [Bb]locker.*\n+\S").unwrap()
 });
 
-/// Scanned project info — mirrors Python scan-projects-fast.py output
+/// Scanned project info - mirrors Python scan-projects-fast.py output
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ProjectInfo {
     pub id: usize,
@@ -107,9 +107,15 @@ fn scan_repo(path: &Path, index: usize, project_segment: &std::collections::Hash
     let agents = read_agents(path);
     let has_brain = path.join("brain").exists();
 
-    // Phase from PROJECT_SPEC.md
-    let phase = read_phase(&path.join("PROJECT_SPEC.md"));
-
+    // Phase from PROJECT_SPEC.md, with fallback to current handoff milestone
+    let phase = {
+        let phase_from_spec = read_phase(&path.join("PROJECT_SPEC.md"));
+        if phase_from_spec.is_empty() {
+            read_current_milestone(&current_md)
+        } else {
+            phase_from_spec
+        }
+    };
     // Lessons count
     let lessons = count_lessons(&path.join("tasks").join("lessons.md"));
 
@@ -218,6 +224,25 @@ fn read_phase(path: &Path) -> String {
             }
         }
     }
+    String::new()
+}
+
+fn read_current_milestone(path: &Path) -> String {
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return String::new(),
+    };
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if let Some(value) = trimmed.strip_prefix("- Current milestone:") {
+            return value.trim().to_string();
+        }
+        if let Some(value) = trimmed.strip_prefix("Current milestone:") {
+            return value.trim().to_string();
+        }
+    }
+
     String::new()
 }
 

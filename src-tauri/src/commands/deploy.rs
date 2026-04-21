@@ -2,7 +2,7 @@
 //! All SSH operations use the yokhan-vps alias from ~/.ssh/config.
 
 use crate::state::AppState;
-use super::claude_runner::silent_cmd;
+use super::claude_runner::{find_bash, silent_cmd};
 
 const DANGEROUS_PATTERNS: &[&str] = &["|", ";", "&&", "||", "`", "$(", "${", "rm -rf", "mkfs", "dd if", "shutdown", "reboot", "init 0", "init 6", "> /dev", "chmod 777"];
 
@@ -45,13 +45,13 @@ pub fn deploy_static(state: &AppState, project: &str, target_path: &str, source:
     let ts = chrono::Utc::now().format("%Y%m%d-%H%M%S");
     let backup = format!("{}.bak-{}", target_path, ts);
     let _ = ssh_exec(host, &format!("cp -r {} {} 2>/dev/null || true", target_path, backup));
-    crate::log_info!("[deploy] backup {} → {}", target_path, backup);
+    crate::log_info!("[deploy] backup {} -> {}", target_path, backup);
 
     // Upload
     match scp_upload(host, &src, target_path) {
         Ok(_) => {
-            crate::log_info!("[deploy] uploaded {} → {}:{}", src, host, target_path);
-            Some(format!("**Deployed** {} → {}:{}\nBackup: {}", project, host, target_path, backup))
+            crate::log_info!("[deploy] uploaded {} -> {}:{}", src, host, target_path);
+            Some(format!("**Deployed** {} -> {}:{}\nBackup: {}", project, host, target_path, backup))
         }
         Err(e) => Some(format!("**Deploy failed:** {}", e)),
     }
@@ -73,13 +73,13 @@ pub fn deploy_verify(url: &str, expected: &str) -> Option<String> {
     let elapsed = start.elapsed().as_millis();
 
     let mut checks = Vec::new();
-    checks.push(if code == 200 { format!("✓ HTTP {}", code) } else { format!("✗ HTTP {}", code) });
-    checks.push(format!("✓ Response time: {}ms", elapsed));
+    checks.push(if code == 200 { format!("[ok] HTTP {}", code) } else { format!("[x] HTTP {}", code) });
+    checks.push(format!("[ok] Response time: {}ms", elapsed));
     if !expected.is_empty() {
         if body.contains(expected) {
-            checks.push(format!("✓ Contains: \"{}\"", expected));
+            checks.push(format!("[ok] Contains: \"{}\"", expected));
         } else {
-            checks.push(format!("✗ Missing: \"{}\"", expected));
+            checks.push(format!("[x] Missing: \"{}\"", expected));
         }
     }
     Some(format!("**Verify {}:**\n{}", url, checks.join("\n")))
@@ -143,14 +143,14 @@ fn sanitize_domain(d: &str) -> Option<&str> {
 pub fn ssl_monitor(domains: &[&str]) -> Option<String> {
     let mut results = Vec::new();
     for domain in domains {
-        let domain = match sanitize_domain(domain) { Some(d) => d, None => { results.push(format!("  {} → INVALID DOMAIN", domain)); continue; } };
-        let output = silent_cmd("bash")
+        let domain = match sanitize_domain(domain) { Some(d) => d, None => { results.push(format!("  {} -> INVALID DOMAIN", domain)); continue; } };
+        let output = silent_cmd(&find_bash())
             .args(["-c", &format!("echo | openssl s_client -servername '{}' -connect '{}':443 2>/dev/null | openssl x509 -noout -dates 2>/dev/null", domain, domain)])
             .output()
             .ok();
         let text = output.map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default();
         let expiry = text.lines().find(|l| l.starts_with("notAfter=")).unwrap_or("unknown");
-        results.push(format!("  {} → {}", domain, expiry));
+        results.push(format!("  {} -> {}", domain, expiry));
     }
     Some(format!("**SSL Certificates:**\n{}", results.join("\n")))
 }
@@ -158,7 +158,7 @@ pub fn ssl_monitor(domains: &[&str]) -> Option<String> {
 /// DNS_VERIFY: check DNS records
 pub fn dns_verify(domain: &str) -> Option<String> {
     let domain = sanitize_domain(domain)?;
-    let output = silent_cmd("bash")
+    let output = silent_cmd(&find_bash())
         .args(["-c", &format!(
             "echo '=== A ==='; dig +short '{}' A; echo '=== AAAA ==='; dig +short '{}' AAAA; echo '=== CNAME ==='; dig +short '{}' CNAME; echo '=== MX ==='; dig +short '{}' MX",
             domain, domain, domain, domain

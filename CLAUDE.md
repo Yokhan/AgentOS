@@ -4,6 +4,11 @@
 Tauri desktop app for orchestrating Claude Code agents across multiple projects.
 Rust backend (Axum API + Tauri commands) + Preact frontend (inline SPA + extracted CSS).
 
+## Managed Project Contract
+- Source of truth for managed-project bootstrap and template updates is the sibling `agent-project-template` repo under `documents_dir/agent-project-template`.
+- AgentOS should consume child-project state from shipped project artifacts (`.template-manifest.json`, `tasks/current.md`, `PROJECT_SPEC.md`, `scripts/check-drift.sh`) instead of re-embedding template logic.
+- If AgentOS needs new bootstrap or update behavior, change it in `agent-project-template` first and keep AgentOS as the orchestrator that calls that contract.
+
 ## Stack
 - **Backend**: Rust, Tauri 2, Axum 0.8, Tokio, Serde
 - **Frontend**: Preact (vendor bundle), vanilla CSS (design tokens), inline `<script type="module">`

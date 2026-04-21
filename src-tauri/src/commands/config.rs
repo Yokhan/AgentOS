@@ -70,7 +70,7 @@ pub fn set_permission(state: State<Arc<AppState>>, project: String, profile: Str
     json!({"status": "ok", "project": project, "profile": profile})
 }
 
-/// Health history removed — was referencing dead state fields.
+/// Health history removed - was referencing dead state fields.
 /// Use health_check command + delegation log for health tracking.
 #[tauri::command]
 pub fn get_health_history(_state: State<Arc<AppState>>, _project: Option<String>) -> Value {
@@ -233,7 +233,7 @@ pub async fn get_modules(
     }
     let root = state.root.clone();
     tokio::task::spawn_blocking(move || {
-        match super::claude_runner::silent_cmd("bash").arg(&script).arg(&project_path).current_dir(&root).output() {
+        match super::claude_runner::silent_cmd(&super::claude_runner::find_bash()).arg(&script).arg(&project_path).current_dir(&root).output() {
             Ok(output) => {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let modules: Vec<Value> = stdout.lines().filter_map(|line| {

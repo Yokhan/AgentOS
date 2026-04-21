@@ -1,26 +1,43 @@
 //! Operations commands: deploy template, health check
 use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::State;
 use crate::state::AppState;
+
+fn resolve_template_root(root: &Path, docs_dir: &Path) -> PathBuf {
+    let managed_template = docs_dir.join("agent-project-template");
+    if managed_template.join("setup.sh").exists() && managed_template.join("CLAUDE.md").exists() {
+        return managed_template;
+    }
+    root.to_path_buf()
+}
 
 /// Deploy template to a project via sync-template.sh
 #[tauri::command]
 pub async fn deploy_template(state: State<'_, Arc<AppState>>, project: String) -> Result<Value, String> {
     let project_dir = state.validate_project(&project).map_err(|e| e)?;
-    let script = state.root.join("scripts").join("sync-template.sh");
+    let template_root = resolve_template_root(&state.root, &state.docs_dir);
+    let script = template_root.join("scripts").join("sync-template.sh");
     if !script.exists() {
         return Ok(json!({"status": "error", "error": "sync-template.sh not found"}));
     }
 
     tokio::task::spawn_blocking(move || {
-        match super::claude_runner::silent_cmd("bash").arg(&script).arg("--from-git").current_dir(&project_dir).output() {
+        match super::claude_runner::silent_cmd(&super::claude_runner::find_bash())
+            .arg(&script)
+            .arg(&template_root)
+            .arg("--project-dir")
+            .arg(&project_dir)
+            .output()
+        {
             Ok(out) => {
                 let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
                 json!({
                     "status": if out.status.success() { "ok" } else { "error" },
                     "project": project,
+                    "template_root": template_root,
                     "stdout": stdout,
                     "stderr": stderr,
                 })
@@ -56,7 +73,7 @@ pub async fn health_check(state: State<'_, Arc<AppState>>, project: String) -> R
                 results.push(json!({"project": proj, "status": "skip", "message": "no check-drift.sh"}));
                 continue;
             }
-            match super::claude_runner::silent_cmd("bash").arg(&script).current_dir(&project_dir).output() {
+            match super::claude_runner::silent_cmd(&super::claude_runner::find_bash()).arg(&script).current_dir(&project_dir).output() {
                 Ok(out) => {
                     let stdout = String::from_utf8_lossy(&out.stdout);
                     let warnings = stdout.lines()
@@ -80,7 +97,8 @@ pub async fn health_check(state: State<'_, Arc<AppState>>, project: String) -> R
 /// Create new project from template
 #[tauri::command]
 pub async fn create_project(state: State<'_, Arc<AppState>>, name: String, orchestrator: bool) -> Result<Value, String> {
-    let setup = state.root.join("setup.sh");
+    let template_root = resolve_template_root(&state.root, &state.docs_dir);
+    let setup = template_root.join("setup.sh");
     if !setup.exists() {
         return Ok(json!({"status": "error", "error": "setup.sh not found"}));
     }
@@ -93,10 +111,11 @@ pub async fn create_project(state: State<'_, Arc<AppState>>, name: String, orche
     crate::log_info!("Creating project '{}' (orchestrator={})", name, orchestrator);
 
     tokio::task::spawn_blocking(move || {
-        let mut args = vec![setup.as_os_str().to_os_string(), std::ffi::OsString::from(&name)];
+        let mut args = vec![setup.as_os_str().to_os_string()];
         if orchestrator { args.push(std::ffi::OsString::from("--orchestrator")); }
+        args.push(std::ffi::OsString::from(&name));
 
-        match super::claude_runner::silent_cmd("bash")
+        match super::claude_runner::silent_cmd(&super::claude_runner::find_bash())
             .args(&args)
             .current_dir(&docs_dir)
             .output()
@@ -110,6 +129,7 @@ pub async fn create_project(state: State<'_, Arc<AppState>>, name: String, orche
                     "status": if ok { "ok" } else { "error" },
                     "project": name,
                     "orchestrator": orchestrator,
+                    "template_root": template_root,
                     "output": stdout,
                 })
             }
@@ -120,12 +140,17 @@ pub async fn create_project(state: State<'_, Arc<AppState>>, name: String, orche
 
 /// Inline deploy for use from chat.rs (not a tauri command)
 pub fn execute_deploy_inline(root: &std::path::Path, docs_dir: &std::path::Path, project: &str) -> String {
-    let script = root.join("scripts").join("sync-template.sh");
+    let template_root = resolve_template_root(root, docs_dir);
+    let script = template_root.join("scripts").join("sync-template.sh");
     if !script.exists() { return "sync-template.sh not found".to_string(); }
     let project_dir = docs_dir.join(project);
     if !project_dir.exists() { return format!("Project dir not found: {}", project); }
-    match super::claude_runner::silent_cmd("bash").arg(&script).arg("--from-git")
-        .current_dir(&project_dir).output()
+    match super::claude_runner::silent_cmd(&super::claude_runner::find_bash())
+        .arg(&script)
+        .arg(&template_root)
+        .arg("--project-dir")
+        .arg(&project_dir)
+        .output()
     {
         Ok(out) => {
             let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -153,7 +178,7 @@ pub fn execute_health_inline(docs_dir: &std::path::Path, project: &str) -> Strin
         let pd = docs_dir.join(proj);
         let script = pd.join("scripts").join("check-drift.sh");
         if !script.exists() { results.push(format!("{}: skip", proj)); continue; }
-        match super::claude_runner::silent_cmd("bash").arg(&script).current_dir(&pd).output() {
+        match super::claude_runner::silent_cmd(&super::claude_runner::find_bash()).arg(&script).current_dir(&pd).output() {
             Ok(out) => {
                 let s = String::from_utf8_lossy(&out.stdout);
                 let summary = s.lines().find(|l| l.contains("warnings") || l.contains("errors"))

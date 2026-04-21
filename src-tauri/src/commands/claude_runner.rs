@@ -10,6 +10,7 @@ use std::sync::OnceLock;
 use std::os::windows::process::CommandExt;
 
 static CLAUDE_BIN: OnceLock<String> = OnceLock::new();
+static BASH_BIN: OnceLock<String> = OnceLock::new();
 
 /// Create a Command that doesn't spawn a visible console window on Windows.
 pub fn silent_cmd(program: &str) -> std::process::Command {
@@ -28,9 +29,9 @@ pub fn unique_tmp(prefix: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("{}-{}-{}.txt", prefix, nanos, std::process::id()))
 }
 
-/// Run claude -p via subprocess — no shell wrapper, direct Command::new("claude")
+/// Run claude -p via subprocess - no shell wrapper, direct Command::new("claude")
 /// Returns stdout text or error message.
-/// Find claude binary — check PATH first, then common locations
+/// Find claude binary - check PATH first, then common locations
 pub fn find_claude() -> String {
     CLAUDE_BIN
         .get_or_init(|| {
@@ -65,11 +66,41 @@ pub fn find_claude() -> String {
         .clone()
 }
 
+/// Find bash binary — check PATH first, then common Git for Windows locations
+pub fn find_bash() -> String {
+    BASH_BIN
+        .get_or_init(|| {
+            if let Ok(output) = silent_cmd("bash").arg("--version").output() {
+                if output.status.success() {
+                    crate::log_info!("Found bash in PATH");
+                    return "bash".to_string();
+                }
+            }
+
+            #[cfg(target_os = "windows")]
+            {
+                for path in &[
+                    std::path::PathBuf::from(r"C:\Program Files\Git\bin\bash.exe"),
+                    std::path::PathBuf::from(r"C:\Program Files\Git\usr\bin\bash.exe"),
+                    std::path::PathBuf::from(r"C:\Program Files (x86)\Git\bin\bash.exe"),
+                ] {
+                    if path.exists() {
+                        crate::log_info!("Found bash at {:?}", path);
+                        return path.to_string_lossy().to_string();
+                    }
+                }
+            }
+
+            crate::log_warn!("bash not found, using fallback 'bash'");
+            "bash".to_string()
+        })
+        .clone()
+}
+
 /// Run claude with optional model and reasoning effort
 pub fn run_claude(cwd: &std::path::Path, prompt: &str, perm_path: &str) -> String {
     run_claude_with_opts(cwd, prompt, perm_path, None, None)
 }
-
 pub fn run_claude_with_opts(
     cwd: &std::path::Path,
     prompt: &str,
@@ -139,7 +170,7 @@ fn run_claude_full(
     let stderr_handle = child.stderr.take().map(spawn_reader_thread);
 
     // Wait with 5-minute timeout
-    // 45 min safety net — user controls abort via UI
+    // 45 min safety net - user controls abort via UI
     let timeout = std::time::Duration::from_secs(2700);
     let start = std::time::Instant::now();
     let mut last_log = std::time::Instant::now();
@@ -254,7 +285,7 @@ pub fn get_permission_path(state: &AppState, project: &str) -> String {
     get_permission_path_for_profile(state, &profile)
 }
 
-/// Get permission path for delegations — minimum "balanced" since user explicitly approved.
+/// Get permission path for delegations - minimum "balanced" since user explicitly approved.
 pub fn get_delegation_permission_path(state: &AppState, _project: &str, level: &str) -> String {
     get_permission_path_for_profile(state, level)
 }
@@ -263,7 +294,7 @@ pub fn get_delegation_permission_path(state: &AppState, _project: &str, level: &
 /// Returns false if response contains success markers (to avoid false positives).
 pub fn is_permission_request(response: &str) -> bool {
     let lower = response.to_lowercase();
-    // Success markers — if present, NOT a permission request
+    // Success markers - if present, NOT a permission request
     let success = [
         "done",
         "committed",
