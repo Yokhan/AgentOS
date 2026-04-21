@@ -1,4 +1,4 @@
-# Agent OS 0.2.0
+# Agent OS 0.2.1
 
 - Tauri desktop app with installers for Windows (`NSIS` and `MSI`).
 - Auto-update pipeline wired for installed builds via GitHub Releases.
@@ -8,3 +8,4 @@
   - signed updater artifacts
   - `latest.json` generation
   - GitHub Actions release workflow
+- Unified GitHub tag-based release flow enabled for future updater builds.
