@@ -4,9 +4,9 @@
   "description": "Agent OS — Desktop command center for AI agents",
   "private": true,
   "scripts": {
-    "tauri": "cargo tauri",
-    "dev": "cargo tauri dev",
-    "build": "cargo tauri build",
+    "tauri": "npx @tauri-apps/cli",
+    "dev": "npx @tauri-apps/cli dev",
+    "build": "npx @tauri-apps/cli build",
     "build:updater": "powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1",
     "test": "cargo test --manifest-path src-tauri/Cargo.toml"
   },
