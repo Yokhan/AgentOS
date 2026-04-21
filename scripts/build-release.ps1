@@ -55,6 +55,10 @@ if (-not $nsisInstaller -and -not $msiInstaller) {
     throw "No installer artifacts were found under $bundleRoot."
 }
 
+function Get-GitHubAssetName([string]$name) {
+    return ($name -replace ' ', '.')
+}
+
 $platforms = [ordered]@{}
 
 if ($nsisInstaller) {
@@ -62,8 +66,9 @@ if ($nsisInstaller) {
     if (-not (Test-Path $nsisSigPath)) {
         throw "Missing NSIS updater signature: $nsisSigPath"
     }
+    $nsisAssetName = Get-GitHubAssetName $nsisInstaller.Name
     $platforms["windows-x86_64-nsis"] = [ordered]@{
-        url = "https://github.com/$Repo/releases/download/$Tag/$($nsisInstaller.Name)"
+        url = "https://github.com/$Repo/releases/download/$Tag/$nsisAssetName"
         signature = (Get-Content $nsisSigPath -Raw).Trim()
     }
 }
@@ -73,8 +78,9 @@ if ($msiInstaller) {
     if (-not (Test-Path $msiSigPath)) {
         throw "Missing MSI updater signature: $msiSigPath"
     }
+    $msiAssetName = Get-GitHubAssetName $msiInstaller.Name
     $platforms["windows-x86_64-msi"] = [ordered]@{
-        url = "https://github.com/$Repo/releases/download/$Tag/$($msiInstaller.Name)"
+        url = "https://github.com/$Repo/releases/download/$Tag/$msiAssetName"
         signature = (Get-Content $msiSigPath -Raw).Trim()
     }
 }
