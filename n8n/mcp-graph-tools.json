@@ -1,0 +1,39 @@
+{
+  "_comment": "MCP-compatible tool definitions for AgentOS Graph API. Projects can reference these via fetch to localhost:3333",
+  "tools": [
+    {
+      "name": "graph_context",
+      "description": "Get dependency graph context for a project. Returns top modules with coupling metrics, import/export relationships, and cycle warnings.",
+      "endpoint": "GET /api/graph/context/{project}",
+      "usage": "Use BEFORE modifying files to understand what depends on what."
+    },
+    {
+      "name": "graph_dependents",
+      "description": "Find all files that depend on (import from) a specific file.",
+      "endpoint": "GET /api/graph/dependents/{project}/{file}",
+      "usage": "Use AFTER changing exported types/functions to find all files that need updating."
+    },
+    {
+      "name": "graph_impact",
+      "description": "Transitive impact analysis — what breaks if you change this file? Up to 3 hops.",
+      "endpoint": "GET /api/graph/impact/{project}/{file}",
+      "usage": "Use to assess blast radius before making breaking changes."
+    },
+    {
+      "name": "graph_verify",
+      "description": "Verify project architecture: check for circular dependencies and instability.",
+      "endpoint": "GET /api/graph/verify/{project}",
+      "usage": "Run AFTER completing changes to ensure no new cycles introduced."
+    },
+    {
+      "name": "graph_overview",
+      "description": "Get all projects with segment grouping and shared resource edges.",
+      "endpoint": "GET /api/graph/overview"
+    },
+    {
+      "name": "graph_project",
+      "description": "Get file-level dependency graph for a specific project.",
+      "endpoint": "GET /api/graph/project/{project}"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "agent-os",
+  "version": "0.2.0",
+  "description": "Agent OS — Desktop command center for AI agents",
+  "private": true,
+  "scripts": {
+    "tauri": "cargo tauri",
+    "dev": "cargo tauri dev",
+    "build": "cargo tauri build",
+    "build:updater": "powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1"
+  }
+}

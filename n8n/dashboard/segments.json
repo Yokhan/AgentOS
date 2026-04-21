@@ -1,0 +1,37 @@
+{
+  "_comment": "Project segments for dashboard grouping. Edit to customize.",
+  "segments": {
+    "Giants Vale": [
+      "GIANTS VALE DUNGEONS",
+      "GiantValleyDocumentation",
+      "GiantValleyDocumentationKiro",
+      "LitAi",
+      "PixelTilemapGenerator"
+    ],
+    "Fitness & Health": [
+      "YokhanFitnessAppMY",
+      "YokhanFitnessLanding",
+      "YokhanGymBot",
+      "HealthTracker",
+      "YokhanMedKit",
+      "YokhanFirstAid",
+      "WellnesCartApp"
+    ],
+    "Client Projects": [
+      "Slitherlink2",
+      "amplitude-client",
+      "zolt"
+    ],
+    "Infrastructure": [
+      "PersonalAssistant",
+      "agent-project-template",
+      "KiloCodeTemplate",
+      "YokhanIndependentVPN",
+      "godot-mcp",
+      "spec-kit"
+    ],
+    "Business": [
+      "NeiroMoney"
+    ]
+  }
+}

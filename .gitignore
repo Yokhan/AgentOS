@@ -1,0 +1,42 @@
+# Build artifacts
+src-tauri/target/
+node_modules/
+
+# Runtime data
+tasks/chats/
+tasks/audit/
+tasks/plans/
+tasks/.chat-history.jsonl
+tasks/.delegation-archive.jsonl
+tasks/.session-events.jsonl
+tasks/.sessions.json
+tasks/.project-sessions.json
+tasks/.work-items.json
+tasks/.file-leases.json
+tasks/.stream-*.jsonl
+tasks/.running-tasks.json
+tasks/.delegations.json
+tasks/.delegation-log.jsonl
+tasks/.strategies.json
+tasks/agent-os.log
+tasks/pa-memory.jsonl
+tasks/goals.md
+tasks/queue.md
+tasks/attachments/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# IDE
+.idea/
+.vscode/
+*.swp
+build-updater.log
+.claude/

@@ -1,0 +1,18 @@
+{
+  "codex_effort": "high",
+  "codex_model": "gpt-5.4",
+  "codex_transport": "acp",
+  "delegation_effort": "high",
+  "delegation_model": "sonnet",
+  "documents_dir": "C:/Users/iohan/Documents",
+  "n8n_url": "http://localhost:5678",
+  "orchestrator_effort": "max",
+  "orchestrator_model": "opus",
+  "orchestrator_project": "PersonalAssistant",
+  "project_permissions": {
+    "HealthTracker": "restrictive",
+    "PersonalAssistant": "permissive",
+    "_orchestrator": "permissive"
+  },
+  "project_root": "C:\\Users\\iohan\\Documents\\AgentOS"
+}

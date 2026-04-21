@@ -1,0 +1,15 @@
+﻿<!doctype html>
+<meta charset="utf-8">
+<body>loading</body>
+<script>
+window.addEventListener('error', e => {
+  document.body.innerText = 'error: ' + e.message + ' @ ' + e.filename + ':' + e.lineno + ':' + e.colno;
+});
+window.addEventListener('unhandledrejection', e => {
+  document.body.innerText = 'rejection: ' + (e.reason && (e.reason.stack || e.reason.message) || String(e.reason));
+});
+</script>
+<script type="module">
+import '/pages.js?v=20260418b';
+document.body.innerText = 'ok';
+</script>

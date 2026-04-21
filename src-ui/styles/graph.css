@@ -1,0 +1,5 @@
+/* Graph View — Canvas with Rust-computed layout */
+.graph-view{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.graph-view canvas{flex:1;display:block}
+.graph-toolbar{position:absolute;top:0;left:0;right:0;padding:var(--sp-s) var(--sp-m);display:flex;align-items:center;gap:var(--sp-s);z-index:1}
+.graph-stats{position:absolute;bottom:0;left:0;padding:var(--sp-xs) var(--sp-m);font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)}

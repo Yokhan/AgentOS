@@ -1,0 +1,27 @@
+{
+  "Giants Vale": {
+    "shared_resources": ["GiantValleyDocumentation/brain/", "design-tokens"],
+    "delegation_strategy": "sequential",
+    "description": "Game and literary universe — shared worldbuilding, lore docs, pixel art"
+  },
+  "Fitness & Health": {
+    "shared_resources": ["design-system", "shared-api-types"],
+    "delegation_strategy": "parallel",
+    "description": "Fitness app ecosystem with shared design system and health tracking"
+  },
+  "Client Projects": {
+    "shared_resources": [],
+    "delegation_strategy": "parallel",
+    "description": "External client work — independent projects"
+  },
+  "Infrastructure": {
+    "shared_resources": ["agent-project-template"],
+    "delegation_strategy": "sequential",
+    "description": "Tools, templates, VPN, development infrastructure"
+  },
+  "Business": {
+    "shared_resources": [],
+    "delegation_strategy": "parallel",
+    "description": "Monetization and business projects"
+  }
+}

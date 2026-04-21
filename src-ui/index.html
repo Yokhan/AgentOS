@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Agent OS - Command Center</title>
+        <link
+            rel="preload"
+            href="fonts/inter-400.woff2"
+            as="font"
+            type="font/woff2"
+            crossorigin
+        />
+        <link
+            rel="preload"
+            href="fonts/space-grotesk-400.woff2"
+            as="font"
+            type="font/woff2"
+            crossorigin
+        />
+        <link
+            rel="preload"
+            href="fonts/space-mono-400.woff2"
+            as="font"
+            type="font/woff2"
+            crossorigin
+        />
+        <link rel="stylesheet" href="styles/main.css" />
+        <link rel="stylesheet" href="styles/chat.css" />
+        <link rel="stylesheet" href="styles/graph.css" />
+        <link rel="stylesheet" href="styles/toolcards.css" />
+    </head>
+    <body>
+        <noscript>Agent OS requires JavaScript.</noscript>
+        <script>
+            (function () {
+                function showBootError(message) {
+                    var safe = String(message || "Unknown startup error")
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;");
+                    document.body.innerHTML =
+                        '<div style="min-height:100vh;padding:32px;background:#070b11;color:#f4f7fb;font-family:ui-monospace,SFMono-Regular,Consolas,monospace">' +
+                        '<h1 style="margin:0 0 16px 0;font-size:20px">Agent OS startup error</h1>' +
+                        '<pre style="white-space:pre-wrap;word-break:break-word;background:#0d1520;border:1px solid #223247;padding:16px;border-radius:10px">' +
+                        safe +
+                        "</pre>" +
+                        '<div style="margin-top:16px;color:#9fb2c7">Reload after reporting the error.</div>' +
+                        "</div>";
+                }
+                window.addEventListener("error", function (event) {
+                    if (event && event.error && event.error.stack) {
+                        showBootError(event.error.stack);
+                        return;
+                    }
+                    if (event && event.message) {
+                        showBootError(event.message);
+                    }
+                });
+                window.addEventListener("unhandledrejection", function (event) {
+                    var reason = event && event.reason;
+                    if (reason && reason.stack) {
+                        showBootError(reason.stack);
+                    } else {
+                        showBootError(reason);
+                    }
+                });
+            })();
+        </script>
+        <script type="module" src="/app.js"></script>
+    </body>
+</html>
