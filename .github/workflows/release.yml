@@ -11,6 +11,7 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+    timeout-minutes: 30
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -30,9 +31,19 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build signed updater artifacts
-        shell: powershell
-        run: npm run build:updater
+      - name: Build signed Tauri bundles
+        shell: pwsh
+        run: |
+          $env:CI = "true"
+          & npx.cmd @tauri-apps/cli build
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Generate updater manifest
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1 -SkipBuild
 
       - name: Publish GitHub release assets
         uses: softprops/action-gh-release@v2

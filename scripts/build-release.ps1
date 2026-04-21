@@ -24,7 +24,7 @@ if ([string]::IsNullOrWhiteSpace($Tag)) {
 if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
     $defaultKey = Join-Path $HOME ".tauri\agent-os.key"
     if (Test-Path $defaultKey) {
-        $env:TAURI_SIGNING_PRIVATE_KEY = $defaultKey
+        $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content $defaultKey -Raw
     }
 }
 
@@ -35,16 +35,29 @@ if (-not $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
 $env:CI = "true"
 
 if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
-    throw "TAURI_SIGNING_PRIVATE_KEY is not set and ~/.tauri/agent-os.key was not found."
+    throw "Set TAURI_SIGNING_PRIVATE_KEY before building updater artifacts."
+}
+
+function Invoke-TauriBuild {
+    param(
+        [string]$WorkingDirectory
+    )
+
+    $process = Start-Process `
+        -FilePath "npx.cmd" `
+        -ArgumentList "@tauri-apps/cli", "build" `
+        -WorkingDirectory $WorkingDirectory `
+        -NoNewWindow `
+        -Wait `
+        -PassThru
+
+    if ($process.ExitCode -ne 0) {
+        throw "Tauri build failed with exit code $($process.ExitCode)."
+    }
 }
 
 if (-not $SkipBuild) {
-    Push-Location $root
-    try {
-        cmd /c npm run build | Out-Host
-    } finally {
-        Pop-Location
-    }
+    Invoke-TauriBuild -WorkingDirectory $root
 }
 
 $bundleRoot = Join-Path $root "src-tauri\target\release\bundle"
@@ -59,6 +72,26 @@ function Get-GitHubAssetName([string]$name) {
     return ($name -replace ' ', '.')
 }
 
+function New-PlatformEntry {
+    param(
+        [string]$Url,
+        [string]$Signature
+    )
+
+    return [pscustomobject]@{
+        url = $Url
+        signature = $Signature
+    }
+}
+
+function Read-NormalizedText {
+    param(
+        [string]$Path
+    )
+
+    return [string]::Concat((Get-Content $Path -Raw))
+}
+
 $platforms = [ordered]@{}
 
 if ($nsisInstaller) {
@@ -67,10 +100,9 @@ if ($nsisInstaller) {
         throw "Missing NSIS updater signature: $nsisSigPath"
     }
     $nsisAssetName = Get-GitHubAssetName $nsisInstaller.Name
-    $platforms["windows-x86_64-nsis"] = [ordered]@{
-        url = "https://github.com/$Repo/releases/download/$Tag/$nsisAssetName"
-        signature = (Get-Content $nsisSigPath -Raw).Trim()
-    }
+    $platforms["windows-x86_64-nsis"] = New-PlatformEntry `
+        -Url "https://github.com/$Repo/releases/download/$Tag/$nsisAssetName" `
+        -Signature ((Read-NormalizedText -Path $nsisSigPath).Trim())
 }
 
 if ($msiInstaller) {
@@ -79,22 +111,25 @@ if ($msiInstaller) {
         throw "Missing MSI updater signature: $msiSigPath"
     }
     $msiAssetName = Get-GitHubAssetName $msiInstaller.Name
-    $platforms["windows-x86_64-msi"] = [ordered]@{
-        url = "https://github.com/$Repo/releases/download/$Tag/$msiAssetName"
-        signature = (Get-Content $msiSigPath -Raw).Trim()
-    }
+    $platforms["windows-x86_64-msi"] = New-PlatformEntry `
+        -Url "https://github.com/$Repo/releases/download/$Tag/$msiAssetName" `
+        -Signature ((Read-NormalizedText -Path $msiSigPath).Trim())
 }
 
 if (-not $UseMsi -and $nsisInstaller) {
-    $platforms["windows-x86_64"] = $platforms["windows-x86_64-nsis"]
+    $platforms["windows-x86_64"] = New-PlatformEntry `
+        -Url $platforms["windows-x86_64-nsis"].url `
+        -Signature $platforms["windows-x86_64-nsis"].signature
 } elseif ($msiInstaller) {
-    $platforms["windows-x86_64"] = $platforms["windows-x86_64-msi"]
+    $platforms["windows-x86_64"] = New-PlatformEntry `
+        -Url $platforms["windows-x86_64-msi"].url `
+        -Signature $platforms["windows-x86_64-msi"].signature
 }
 
 $notes = ""
 $releaseNotesPath = Join-Path $root "tasks\RELEASE_NOTES.md"
 if (Test-Path $releaseNotesPath) {
-    $notes = Get-Content $releaseNotesPath -Raw
+    $notes = Read-NormalizedText -Path $releaseNotesPath
 }
 
 $json = [ordered]@{
