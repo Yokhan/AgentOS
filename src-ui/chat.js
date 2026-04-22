@@ -767,7 +767,7 @@ function ChatSidebar() {
           dualBusy.value = "";
         }
       } else {
-        await runDualRound(msg);
+        await runDualRound(msg, !duoExecuteMode);
       }
     } catch (e) {
       showToast("Room action error: " + e, "error");
@@ -938,8 +938,8 @@ function ChatSidebar() {
                 ${duoView === "chat"
                   ? "Chat stays primary. Switch to Collaborate when you want both agents visible."
                   : duoView === "collaborate"
-                    ? "Compare Claude and Codex, ask both, or challenge one side."
-                    : "Run work and inspect results without leaving the shared context."}
+                    ? "Compare Claude and Codex in analysis mode, ask both, or challenge one side."
+                    : "Run work in execution mode and inspect results without leaving the shared context."}
               </div>
             </div>
           </div>

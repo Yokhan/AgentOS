@@ -76,6 +76,23 @@ fn write_enabled_participant_for_provider(
         .find(|p| p.write_enabled && p.provider == provider)
 }
 
+fn participant_can_execute_pa_commands(
+    state: &AppState,
+    participant: &SessionParticipant,
+    analysis_only: bool,
+) -> bool {
+    participant_has_round_write_access(participant, analysis_only)
+        && participant.role == "product"
+        && participant.provider == super::provider_runner::orchestrator_provider(state)
+}
+
+fn participant_has_round_write_access(
+    participant: &SessionParticipant,
+    analysis_only: bool,
+) -> bool {
+    !analysis_only && participant.write_enabled
+}
+
 fn nonterminal_work_item(item: &Value) -> bool {
     !matches!(
         item.get("status").and_then(|v| v.as_str()).unwrap_or(""),
@@ -1121,6 +1138,9 @@ fn build_agent_prompt(
         prompt.push_str("Parallel write is allowed only on disjoint leased paths. Do not assume global exclusive ownership.\n");
     } else {
         prompt.push_str("You are review-oriented and should challenge weak assumptions before proposing changes.\n");
+        if !analysis_only {
+            prompt.push_str("Execution mode is active for the room, but you still do not have write access. Stay read-only unless the user explicitly grants writer status.\n");
+        }
     }
 
     if analysis_only {
@@ -1130,6 +1150,20 @@ fn build_agent_prompt(
         prompt.push_str("If no file changes are needed, end with:\nFILES: none\n");
     } else {
         prompt.push_str("If you expect file changes, end your response with a single FILES: line listing the likely touched files.\n");
+    }
+
+    if participant_can_execute_pa_commands(state, participant, analysis_only) {
+        prompt.push_str("\nExecution mode is live for this participant. Plain analysis does not trigger orchestration.\n");
+        prompt.push_str("If you want AgentOS to act, emit structured PA commands exactly.\n");
+        prompt.push_str("Common commands:\n");
+        prompt.push_str("- [DELEGATE:Project]task[/DELEGATE]\n");
+        prompt.push_str("- [DELEGATE_BATCH:p1,p2]task[/DELEGATE_BATCH]\n");
+        prompt.push_str("- [DELEGATE_CHAIN:Project]step1\\nstep2[/DELEGATE_CHAIN]\n");
+        prompt.push_str("- [PLAN:title]Project: task\\n...[/PLAN]\n");
+        prompt.push_str("- [STRATEGY:goal]context[/STRATEGY]\n");
+        prompt.push_str("- [NOTIFY:message]\n");
+        prompt
+            .push_str("If you are only reviewing, say so plainly and do not emit command tags.\n");
     }
 
     if !session.current_working_set.is_empty() {
@@ -1789,7 +1823,8 @@ fn run_session_agent_core(
         reasoning_effort.as_deref(),
         role_effort_key,
     );
-    let perm_path = if analysis_only {
+    let write_access = participant_has_round_write_access(participant, analysis_only);
+    let perm_path = if analysis_only || !write_access {
         super::claude_runner::get_permission_path_for_profile(state, "restrictive")
     } else {
         super::claude_runner::get_permission_path(state, &permission_project)
@@ -1858,11 +1893,13 @@ fn run_session_agent_core(
 
     let activity_label = if analysis_only {
         format!("{} analysis", participant.label)
+    } else if !write_access {
+        format!("{} execute-review", participant.label)
     } else {
         participant.label.clone()
     };
     super::process_manager::set_activity(state, &chat_key, "multi-agent", &activity_label);
-    if !analysis_only {
+    if write_access {
         state.acquire_dir_lock(&lock_key);
     }
     let response = super::provider_runner::run_provider_with_opts(
@@ -1874,10 +1911,32 @@ fn run_session_agent_core(
         resolved_model.as_deref(),
         resolved_effort.as_deref(),
     );
-    if !analysis_only {
+    if write_access {
         state.release_dir_lock(&lock_key);
     }
     super::process_manager::clear_activity(state, &chat_key);
+
+    let mut final_response = response.clone();
+    if participant_can_execute_pa_commands(state, participant, analysis_only) {
+        let commands = super::pa_commands::parse_pa_commands(&response, state);
+        let warnings = super::pa_commands::detect_malformed_commands(&response);
+
+        for parsed in &commands {
+            if !parsed.valid {
+                if let Some(err) = &parsed.error {
+                    final_response += &format!("\n\n**Warning:** {}", err);
+                }
+                continue;
+            }
+            if let Some(text) = super::pa_commands::execute_pa_command(state, &parsed.cmd) {
+                final_response += &format!("\n\n---\n{}", text);
+            }
+        }
+
+        for warning in warnings {
+            final_response += &format!("\n\n---\n**Note:** {}", warning);
+        }
+    }
 
     let ts = state.now_iso();
     set_session_state(state, &session.id, |existing| {
@@ -1894,13 +1953,13 @@ fn run_session_agent_core(
         PresenceState::Replying,
         &format!("{} is replying", participant.label),
     );
-    let file_intents = extract_file_intents(&response);
+    let file_intents = extract_file_intents(&final_response);
     super::jsonl::append_jsonl_logged(
         &chat_file,
         &json!({
             "ts": ts,
             "role": "assistant",
-            "msg": response,
+            "msg": final_response,
             "participant": participant.id,
             "provider": participant.provider.as_str(),
             "meta": participant.label,
@@ -1914,7 +1973,7 @@ fn run_session_agent_core(
         state,
         session,
         participant,
-        &response,
+        &final_response,
         round_id,
         analysis_only,
         &file_intents,
@@ -1929,8 +1988,8 @@ fn run_session_agent_core(
             "provider": participant.provider.as_str(),
             "analysis_only": analysis_only,
             "round_id": round_id,
-            "summary": super::claude_runner::safe_truncate(&response, 200),
-            "response": response.clone(),
+            "summary": super::claude_runner::safe_truncate(&final_response, 200),
+            "response": final_response.clone(),
             "file_intents": file_intents.clone(),
         }),
     });
@@ -1978,7 +2037,7 @@ fn run_session_agent_core(
         "status": "complete",
         "session_id": session.id,
         "participant": participant,
-        "response": response,
+        "response": final_response,
         "model": resolved_model,
         "reasoning_effort": resolved_effort,
         "analysis_only": analysis_only,
@@ -3678,4 +3737,109 @@ pub fn complete_user_work_item(
         }),
     );
     json!({"status": "ok", "work_item_id": work_item_id})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::provider_runner::ProviderKind;
+    use crate::state::{PresenceState, SessionMode, SessionStatus};
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    fn temp_root(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "agent-os-multi-agent-{name}-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(root.join("tasks")).unwrap();
+        root
+    }
+
+    fn test_state(name: &str) -> AppState {
+        AppState::new(temp_root(name))
+    }
+
+    fn test_session(participants: Vec<SessionParticipant>) -> MultiAgentSession {
+        let mut presence = HashMap::new();
+        for participant in &participants {
+            presence.insert(participant.id.clone(), PresenceState::Idle);
+        }
+        MultiAgentSession {
+            id: "mas-test".to_string(),
+            title: "Test Session".to_string(),
+            project: String::new(),
+            status: SessionStatus::Active,
+            mode: SessionMode::Review,
+            participants,
+            current_working_set: Vec::new(),
+            active_round_id: None,
+            active_speaker: None,
+            presence,
+            pending_challenge: None,
+            pending_rebuttal: None,
+            linked_strategy_ids: Vec::new(),
+            linked_project_session_ids: Vec::new(),
+            linked_work_item_ids: Vec::new(),
+            linked_tactic_ids: Vec::new(),
+            linked_plan_ids: Vec::new(),
+            linked_delegation_ids: Vec::new(),
+            created_at: "2026-04-22T00:00:00Z".to_string(),
+            updated_at: "2026-04-22T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn execution_prompt_includes_pa_commands_for_writer() {
+        let state = test_state("writer");
+        let participant = SessionParticipant {
+            id: "claude_pm".to_string(),
+            label: "Claude PM".to_string(),
+            provider: ProviderKind::Claude,
+            role: "product".to_string(),
+            write_enabled: true,
+        };
+        let session = test_session(vec![participant.clone()]);
+
+        let prompt = build_agent_prompt(&state, &session, &participant, "Start execution", false);
+
+        assert!(prompt.contains("Execution mode is live for this participant."));
+        assert!(prompt.contains("[DELEGATE:Project]task[/DELEGATE]"));
+        assert!(participant_has_round_write_access(&participant, false));
+    }
+
+    #[test]
+    fn execution_prompt_keeps_non_writer_read_only() {
+        let state = test_state("reviewer");
+        let participant = SessionParticipant {
+            id: "codex_tech".to_string(),
+            label: "Codex Tech".to_string(),
+            provider: ProviderKind::Codex,
+            role: "technical".to_string(),
+            write_enabled: false,
+        };
+        let session = test_session(vec![participant.clone()]);
+
+        let prompt = build_agent_prompt(&state, &session, &participant, "Start execution", false);
+
+        assert!(prompt.contains("you still do not have write access"));
+        assert!(!prompt.contains("[DELEGATE:Project]task[/DELEGATE]"));
+        assert!(!participant_has_round_write_access(&participant, false));
+    }
+
+    #[test]
+    fn analysis_round_never_grants_write_access() {
+        let participant = SessionParticipant {
+            id: "claude_pm".to_string(),
+            label: "Claude PM".to_string(),
+            provider: ProviderKind::Claude,
+            role: "product".to_string(),
+            write_enabled: true,
+        };
+
+        assert!(!participant_has_round_write_access(&participant, true));
+    }
 }

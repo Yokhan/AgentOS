@@ -1339,7 +1339,7 @@ async function runDualParticipant(participantId, message) {
   }
 }
 
-async function runDualRound(message) {
+async function runDualRound(message, analysisOnly = true) {
   if (!__IS_TAURI) return;
   const msg = (message || "").trim();
   if (!msg) {
@@ -1359,7 +1359,7 @@ async function runDualRound(message) {
       message: msg,
       model: null,
       reasoningEffort: null,
-      analysisOnly: true,
+      analysisOnly,
     });
     if (res?.status === "complete" || res?.status === "partial") {
       await loadDualSession(sessionId);
