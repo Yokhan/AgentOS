@@ -1,6 +1,5 @@
-# Agent OS 0.2.3
+# Agent OS 0.2.4
 
-- Managed projects now bootstrap and sync through the sibling `agent-project-template` repo instead of embedding stale template logic inside AgentOS.
-- Windows bash resolution now finds Git Bash automatically for template sync, health checks, DNS, SSL, and other shell-backed flows.
-- Project scanning falls back to `tasks/current.md` milestone text when `PROJECT_SPEC.md` does not expose a phase.
-- Windows release automation now allows enough time for the signed Windows build and writes updater `latest.json` without a UTF-8 BOM.
+- Duo collaborate and execute workspaces now render in the main canvas instead of nesting inside the right chat sidebar.
+- The right sidebar stays dedicated to the active chat, composer, and compact duo status instead of duplicating the workspace UI.
+- Auto-update delivery continues through the signed GitHub Release `latest.json` manifest consumed by the built-in Tauri updater.

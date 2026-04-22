@@ -519,32 +519,6 @@ function RunningBanner() {
   </div>`;
 }
 
-let duoPanelsModulePromise = null;
-const PAGES_MODULE_URL = "/pages.js?v=20260418b";
-function useDuoPanelsModule(enabled) {
-  const [duoMod, setDuoMod] = useState(null);
-  const [duoErr, setDuoErr] = useState("");
-  useEffect(() => {
-    if (!enabled) return;
-    let active = true;
-    if (!duoPanelsModulePromise) {
-      duoPanelsModulePromise = import(PAGES_MODULE_URL);
-    }
-    duoPanelsModulePromise
-      .then((mod) => {
-        if (active) setDuoMod(mod);
-      })
-      .catch((err) => {
-        console.error("duo panels load failed:", err);
-        if (active) setDuoErr(String(err?.stack || err?.message || err));
-      });
-    return () => {
-      active = false;
-    };
-  }, [enabled]);
-  return { duoMod, duoErr };
-}
-
 function ChatSidebar() {
   const inputRef = useRef();
   const msgsRef = useRef();
@@ -555,6 +529,7 @@ function ChatSidebar() {
   const duoView = duoEnabled ? normalizeDuoView(activeRoomTab.value) : "chat";
   const duoCollaborateMode = duoEnabled && duoView === "collaborate";
   const duoExecuteMode = duoEnabled && duoView === "execute";
+  const duoWorkspaceInCanvas = duoCollaborateMode || duoExecuteMode;
   const soloProvider =
     !currentProject.value &&
     permData.value?.provider_status?.roles?.orchestrator_provider === "codex"
@@ -577,8 +552,6 @@ function ChatSidebar() {
   const [duoComposerAction, setDuoComposerAction] = useState("ask_both");
   const [duoComposerTarget, setDuoComposerTarget] = useState("");
   const [duoAdvancedOpen, setDuoAdvancedOpen] = useState(false);
-  const { duoMod, duoErr } = useDuoPanelsModule(duoEnabled);
-  const EmbeddedDualAgentsPanel = duoMod?.EmbeddedDualAgentsPanel || null;
   const participants = dualSessionData.value?.session?.participants || [];
   const duoSession = dualSessionData.value?.session || null;
   const roomTarget =
@@ -1307,29 +1280,12 @@ function ChatSidebar() {
           </button>`
         : html`<button class="send-btn" onClick=${send}>↑</button>`}
     </div>
-    ${duoExecuteMode || duoCollaborateMode
-      ? duoErr
-        ? html`<div class="panel" style="margin:var(--sp-s)">
-            <div
-              style="font-family:var(--font-mono);font-size:var(--fs-s);color:var(--accent)"
-            >
-              duo panel load error
-            </div>
-            <pre
-              style="white-space:pre-wrap;word-break:break-word;font-size:var(--fs-s);color:var(--t2)"
-            >
-${duoErr}</pre
-            >
-          </div>`
-        : EmbeddedDualAgentsPanel
-          ? html`<div
-              style="padding:var(--sp-s);border-top:1px solid var(--border);overflow:auto;max-height:40vh"
-            >
-              <${EmbeddedDualAgentsPanel} tab=${duoView} />
-            </div>`
-          : html`<div class="panel" style="margin:var(--sp-s);color:var(--t3)">
-              Loading duo panels...
-            </div>`
+    ${duoWorkspaceInCanvas
+      ? html`<div
+          style="padding:var(--sp-s);border-top:1px solid var(--border);background:var(--bg-soft);font-size:var(--fs-s);color:var(--t3)"
+        >
+          duo ${duoView} workspace is open in the main canvas
+        </div>`
       : null}
   </div>`;
 }
