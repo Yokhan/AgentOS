@@ -554,6 +554,7 @@ function ChatSidebar() {
   const [duoAdvancedOpen, setDuoAdvancedOpen] = useState(false);
   const participants = dualSessionData.value?.session?.participants || [];
   const duoSession = dualSessionData.value?.session || null;
+  const activeOrchestratorId = duoSession?.orchestrator_participant_id || "";
   const roomTarget =
     participants.find((p) => p.id === duoComposerTarget) || null;
   const latestDuoRound = (() => {
@@ -584,6 +585,18 @@ function ChatSidebar() {
     if (participant && !participant.write_enabled) {
       showToast(
         `${participant.label} is review-only in this room. Grant write in Advanced runtime controls if you want execution.`,
+        "info",
+      );
+    } else if (
+      participant &&
+      activeOrchestratorId &&
+      participant.id !== activeOrchestratorId
+    ) {
+      const owner =
+        participants.find((p) => p.id === activeOrchestratorId)?.label ||
+        "another participant";
+      showToast(
+        `${participant.label} can write here, but orchestration currently belongs to ${owner}. Switch orchestrator in Advanced runtime controls if you want PA commands from ${participant.label}.`,
         "info",
       );
     }
@@ -1022,7 +1035,8 @@ function ChatSidebar() {
               </div>
               <div style="font-size:var(--fs-s);color:var(--t3)">
                 choose who should take the next turn or move this into execution
-                . review-only participants stay read-only until you grant write.
+                . review-only participants stay read-only until you grant write,
+                and orchestration follows the active orchestrator.
               </div>
             </div>
             <div style="font-size:var(--fs-s);color:var(--t3)">
@@ -1035,6 +1049,7 @@ function ChatSidebar() {
               const participant =
                 participants.find((p) => p.id === msg.participant) || null;
               const canWrite = !!participant?.write_enabled;
+              const isOrchestrator = participant?.id === activeOrchestratorId;
               const label = (msg.meta || "")
                 .replace(/^\s*[^A-Za-z0-9]+/, "")
                 .trim();
@@ -1044,7 +1059,9 @@ function ChatSidebar() {
               >
                 ${canWrite ? "continue with" : "ask"}
                 ${label || participant?.label || msg.participant}${canWrite
-                  ? ""
+                  ? isOrchestrator
+                    ? " (orchestrator)"
+                    : ""
                   : " (review)"}
               </button>`;
             })}

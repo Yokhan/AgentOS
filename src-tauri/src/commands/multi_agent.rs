@@ -51,6 +51,43 @@ fn default_participants(state: &AppState) -> Vec<SessionParticipant> {
     ]
 }
 
+fn default_orchestrator_participant_id(
+    state: &AppState,
+    participants: &[SessionParticipant],
+) -> Option<String> {
+    participants
+        .iter()
+        .find(|p| {
+            p.role == "product"
+                && p.provider == super::provider_runner::orchestrator_provider(state)
+        })
+        .map(|p| p.id.clone())
+        .or_else(|| participants.first().map(|p| p.id.clone()))
+}
+
+fn session_orchestrator_participant_id(
+    state: &AppState,
+    session: &MultiAgentSession,
+) -> Option<String> {
+    session
+        .orchestrator_participant_id
+        .as_ref()
+        .filter(|id| session.participants.iter().any(|p| p.id == **id))
+        .cloned()
+        .or_else(|| default_orchestrator_participant_id(state, &session.participants))
+}
+
+fn session_orchestrator_participant<'a>(
+    state: &AppState,
+    session: &'a MultiAgentSession,
+) -> Option<&'a SessionParticipant> {
+    let orchestrator_id = session_orchestrator_participant_id(state, session)?;
+    session
+        .participants
+        .iter()
+        .find(|participant| participant.id == orchestrator_id)
+}
+
 fn default_presence(participants: &[SessionParticipant]) -> HashMap<String, PresenceState> {
     participants
         .iter()
@@ -78,12 +115,13 @@ fn write_enabled_participant_for_provider(
 
 fn participant_can_execute_pa_commands(
     state: &AppState,
+    session: &MultiAgentSession,
     participant: &SessionParticipant,
     analysis_only: bool,
 ) -> bool {
     participant_has_round_write_access(participant, analysis_only)
-        && participant.role == "product"
-        && participant.provider == super::provider_runner::orchestrator_provider(state)
+        && session_orchestrator_participant_id(state, session).as_deref()
+            == Some(participant.id.as_str())
 }
 
 fn participant_has_round_write_access(
@@ -1090,6 +1128,9 @@ fn build_agent_prompt(
     analysis_only: bool,
 ) -> String {
     let mut prompt = String::new();
+    let orchestrator = session_orchestrator_participant(state, session);
+    let is_orchestrator =
+        orchestrator.map(|current| current.id.as_str()) == Some(participant.id.as_str());
     prompt.push_str("You are operating inside AgentOS multi-agent orchestration.\n");
     prompt.push_str(&format!(
         "Session: {} ({})\nMode: {:?}\nProject: {}\nRole: {}\nParticipant: {}\n\n",
@@ -1136,6 +1177,15 @@ fn build_agent_prompt(
     if participant.write_enabled {
         prompt.push_str("You currently have write access in this room.\n");
         prompt.push_str("Parallel write is allowed only on disjoint leased paths. Do not assume global exclusive ownership.\n");
+        if !analysis_only && !is_orchestrator {
+            let owner = orchestrator
+                .map(|current| current.label.clone())
+                .unwrap_or_else(|| "another participant".to_string());
+            prompt.push_str(&format!(
+                "Execution mode can write through you, but orchestration currently belongs to {}. You may still execute assigned work, however PA commands will not run until you are set as orchestrator.\n",
+                owner
+            ));
+        }
     } else {
         prompt.push_str("You are review-oriented and should challenge weak assumptions before proposing changes.\n");
         if !analysis_only {
@@ -1152,7 +1202,7 @@ fn build_agent_prompt(
         prompt.push_str("If you expect file changes, end your response with a single FILES: line listing the likely touched files.\n");
     }
 
-    if participant_can_execute_pa_commands(state, participant, analysis_only) {
+    if participant_can_execute_pa_commands(state, session, participant, analysis_only) {
         prompt.push_str("\nExecution mode is live for this participant. Plain analysis does not trigger orchestration.\n");
         prompt.push_str("If you want AgentOS to act, emit structured PA commands exactly.\n");
         prompt.push_str("Common commands:\n");
@@ -1917,7 +1967,7 @@ fn run_session_agent_core(
     super::process_manager::clear_activity(state, &chat_key);
 
     let mut final_response = response.clone();
-    if participant_can_execute_pa_commands(state, participant, analysis_only) {
+    if participant_can_execute_pa_commands(state, session, participant, analysis_only) {
         let commands = super::pa_commands::parse_pa_commands(&response, state);
         let warnings = super::pa_commands::detect_malformed_commands(&response);
 
@@ -2063,6 +2113,7 @@ pub fn create_multi_agent_session(
 
     let now = state.now_iso();
     let participants = default_participants(&state);
+    let orchestrator_participant_id = default_orchestrator_participant_id(&state, &participants);
     let session = MultiAgentSession {
         id: new_id("mas"),
         title: session_title(&project, title.as_deref()),
@@ -2070,6 +2121,7 @@ pub fn create_multi_agent_session(
         status: SessionStatus::Active,
         mode: parse_mode(mode.as_deref()),
         participants: participants.clone(),
+        orchestrator_participant_id,
         current_working_set: Vec::new(),
         active_round_id: None,
         active_speaker: None,
@@ -2126,6 +2178,11 @@ pub fn get_multi_agent_session(state: State<'_, Arc<AppState>>, session_id: Stri
         .and_then(|map| map.get(&session_id).cloned());
     match session {
         Some(session) => {
+            let mut hydrated_session = session.clone();
+            if hydrated_session.orchestrator_participant_id.is_none() {
+                hydrated_session.orchestrator_participant_id =
+                    session_orchestrator_participant_id(&state, &session);
+            }
             let active_writers: Vec<SessionParticipant> = write_enabled_participants(&session)
                 .into_iter()
                 .cloned()
@@ -2135,6 +2192,16 @@ pub fn get_multi_agent_session(state: State<'_, Arc<AppState>>, session_id: Stri
             } else {
                 None
             };
+            let active_orchestrator = hydrated_session
+                .orchestrator_participant_id
+                .as_ref()
+                .and_then(|id| {
+                    hydrated_session
+                        .participants
+                        .iter()
+                        .find(|participant| participant.id == *id)
+                        .cloned()
+                });
             let write_conflicts = write_conflicts_for_session(&state, &session);
             let participant_runtime: Vec<Value> = session
                 .participants
@@ -2143,10 +2210,11 @@ pub fn get_multi_agent_session(state: State<'_, Arc<AppState>>, session_id: Stri
                 .collect();
             json!({
                 "status": "ok",
-                "session": session.clone(),
+                "session": hydrated_session,
                 "events": state.get_session_events(&session_id, 200),
                 "active_writer": active_writer,
                 "active_writers": active_writers,
+                "active_orchestrator": active_orchestrator,
                 "write_conflicts": write_conflicts,
                 "participant_runtime": participant_runtime,
                 "active_leases": linked_file_leases_for_session(&state, &session),
@@ -2229,6 +2297,53 @@ pub fn set_session_writer(
 }
 
 #[tauri::command]
+pub fn set_session_orchestrator(
+    state: State<'_, Arc<AppState>>,
+    session_id: String,
+    participant_id: String,
+) -> Value {
+    let mut updated = None;
+    let mut previous_label = None;
+    if let Ok(mut sessions) = state.sessions.lock() {
+        if let Some(session) = sessions.get_mut(&session_id) {
+            previous_label =
+                session_orchestrator_participant(&state, session).map(|p| p.label.clone());
+            let mut found_label = None;
+            for participant in &mut session.participants {
+                if participant.id == participant_id {
+                    participant.write_enabled = true;
+                    found_label = Some(participant.label.clone());
+                    break;
+                }
+            }
+            let Some(label) = found_label else {
+                return json!({"status": "error", "error": "Participant not found"});
+            };
+            session.orchestrator_participant_id = Some(participant_id.clone());
+            session.updated_at = state.now_iso();
+            updated = Some((session.clone(), label));
+        }
+    }
+    let Some((session, label)) = updated else {
+        return json!({"status": "error", "error": "Session not found"});
+    };
+    state.save_sessions();
+    emit_pipeline_event(
+        &state,
+        &session_id,
+        "orchestrator_switched",
+        "user",
+        &format!("Set {} as the room orchestrator", label),
+        json!({
+            "participant_id": participant_id,
+            "label": label,
+            "previous_label": previous_label,
+        }),
+    );
+    json!({"status": "ok", "session": session})
+}
+
+#[tauri::command]
 pub fn revoke_session_writer(
     state: State<'_, Arc<AppState>>,
     session_id: String,
@@ -2266,6 +2381,14 @@ pub fn revoke_session_writer(
     let mut updated = None;
     if let Ok(mut sessions) = state.sessions.lock() {
         if let Some(session) = sessions.get_mut(&session_id) {
+            if session_orchestrator_participant_id(&state, session).as_deref()
+                == Some(participant_id.as_str())
+            {
+                return json!({
+                    "status": "error",
+                    "error": "Current orchestrator must retain write access. Set another orchestrator first",
+                });
+            }
             let enabled_count = session
                 .participants
                 .iter()
@@ -3768,6 +3891,9 @@ mod tests {
         for participant in &participants {
             presence.insert(participant.id.clone(), PresenceState::Idle);
         }
+        let orchestrator_participant_id = participants
+            .first()
+            .map(|participant| participant.id.clone());
         MultiAgentSession {
             id: "mas-test".to_string(),
             title: "Test Session".to_string(),
@@ -3775,6 +3901,7 @@ mod tests {
             status: SessionStatus::Active,
             mode: SessionMode::Review,
             participants,
+            orchestrator_participant_id,
             current_working_set: Vec::new(),
             active_round_id: None,
             active_speaker: None,
@@ -3841,5 +3968,59 @@ mod tests {
         };
 
         assert!(!participant_has_round_write_access(&participant, true));
+    }
+
+    #[test]
+    fn codex_can_become_orchestrator_when_selected() {
+        let state = test_state("codex-orchestrator");
+        let claude = SessionParticipant {
+            id: "claude_pm".to_string(),
+            label: "Claude PM".to_string(),
+            provider: ProviderKind::Claude,
+            role: "product".to_string(),
+            write_enabled: true,
+        };
+        let codex = SessionParticipant {
+            id: "codex_tech".to_string(),
+            label: "Codex Tech".to_string(),
+            provider: ProviderKind::Codex,
+            role: "technical".to_string(),
+            write_enabled: true,
+        };
+        let mut session = test_session(vec![claude.clone(), codex.clone()]);
+        session.orchestrator_participant_id = Some(codex.id.clone());
+
+        assert!(participant_can_execute_pa_commands(
+            &state, &session, &codex, false
+        ));
+        assert!(!participant_can_execute_pa_commands(
+            &state, &session, &claude, false
+        ));
+    }
+
+    #[test]
+    fn non_orchestrator_writer_does_not_receive_pa_commands() {
+        let state = test_state("writer-no-orchestrator");
+        let claude = SessionParticipant {
+            id: "claude_pm".to_string(),
+            label: "Claude PM".to_string(),
+            provider: ProviderKind::Claude,
+            role: "product".to_string(),
+            write_enabled: true,
+        };
+        let codex = SessionParticipant {
+            id: "codex_tech".to_string(),
+            label: "Codex Tech".to_string(),
+            provider: ProviderKind::Codex,
+            role: "technical".to_string(),
+            write_enabled: true,
+        };
+        let mut session = test_session(vec![claude.clone(), codex.clone()]);
+        session.orchestrator_participant_id = Some(codex.id.clone());
+
+        let prompt = build_agent_prompt(&state, &session, &claude, "Start execution", false);
+
+        assert!(prompt.contains("orchestration currently belongs to Codex Tech"));
+        assert!(!prompt.contains("[DELEGATE:Project]task[/DELEGATE]"));
     }
 }

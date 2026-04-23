@@ -151,6 +151,8 @@ pub struct MultiAgentSession {
     pub mode: SessionMode,
     #[serde(default)]
     pub participants: Vec<SessionParticipant>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orchestrator_participant_id: Option<String>,
     #[serde(default)]
     pub current_working_set: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

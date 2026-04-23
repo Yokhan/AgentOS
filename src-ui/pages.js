@@ -46,6 +46,7 @@ import {
   setPermission,
   authenticateCodexAcp,
   setDualWriter,
+  setDualOrchestrator,
   revokeDualWriter,
   ensureDualSession,
   loadDualSession,
@@ -1059,6 +1060,9 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
   const presence = session?.presence || {};
   const workingSet = session?.current_working_set || [];
   const activeWriters = data?.active_writers || [];
+  const activeOrchestrator = data?.active_orchestrator || null;
+  const activeOrchestratorId =
+    session?.orchestrator_participant_id || activeOrchestrator?.id || "";
   const writeConflicts = data?.write_conflicts || [];
   const activeLeases = data?.active_leases || [];
   const linkedProjectSessions = data?.linked_project_sessions || [];
@@ -1567,6 +1571,19 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
       await setDualWriter(activeDualSession.value || null, participant.id);
     } catch (e) {
       showToast("Set writer error: " + e, "error");
+    } finally {
+      dualBusy.value = "";
+    }
+  };
+  const setOrchestrator = async (participant) => {
+    dualBusy.value = "orchestrator:" + participant.id;
+    try {
+      await setDualOrchestrator(
+        activeDualSession.value || null,
+        participant.id,
+      );
+    } catch (e) {
+      showToast("Set orchestrator error: " + e, "error");
     } finally {
       dualBusy.value = "";
     }
@@ -2146,6 +2163,11 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
           >
             advanced runtime controls
           </summary>
+          <div
+            style="margin-top:var(--sp-s);font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
+          >
+            active orchestrator: ${activeOrchestrator?.label || "unassigned"}
+          </div>
           ${writeConflicts.length
             ? html`<div
                 style="margin-top:var(--sp-s);padding:var(--sp-s);border:1px solid var(--accent);background:var(--accent-dim);font-size:var(--fs-s);color:var(--accent)"
@@ -2165,6 +2187,7 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
               const canWrite = activeWriters.some(
                 (writer) => writer.participant_id === participant.id,
               );
+              const isOrchestrator = activeOrchestratorId === participant.id;
               return html`<div
                 style="padding:var(--sp-s);border:1px solid var(--border);background:var(--bg-soft)"
               >
@@ -2179,6 +2202,13 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
                 <div
                   style="display:flex;gap:var(--sp-xs);flex-wrap:wrap;margin-top:var(--sp-xs)"
                 >
+                  <button
+                    class="action-btn"
+                    disabled=${!!dualBusy.value || isOrchestrator}
+                    onClick=${() => setOrchestrator(participant)}
+                  >
+                    ${isOrchestrator ? "orchestrator" : "make orchestrator"}
+                  </button>
                   <button
                     class="action-btn"
                     disabled=${!!dualBusy.value}

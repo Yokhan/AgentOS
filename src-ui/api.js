@@ -1242,6 +1242,19 @@ async function setDualWriter(sessionId, participantId) {
   }
   throw new Error(res?.error || "Cannot set writer");
 }
+async function setDualOrchestrator(sessionId, participantId) {
+  if (!__IS_TAURI || !sessionId || !participantId) return null;
+  const res = await __invoke("set_session_orchestrator", {
+    sessionId,
+    participantId,
+  });
+  if (res?.status === "ok") {
+    await loadDualSession(sessionId);
+    showToast("Orchestrator switched", "success");
+    return res;
+  }
+  throw new Error(res?.error || "Cannot set orchestrator");
+}
 async function revokeDualWriter(sessionId, participantId) {
   if (!__IS_TAURI || !sessionId || !participantId) return null;
   const res = await __invoke("revoke_session_writer", {
@@ -1462,6 +1475,7 @@ export {
   rejectDel,
   createDualSession,
   setDualWriter,
+  setDualOrchestrator,
   revokeDualWriter,
   ensureDualSession,
   loadDualSession,

@@ -201,6 +201,7 @@ pub fn run() {
             commands::multi_agent::get_multi_agent_session,
             commands::multi_agent::get_session_agent_history,
             commands::multi_agent::set_session_writer,
+            commands::multi_agent::set_session_orchestrator,
             commands::multi_agent::revoke_session_writer,
             commands::multi_agent::acquire_work_item_lease_manual,
             commands::multi_agent::release_file_lease,
