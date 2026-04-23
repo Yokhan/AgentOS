@@ -1,5 +1,5 @@
-# Agent OS 0.2.5
+# Agent OS 0.2.6
 
-- Duo `execute` rounds now actually run as execution rounds instead of being hard-forced into analysis-only review mode.
-- The write-enabled orchestrator participant in multi-agent execution can now emit and execute PA commands such as `[DELEGATE]`, `[PLAN]`, and `[NOTIFY]` from duo responses.
-- Non-writer participants remain read-only even during execution rounds, so the shared room no longer grants implicit write-capable execution to the technical reviewer.
+- Clarified the duo handoff flow so read-only participants are labeled as review-only instead of looking like the next execution step.
+- Clicking a review-only participant now warns that they cannot execute until you grant write access in Advanced runtime controls.
+- Duo runtime guidance now explicitly tells you that review-only participants stay read-only until write access is granted.

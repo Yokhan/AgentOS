@@ -579,6 +579,14 @@ function ChatSidebar() {
     };
   })();
   const focusDuoAgent = (participantId) => {
+    const participant =
+      participants.find((p) => p.id === participantId) || null;
+    if (participant && !participant.write_enabled) {
+      showToast(
+        `${participant.label} is review-only in this room. Grant write in Advanced runtime controls if you want execution.`,
+        "info",
+      );
+    }
     setDuoComposerAction("mention");
     setDuoComposerTarget(participantId);
     setDuoAdvancedOpen(true);
@@ -1014,6 +1022,7 @@ function ChatSidebar() {
               </div>
               <div style="font-size:var(--fs-s);color:var(--t3)">
                 choose who should take the next turn or move this into execution
+                . review-only participants stay read-only until you grant write.
               </div>
             </div>
             <div style="font-size:var(--fs-s);color:var(--t3)">
@@ -1023,6 +1032,9 @@ function ChatSidebar() {
           </div>
           <div style="display:flex;gap:var(--sp-xs);flex-wrap:wrap">
             ${latestDuoRound.assistants.map((msg) => {
+              const participant =
+                participants.find((p) => p.id === msg.participant) || null;
+              const canWrite = !!participant?.write_enabled;
               const label = (msg.meta || "")
                 .replace(/^\s*[^A-Za-z0-9]+/, "")
                 .trim();
@@ -1030,7 +1042,10 @@ function ChatSidebar() {
                 class="action-btn"
                 onClick=${() => focusDuoAgent(msg.participant)}
               >
-                continue with ${label || msg.participant}
+                ${canWrite ? "continue with" : "ask"}
+                ${label || participant?.label || msg.participant}${canWrite
+                  ? ""
+                  : " (review)"}
               </button>`;
             })}
             <button
