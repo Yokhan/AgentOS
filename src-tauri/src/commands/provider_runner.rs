@@ -1,6 +1,8 @@
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -356,7 +358,7 @@ fn codex_allowed_efforts(model: Option<&str>) -> &'static [&'static str] {
     if model.is_empty() {
         return &["none", "low", "medium", "high", "xhigh"];
     }
-    if model.starts_with("gpt-5.4") || model == "gpt-5.2" {
+    if model.starts_with("gpt-5.5") || model.starts_with("gpt-5.4") || model == "gpt-5.2" {
         return &["none", "low", "medium", "high", "xhigh"];
     }
     if model == "gpt-5.3-codex" || model == "gpt-5.3-codex-spark" || model == "gpt-5.2-codex" {
@@ -524,6 +526,128 @@ fn codex_acp_status_snapshot(state: &AppState) -> Value {
     }
 
     snapshot
+}
+
+fn codex_models_cache_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(".codex").join("models_cache.json"))
+}
+
+fn model_slug_from_value(value: &Value) -> Option<String> {
+    if let Some(text) = value.as_str() {
+        let trimmed = text.trim();
+        if trimmed.starts_with("gpt-") || trimmed.contains("codex") {
+            return Some(trimmed.to_string());
+        }
+        return None;
+    }
+    let obj = value.as_object()?;
+    for key in ["slug", "id", "name", "model"] {
+        if let Some(slug) = obj.get(key).and_then(|v| v.as_str()) {
+            let trimmed = slug.trim();
+            if trimmed.starts_with("gpt-") || trimmed.contains("codex") {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn normalize_model_entry(value: &Value, source: &str) -> Option<Value> {
+    let slug = model_slug_from_value(value)?;
+    let display_name = value
+        .get("display_name")
+        .or_else(|| value.get("displayName"))
+        .or_else(|| value.get("label"))
+        .and_then(|v| v.as_str())
+        .unwrap_or(&slug);
+    Some(json!({
+        "slug": slug,
+        "display_name": display_name,
+        "description": value.get("description").cloned().unwrap_or(Value::Null),
+        "default_reasoning_level": value
+            .get("default_reasoning_level")
+            .or_else(|| value.get("defaultReasoningLevel"))
+            .cloned()
+            .unwrap_or(Value::Null),
+        "supported_reasoning_levels": value
+            .get("supported_reasoning_levels")
+            .or_else(|| value.get("supportedReasoningLevels"))
+            .or_else(|| value.get("reasoning_efforts"))
+            .or_else(|| value.get("reasoningEfforts"))
+            .cloned()
+            .unwrap_or(Value::Array(vec![])),
+        "source": source,
+    }))
+}
+
+fn collect_model_entries(value: &Value, source: &str, out: &mut Vec<Value>) {
+    match value {
+        Value::Array(items) => {
+            let model_like_count = items
+                .iter()
+                .filter(|item| model_slug_from_value(item).is_some())
+                .count();
+            if model_like_count > 0 {
+                for item in items {
+                    if let Some(entry) = normalize_model_entry(item, source) {
+                        out.push(entry);
+                    }
+                }
+                return;
+            }
+            for item in items {
+                collect_model_entries(item, source, out);
+            }
+        }
+        Value::Object(map) => {
+            if let Some(entry) = normalize_model_entry(value, source) {
+                out.push(entry);
+                return;
+            }
+            for nested in map.values() {
+                collect_model_entries(nested, source, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn codex_cached_models() -> Vec<Value> {
+    let Some(path) = codex_models_cache_path() else {
+        return vec![];
+    };
+    let Ok(raw) = fs::read_to_string(path) else {
+        return vec![];
+    };
+    let Ok(parsed) = serde_json::from_str::<Value>(&raw) else {
+        return vec![];
+    };
+    let mut models = Vec::new();
+    collect_model_entries(
+        parsed.get("models").unwrap_or(&parsed),
+        "codex-cache",
+        &mut models,
+    );
+    models
+}
+
+fn codex_available_models(codex_acp: &Value) -> Vec<Value> {
+    let mut models = codex_cached_models();
+    if let Some(capabilities) = codex_acp.get("agent_capabilities") {
+        collect_model_entries(capabilities, "acp", &mut models);
+    }
+    let mut seen = HashSet::new();
+    models
+        .into_iter()
+        .filter(|model| {
+            let slug = model
+                .get("slug")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            !slug.is_empty() && seen.insert(slug)
+        })
+        .collect()
 }
 
 fn render_template_args(
@@ -767,6 +891,7 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
     let codex_binary = resolve_codex_binary(state);
     let codex_probe = probe_binary(&codex_binary);
     let codex_acp = codex_acp_status_snapshot(state);
+    let codex_models = codex_available_models(&codex_acp);
 
     json!({
         "roles": {
@@ -799,6 +924,7 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
                 "auth_methods": codex_acp.get("auth_methods").cloned().unwrap_or(Value::Array(vec![])),
                 "acp_command": codex_acp.get("command").cloned().unwrap_or(Value::Null),
                 "acp_args": codex_acp.get("args").cloned().unwrap_or(Value::Array(vec![])),
+                "models": codex_models,
             }
         },
         "notes": [
@@ -874,12 +1000,41 @@ mod tests {
     fn codex_effort_matrix_is_model_aware() {
         assert!(codex_effort_config_arg(None, "xhigh").is_some());
         assert!(codex_effort_config_arg(Some("gpt-5.4"), "xhigh").is_some());
+        assert!(codex_effort_config_arg(Some("gpt-5.5"), "xhigh").is_some());
         assert!(codex_effort_config_arg(Some("gpt-5.2-codex"), "xhigh").is_some());
         assert!(codex_effort_config_arg(Some("gpt-5.3-codex"), "none").is_none());
         assert!(codex_effort_config_arg(Some("gpt-5"), "minimal").is_some());
         assert!(codex_effort_config_arg(Some("gpt-5"), "none").is_none());
         assert!(codex_effort_config_arg(Some("gpt-5.1-codex"), "none").is_some());
         assert!(codex_effort_config_arg(Some("gpt-5.1-codex-max"), "low").is_none());
+    }
+
+    #[test]
+    fn model_entries_are_collected_from_codex_cache_shape() {
+        let mut out = Vec::new();
+        collect_model_entries(
+            &json!({
+                "models": [
+                    {
+                        "slug": "gpt-5.5",
+                        "display_name": "GPT-5.5",
+                        "supported_reasoning_levels": [
+                            {"effort": "low"},
+                            {"effort": "xhigh"}
+                        ]
+                    }
+                ]
+            }),
+            "test",
+            &mut out,
+        );
+
+        assert_eq!(
+            out.first()
+                .and_then(|model| model.get("slug"))
+                .and_then(|slug| slug.as_str()),
+            Some("gpt-5.5")
+        );
     }
 }
 

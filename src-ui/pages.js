@@ -54,7 +54,7 @@ import {
   runDualRoomAction,
 } from "/api.js";
 import {
-  CODEX_MODEL_OPTIONS,
+  codexModelOptionsFromStatus,
   codexEffortOptionsForModel,
 } from "/provider-caps.js";
 
@@ -67,7 +67,15 @@ function SettingsPage() {
   const codexStatus = prov?.codex || {};
   const codexModel = pd?.config?.codex_model || "";
   const codexEffort = pd?.config?.codex_effort || "";
-  const codexEffortOptions = codexEffortOptionsForModel(codexModel, "default");
+  const codexModelOptions = codexModelOptionsFromStatus(
+    codexStatus,
+    codexModel,
+  );
+  const codexEffortOptions = codexEffortOptionsForModel(
+    codexModel,
+    "default",
+    codexStatus,
+  );
   const codexTransport =
     codexStatus?.transport || pd?.config?.codex_transport || "cli";
   const codexReady = !!codexStatus.ready;
@@ -336,6 +344,7 @@ function SettingsPage() {
                 const nextEffortOptions = codexEffortOptionsForModel(
                   nextModel,
                   "default",
+                  codexStatus,
                 );
                 const allowedEfforts = new Set(
                   nextEffortOptions.map(([value]) => value),
@@ -358,11 +367,26 @@ function SettingsPage() {
               }}
             >
               <option value="">auto</option>
-              ${CODEX_MODEL_OPTIONS.map(
+              ${codexModelOptions.map(
                 ([value, label]) =>
                   html`<option value=${value}>${label}</option>`,
               )}
             </select>
+            <input
+              style="margin-top:var(--sp-xs);width:100%;background:var(--sf);border:1px solid var(--border);color:var(--text);padding:var(--sp-s);font-family:var(--font-mono);font-size:var(--fs-s)"
+              placeholder="custom model, e.g. gpt-5.5"
+              value=${codexModel}
+              onChange=${(e) => {
+                const nextModel = e.target.value.trim();
+                __invoke("set_config", {
+                  key: "codex_model",
+                  value: nextModel,
+                }).then(() => {
+                  showToast("Saved", "success");
+                  loadPerms();
+                });
+              }}
+            />
           </div>
           <div>
             <label

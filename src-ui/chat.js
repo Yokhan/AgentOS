@@ -76,11 +76,12 @@ import {
   createAdhocPlanFromRoom,
   createRoomProjectSession,
   loadDualSession,
+  setDualOrchestrator,
 } from "/api.js";
 import {
   CLAUDE_EFFORT_OPTIONS,
   CLAUDE_MODEL_OPTIONS,
-  CODEX_MODEL_OPTIONS,
+  codexModelOptionsFromStatus,
   codexEffortOptionsForModel,
 } from "/provider-caps.js";
 
@@ -543,11 +544,14 @@ function ChatSidebar() {
     soloProvider === "codex"
       ? selectedCodexEffort.value
       : selectedClaudeEffort.value;
+  const codexStatus = permData.value?.provider_status?.providers?.codex || {};
   const modelOptions =
-    soloProvider === "codex" ? CODEX_MODEL_OPTIONS : CLAUDE_MODEL_OPTIONS;
+    soloProvider === "codex"
+      ? codexModelOptionsFromStatus(codexStatus, selectedModelValue)
+      : CLAUDE_MODEL_OPTIONS;
   const effortOptions =
     soloProvider === "codex"
-      ? codexEffortOptionsForModel(selectedModelValue, "effort")
+      ? codexEffortOptionsForModel(selectedModelValue, "effort", codexStatus)
       : CLAUDE_EFFORT_OPTIONS;
   const [duoComposerAction, setDuoComposerAction] = useState("ask_both");
   const [duoComposerTarget, setDuoComposerTarget] = useState("");
@@ -555,6 +559,12 @@ function ChatSidebar() {
   const participants = dualSessionData.value?.session?.participants || [];
   const duoSession = dualSessionData.value?.session || null;
   const activeOrchestratorId = duoSession?.orchestrator_participant_id || "";
+  const activeOrchestrator =
+    participants.find((p) => p.id === activeOrchestratorId) || null;
+  const codexParticipant =
+    participants.find((p) => p.provider === "codex") ||
+    participants.find((p) => p.id === "codex_tech") ||
+    null;
   const roomTarget =
     participants.find((p) => p.id === duoComposerTarget) || null;
   const latestDuoRound = (() => {
@@ -604,6 +614,22 @@ function ChatSidebar() {
     setDuoComposerTarget(participantId);
     setDuoAdvancedOpen(true);
     activeRoomTab.value = "collaborate";
+  };
+  const useDuoOrchestrator = async (participantId) => {
+    const sessionId =
+      activeDualSession.value || dualSessionData.value?.session?.id;
+    if (!sessionId || !participantId) return;
+    dualBusy.value = "orchestrator:" + participantId;
+    try {
+      await setDualOrchestrator(sessionId, participantId);
+      setDuoComposerAction("send");
+      setDuoComposerTarget("");
+      activeRoomTab.value = "execute";
+    } catch (e) {
+      showToast("Set orchestrator error: " + e, "error");
+    } finally {
+      dualBusy.value = "";
+    }
   };
   const setDuoNextAction = (action) => {
     setDuoComposerAction(action);
@@ -956,13 +982,18 @@ function ChatSidebar() {
                 duo for ${currentProject.value || "_orchestrator"}
               </div>
               <div style="font-size:var(--fs-s);color:var(--t3)">
-                ${duoView === "chat"
-                  ? "Chat stays primary. Switch to Collaborate when you want both agents visible."
-                  : duoView === "collaborate"
-                    ? "Compare Claude and Codex in analysis mode, ask both, or challenge one side."
-                    : "Run work in execution mode and inspect results without leaving the shared context."}
+                orchestrator: ${activeOrchestrator?.label || "unassigned"}
               </div>
             </div>
+            ${codexParticipant && codexParticipant.id !== activeOrchestratorId
+              ? html`<button
+                  class="action-btn"
+                  disabled=${!!dualBusy.value}
+                  onClick=${() => useDuoOrchestrator(codexParticipant.id)}
+                >
+                  use Codex
+                </button>`
+              : null}
           </div>
           <div
             style="display:flex;gap:var(--sp-xs);flex-wrap:wrap;margin-top:var(--sp-xs)"
@@ -1034,9 +1065,7 @@ function ChatSidebar() {
                 next step
               </div>
               <div style="font-size:var(--fs-s);color:var(--t3)">
-                choose who should take the next turn or move this into execution
-                . review-only participants stay read-only until you grant write,
-                and orchestration follows the active orchestrator.
+                orchestrator: ${activeOrchestrator?.label || "unassigned"}
               </div>
             </div>
             <div style="font-size:var(--fs-s);color:var(--t3)">
@@ -1045,6 +1074,15 @@ function ChatSidebar() {
             </div>
           </div>
           <div style="display:flex;gap:var(--sp-xs);flex-wrap:wrap">
+            ${codexParticipant && codexParticipant.id !== activeOrchestratorId
+              ? html`<button
+                  class="action-btn primary"
+                  disabled=${!!dualBusy.value}
+                  onClick=${() => useDuoOrchestrator(codexParticipant.id)}
+                >
+                  use Codex as orchestrator
+                </button>`
+              : null}
             ${latestDuoRound.assistants.map((msg) => {
               const participant =
                 participants.find((p) => p.id === msg.participant) || null;

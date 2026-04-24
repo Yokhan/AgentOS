@@ -1,5 +1,5 @@
-# Agent OS 0.2.7
+# Agent OS 0.2.8
 
-- Duo sessions now have an explicit active orchestrator instead of hard-wiring orchestration to the default Claude PM participant.
-- You can promote Codex Tech to orchestrator from Advanced runtime controls; switching orchestrator automatically grants write access when needed.
-- Execution prompts now separate write access from orchestration ownership, so non-orchestrator writers no longer look like they can emit PA commands.
+- The right duo panel now exposes the active orchestrator and a direct `use Codex` / `use Codex as orchestrator` path without digging through runtime controls.
+- Codex model choices now merge AgentOS fallbacks, the current saved model, Codex ACP capabilities, and the local Codex `models_cache.json`.
+- New GPT-5-family models such as `gpt-5.5` are accepted instead of being reset to `auto`.
