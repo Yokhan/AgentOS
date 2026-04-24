@@ -969,72 +969,87 @@ function ChatSidebar() {
     ${isDrag.value ? html`<div class="drop-zone">Drop files here</div>` : null}
     <${RunningBanner} />
     ${duoEnabled
-      ? html`<div
-          style="padding:var(--sp-s) var(--sp-m);border-bottom:1px solid var(--border);background:var(--bg-soft)"
-        >
-          <div
-            style="display:flex;justify-content:space-between;gap:var(--sp-s);align-items:center;flex-wrap:wrap"
-          >
+      ? html`<div class="duo-brief">
+          <div class="duo-brief-top">
             <div>
-              <div
-                style="font-size:var(--fs-s);color:var(--cyan);font-family:var(--font-mono)"
-              >
-                duo for ${currentProject.value || "_orchestrator"}
+              <div class="duo-eyebrow">
+                ${currentProject.value || "_orchestrator"} room
               </div>
-              <div style="font-size:var(--fs-s);color:var(--t3)">
-                orchestrator: ${activeOrchestrator?.label || "unassigned"}
+              <div class="duo-title">
+                ${activeOrchestrator?.label || "No orchestrator selected"}
+              </div>
+              <div class="duo-sub">
+                ${duoExecuteMode
+                  ? "Execution board is open in the main canvas."
+                  : duoCollaborateMode
+                    ? "Ask both agents, then choose who executes."
+                    : "Normal chat mode; Duo room is standing by."}
               </div>
             </div>
-            ${codexParticipant && codexParticipant.id !== activeOrchestratorId
+            <span class="duo-pill ${duoExecuteMode ? "hot" : ""}">
+              ${duoExecuteMode
+                ? "execute"
+                : duoCollaborateMode
+                  ? "review"
+                  : "chat"}
+            </span>
+          </div>
+          <div class="duo-primary-actions">
+            <button
+              class="duo-primary"
+              disabled=${!!dualBusy.value}
+              onClick=${() => {
+                setDuoComposerAction("ask_both");
+                setDuoComposerTarget("");
+                setDuoAdvancedOpen(false);
+                setDuoView("collaborate");
+              }}
+            >
+              Ask both
+            </button>
+            ${codexParticipant
               ? html`<button
-                  class="action-btn"
+                  class="duo-primary codex"
                   disabled=${!!dualBusy.value}
-                  onClick=${() => useDuoOrchestrator(codexParticipant.id)}
+                  onClick=${async () => {
+                    if (codexParticipant.id !== activeOrchestratorId) {
+                      await useDuoOrchestrator(codexParticipant.id);
+                    } else {
+                      setDuoView("execute");
+                    }
+                  }}
                 >
-                  use Codex
+                  Codex executes
                 </button>`
               : null}
           </div>
-          <div
-            style="display:flex;gap:var(--sp-xs);flex-wrap:wrap;margin-top:var(--sp-xs)"
-          >
-            <button
-              style="background:${duoView === "chat"
-                ? "var(--cyan)"
-                : "transparent"};color:${duoView === "chat"
-                ? "var(--bg)"
-                : "var(--t3)"};border:1px solid ${duoView === "chat"
-                ? "var(--cyan)"
-                : "var(--border)"};font-size:var(--fs-s);padding:4px 8px;cursor:pointer;font-family:var(--font-mono)"
-              onClick=${() => setDuoView("chat")}
-            >
-              chat
-            </button>
-            <button
-              style="background:${duoView === "collaborate"
-                ? "var(--cyan)"
-                : "transparent"};color:${duoView === "collaborate"
-                ? "var(--bg)"
-                : "var(--t3)"};border:1px solid ${duoView === "collaborate"
-                ? "var(--cyan)"
-                : "var(--border)"};font-size:var(--fs-s);padding:4px 8px;cursor:pointer;font-family:var(--font-mono)"
-              onClick=${() => setDuoView("collaborate")}
-            >
-              collaborate
-            </button>
-            <button
-              style="background:${duoView === "execute"
-                ? "var(--cyan)"
-                : "transparent"};color:${duoView === "execute"
-                ? "var(--bg)"
-                : "var(--t3)"};border:1px solid ${duoView === "execute"
-                ? "var(--cyan)"
-                : "var(--border)"};font-size:var(--fs-s);padding:4px 8px;cursor:pointer;font-family:var(--font-mono)"
-              onClick=${() => setDuoView("execute")}
-            >
-              execute
-            </button>
-          </div>
+          <details class="duo-small-controls">
+            <summary>change mode / routing</summary>
+            <div class="duo-control-grid">
+              ${[
+                ["chat", "plain chat"],
+                ["collaborate", "review room"],
+                ["execute", "execution board"],
+              ].map(
+                ([id, label]) =>
+                  html`<button
+                    class=${duoView === id ? "selected" : ""}
+                    onClick=${() => setDuoView(id)}
+                  >
+                    ${label}
+                  </button>`,
+              )}
+              ${codexParticipant && codexParticipant.id !== activeOrchestratorId
+                ? html`<button
+                    class="selected-warn"
+                    disabled=${!!dualBusy.value}
+                    onClick=${() => useDuoOrchestrator(codexParticipant.id)}
+                  >
+                    make Codex orchestrator
+                  </button>`
+                : null}
+            </div>
+          </details>
         </div>`
       : null}
     <${InboxPanel} />
@@ -1052,74 +1067,69 @@ function ChatSidebar() {
       <${StreamBubble} />
     </div>
     ${latestDuoRound
-      ? html`<div
-          style="padding:var(--sp-s);border-top:1px solid var(--border);background:var(--bg-soft);display:flex;flex-direction:column;gap:var(--sp-xs)"
-        >
-          <div
-            style="display:flex;justify-content:space-between;gap:var(--sp-s);align-items:center;flex-wrap:wrap"
+      ? html`<div class="duo-next-card">
+          <div>
+            <div class="duo-eyebrow">recommended next step</div>
+            <div class="duo-next-title">
+              ${activeOrchestrator?.label || "Pick an orchestrator"} continues
+            </div>
+            <div class="duo-sub">
+              ${latestDuoRound.assistants.length}
+              response${latestDuoRound.assistants.length > 1 ? "s" : ""} from
+              the last Duo round.
+            </div>
+          </div>
+          <button
+            class="duo-primary"
+            disabled=${!!dualBusy.value}
+            onClick=${() => {
+              setDuoComposerAction("send");
+              setDuoComposerTarget("");
+              setDuoView("execute");
+            }}
           >
-            <div>
-              <div
-                style="font-size:var(--fs-s);color:var(--yellow);font-family:var(--font-mono)"
-              >
-                next step
-              </div>
-              <div style="font-size:var(--fs-s);color:var(--t3)">
-                orchestrator: ${activeOrchestrator?.label || "unassigned"}
-              </div>
-            </div>
-            <div style="font-size:var(--fs-s);color:var(--t3)">
-              last duo round: ${latestDuoRound.assistants.length} visible
-              response${latestDuoRound.assistants.length > 1 ? "s" : ""}
-            </div>
-          </div>
-          <div style="display:flex;gap:var(--sp-xs);flex-wrap:wrap">
-            ${codexParticipant && codexParticipant.id !== activeOrchestratorId
-              ? html`<button
-                  class="action-btn primary"
-                  disabled=${!!dualBusy.value}
-                  onClick=${() => useDuoOrchestrator(codexParticipant.id)}
+            Continue
+          </button>
+          <details class="duo-small-controls">
+            <summary>other actions</summary>
+            <div class="duo-control-grid">
+              ${codexParticipant && codexParticipant.id !== activeOrchestratorId
+                ? html`<button
+                    class="selected-warn"
+                    disabled=${!!dualBusy.value}
+                    onClick=${() => useDuoOrchestrator(codexParticipant.id)}
+                  >
+                    use Codex as orchestrator
+                  </button>`
+                : null}
+              ${latestDuoRound.assistants.map((msg) => {
+                const participant =
+                  participants.find((p) => p.id === msg.participant) || null;
+                const canWrite = !!participant?.write_enabled;
+                const isOrchestrator = participant?.id === activeOrchestratorId;
+                const label = (msg.meta || "")
+                  .replace(/^\s*[^A-Za-z0-9]+/, "")
+                  .trim();
+                return html`<button
+                  onClick=${() => focusDuoAgent(msg.participant)}
                 >
-                  use Codex as orchestrator
-                </button>`
-              : null}
-            ${latestDuoRound.assistants.map((msg) => {
-              const participant =
-                participants.find((p) => p.id === msg.participant) || null;
-              const canWrite = !!participant?.write_enabled;
-              const isOrchestrator = participant?.id === activeOrchestratorId;
-              const label = (msg.meta || "")
-                .replace(/^\s*[^A-Za-z0-9]+/, "")
-                .trim();
-              return html`<button
-                class="action-btn"
-                onClick=${() => focusDuoAgent(msg.participant)}
+                  ${canWrite ? "continue with" : "ask"}
+                  ${label || participant?.label || msg.participant}${canWrite
+                    ? isOrchestrator
+                      ? " (orchestrator)"
+                      : ""
+                    : " (review)"}
+                </button>`;
+              })}
+              <button
+                onClick=${() => {
+                  setDuoNextAction("promote_plan");
+                }}
               >
-                ${canWrite ? "continue with" : "ask"}
-                ${label || participant?.label || msg.participant}${canWrite
-                  ? isOrchestrator
-                    ? " (orchestrator)"
-                    : ""
-                  : " (review)"}
-              </button>`;
-            })}
-            <button
-              class="action-btn"
-              onClick=${() => {
-                setDuoNextAction("promote_plan");
-              }}
-            >
-              turn into plan
-            </button>
-            <button
-              class="action-btn"
-              onClick=${() => {
-                setDuoView("execute");
-              }}
-            >
-              open execute
-            </button>
-          </div>
+                turn into plan
+              </button>
+            </div>
+          </details>
         </div>`
       : null}
     ${showScrollBtn.value
@@ -1157,37 +1167,59 @@ function ChatSidebar() {
         </div>`
       : null}
     ${duoCollaborateMode
-      ? html`<div
-          style="display:flex;gap:var(--sp-xs);flex-wrap:wrap;padding:var(--sp-s);border-top:1px solid var(--border);background:var(--bg-soft)"
-        >
-          ${[
-            ["send", "send"],
-            ["ask_both", "ask both"],
-            ["challenge", "challenge"],
-          ].map(
-            ([id, label]) =>
-              html`<button
-                style="background:${duoComposerAction === id
-                  ? "var(--cyan)"
-                  : "transparent"};color:${duoComposerAction === id
-                  ? "var(--bg)"
-                  : "var(--t3)"};border:1px solid ${duoComposerAction === id
-                  ? "var(--cyan)"
-                  : "var(--border)"};font-size:var(--fs-s);padding:4px 8px;cursor:pointer;font-family:var(--font-mono)"
-                onClick=${() => {
-                  setDuoComposerAction(id);
-                  if (id !== "challenge") setDuoComposerTarget("");
-                  setDuoAdvancedOpen(false);
-                }}
+      ? html`<div class="duo-compose-route">
+          <span>
+            Input goes to
+            <strong>
+              ${duoComposerAction === "send"
+                ? activeOrchestrator?.label || "main chat"
+                : duoComposerAction === "challenge"
+                  ? "challenge target"
+                  : duoComposerAction === "mention"
+                    ? roomTarget?.label || "selected agent"
+                    : duoComposerAction === "rebuttal"
+                      ? roomTarget?.label || "selected agent"
+                      : duoComposerAction === "promote_plan"
+                        ? "new plan"
+                        : duoComposerAction === "promote_strategy"
+                          ? "strategy"
+                          : duoComposerAction === "child_session"
+                            ? "child session"
+                            : "both agents"}
+            </strong>
+          </span>
+          <details class="duo-small-controls compact">
+            <summary>change</summary>
+            <div class="duo-control-grid">
+              ${[
+                ["ask_both", "ask both"],
+                ["send", "orchestrator"],
+                ["challenge", "challenge"],
+              ].map(
+                ([id, label]) =>
+                  html`<button
+                    class=${duoComposerAction === id ? "selected" : ""}
+                    onClick=${() => {
+                      setDuoComposerAction(id);
+                      if (id !== "challenge") setDuoComposerTarget("");
+                      setDuoAdvancedOpen(false);
+                    }}
+                  >
+                    ${label}
+                  </button>`,
+              )}
+              <button
+                class=${duoAdvancedOpen ? "selected-warn" : ""}
+                onClick=${() => setDuoAdvancedOpen(!duoAdvancedOpen)}
               >
-                ${label}
-              </button>`,
-          )}
+                more routes
+              </button>
+            </div>
+          </details>
           ${duoComposerAction === "challenge"
             ? html`<select
                 value=${duoComposerTarget}
                 onInput=${(e) => setDuoComposerTarget(e.currentTarget.value)}
-                style="background:var(--sf);color:var(--text);border:1px solid var(--border);font-size:var(--fs-s);padding:4px 8px;font-family:var(--font-mono)"
               >
                 <option value="">pick target</option>
                 ${participants.map(
@@ -1195,18 +1227,6 @@ function ChatSidebar() {
                 )}
               </select>`
             : null}
-          <button
-            style="background:${duoAdvancedOpen
-              ? "var(--yellow)"
-              : "transparent"};color:${duoAdvancedOpen
-              ? "var(--bg)"
-              : "var(--t3)"};border:1px solid ${duoAdvancedOpen
-              ? "var(--yellow)"
-              : "var(--border)"};font-size:var(--fs-s);padding:4px 8px;cursor:pointer;font-family:var(--font-mono)"
-            onClick=${() => setDuoAdvancedOpen(!duoAdvancedOpen)}
-          >
-            advanced
-          </button>
         </div>`
       : null}
     ${duoCollaborateMode && duoAdvancedOpen
@@ -1350,13 +1370,6 @@ function ChatSidebar() {
           </button>`
         : html`<button class="send-btn" onClick=${send}>↑</button>`}
     </div>
-    ${duoWorkspaceInCanvas
-      ? html`<div
-          style="padding:var(--sp-s);border-top:1px solid var(--border);background:var(--bg-soft);font-size:var(--fs-s);color:var(--t3)"
-        >
-          duo ${duoView} workspace is open in the main canvas
-        </div>`
-      : null}
   </div>`;
 }
 
