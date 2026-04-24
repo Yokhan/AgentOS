@@ -561,10 +561,15 @@ function ChatSidebar() {
   const activeOrchestratorId = duoSession?.orchestrator_participant_id || "";
   const activeOrchestrator =
     participants.find((p) => p.id === activeOrchestratorId) || null;
-  const codexParticipant =
-    participants.find((p) => p.provider === "codex") ||
-    participants.find((p) => p.id === "codex_tech") ||
-    null;
+  const leadCandidates =
+    participants.filter(
+      (p) =>
+        p?.id &&
+        (p.provider === "claude" || p.provider === "codex" || p.write_enabled),
+    ) || [];
+  const visibleLeadCandidates = leadCandidates.length
+    ? leadCandidates
+    : participants;
   const roomTarget =
     participants.find((p) => p.id === duoComposerTarget) || null;
   const latestDuoRound = (() => {
@@ -976,13 +981,13 @@ function ChatSidebar() {
                 ${currentProject.value || "_orchestrator"} room
               </div>
               <div class="duo-title">
-                ${activeOrchestrator?.label || "No orchestrator selected"}
+                ${activeOrchestrator?.label || "Choose who leads"}
               </div>
               <div class="duo-sub">
                 ${duoExecuteMode
                   ? "Execution board is open in the main canvas."
                   : duoCollaborateMode
-                    ? "Ask both agents, then choose who executes."
+                    ? "Ask both agents, then choose who leads the next step."
                     : "Normal chat mode; Duo room is standing by."}
               </div>
             </div>
@@ -1007,25 +1012,39 @@ function ChatSidebar() {
             >
               Ask both
             </button>
-            ${codexParticipant
-              ? html`<button
-                  class="duo-primary codex"
-                  disabled=${!!dualBusy.value}
-                  onClick=${async () => {
-                    if (codexParticipant.id !== activeOrchestratorId) {
-                      await useDuoOrchestrator(codexParticipant.id);
-                    } else {
-                      setDuoView("execute");
-                    }
-                  }}
-                >
-                  Codex executes
-                </button>`
-              : null}
+            <button
+              class="duo-primary execute"
+              disabled=${!!dualBusy.value || !visibleLeadCandidates.length}
+              onClick=${async () => {
+                if (!activeOrchestrator && visibleLeadCandidates[0]) {
+                  await useDuoOrchestrator(visibleLeadCandidates[0].id);
+                  return;
+                }
+                setDuoComposerAction("send");
+                setDuoComposerTarget("");
+                setDuoView("execute");
+              }}
+            >
+              ${activeOrchestrator
+                ? "Execute with " + activeOrchestrator.label
+                : "Choose lead"}
+            </button>
           </div>
           <details class="duo-small-controls">
-            <summary>change mode / routing</summary>
+            <summary>choose lead / routing</summary>
             <div class="duo-control-grid">
+              ${visibleLeadCandidates.map(
+                (participant) =>
+                  html`<button
+                    class=${participant.id === activeOrchestratorId
+                      ? "lead selected"
+                      : "lead"}
+                    disabled=${!!dualBusy.value}
+                    onClick=${() => useDuoOrchestrator(participant.id)}
+                  >
+                    lead: ${participant.label}
+                  </button>`,
+              )}
               ${[
                 ["chat", "plain chat"],
                 ["collaborate", "review room"],
@@ -1039,15 +1058,6 @@ function ChatSidebar() {
                     ${label}
                   </button>`,
               )}
-              ${codexParticipant && codexParticipant.id !== activeOrchestratorId
-                ? html`<button
-                    class="selected-warn"
-                    disabled=${!!dualBusy.value}
-                    onClick=${() => useDuoOrchestrator(codexParticipant.id)}
-                  >
-                    make Codex orchestrator
-                  </button>`
-                : null}
             </div>
           </details>
         </div>`
@@ -1093,15 +1103,18 @@ function ChatSidebar() {
           <details class="duo-small-controls">
             <summary>other actions</summary>
             <div class="duo-control-grid">
-              ${codexParticipant && codexParticipant.id !== activeOrchestratorId
-                ? html`<button
-                    class="selected-warn"
+              ${visibleLeadCandidates.map(
+                (participant) =>
+                  html`<button
+                    class=${participant.id === activeOrchestratorId
+                      ? "lead selected"
+                      : "lead"}
                     disabled=${!!dualBusy.value}
-                    onClick=${() => useDuoOrchestrator(codexParticipant.id)}
+                    onClick=${() => useDuoOrchestrator(participant.id)}
                   >
-                    use Codex as orchestrator
-                  </button>`
-                : null}
+                    lead: ${participant.label}
+                  </button>`,
+              )}
               ${latestDuoRound.assistants.map((msg) => {
                 const participant =
                   participants.find((p) => p.id === msg.participant) || null;

@@ -1,6 +1,11 @@
+# Agent OS 0.2.11
+
+- Made the Duo flow provider-neutral: the right panel now asks who should lead, lists all room lead candidates, and uses `Execute with <current lead>` instead of hardcoding Codex as the execution path.
+- Codex remains one-click selectable when present, but Claude or any write-enabled participant can be made lead from the same compact control.
+
 # Agent OS 0.2.10
 
-- Simplified the Duo right panel so it presents one readable flow instead of a cockpit of internal modes: `Ask both`, `Codex executes`, a compact route line, and collapsed advanced controls.
+- Simplified the Duo right panel so it presents one readable flow instead of a cockpit of internal modes: primary review/execution actions, a compact route line, and collapsed advanced controls.
 - Reduced duplicate Duo status chrome by removing the always-visible mode tab row, lower workspace notice, and noisy next-step button cluster.
 
 # Agent OS 0.2.9

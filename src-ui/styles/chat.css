@@ -246,7 +246,7 @@
     min-height: 34px;
     padding: var(--sp-xs) var(--sp-m);
 }
-.duo-primary.codex {
+.duo-primary.execute {
     background: var(--cyan);
     border-color: var(--cyan);
 }
@@ -293,6 +293,13 @@
     background: var(--cyan);
     border-color: var(--cyan);
     color: var(--bg);
+}
+.duo-control-grid button.lead {
+    border-color: color-mix(in srgb, var(--cyan) 45%, var(--border));
+}
+.duo-control-grid button.lead::before {
+    content: "• ";
+    color: var(--cyan);
 }
 .duo-control-grid button.selected-warn {
     background: var(--yellow);
