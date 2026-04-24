@@ -22,6 +22,7 @@ import {
   selectedClaudeEffort,
   selectedCodexModel,
   selectedCodexEffort,
+  selectedSoloProvider,
   isRec,
   attFiles,
   isOn,
@@ -567,11 +568,19 @@ function ChatSidebar() {
   const duoCollaborateMode = duoEnabled && duoView === "collaborate";
   const duoExecuteMode = duoEnabled && duoView === "execute";
   const duoWorkspaceInCanvas = duoCollaborateMode || duoExecuteMode;
-  const soloProvider =
-    !currentProject.value &&
-    permData.value?.provider_status?.roles?.orchestrator_provider === "codex"
-      ? "codex"
-      : "claude";
+  const configuredSoloProvider =
+    permData.value?.provider_status?.roles?.orchestrator_provider || "claude";
+  const explicitSoloProvider = ["claude", "codex"].includes(
+    selectedSoloProvider.value,
+  )
+    ? selectedSoloProvider.value
+    : "";
+  const soloProvider = explicitSoloProvider || configuredSoloProvider;
+  const soloProviderOptions = [
+    ["", "auto: " + configuredSoloProvider],
+    ["claude", "claude"],
+    ["codex", "codex"],
+  ];
   const selectedModelValue =
     soloProvider === "codex"
       ? selectedCodexModel.value
@@ -1033,7 +1042,27 @@ function ChatSidebar() {
         ${duoEnabled
           ? null
           : html`<select
+                value=${selectedSoloProvider.value}
+                title="Solo provider"
+                style="background:var(--sf);color:var(--t2);border:1px solid var(--border);font-family:var(--font-mono);font-size:var(--fs-s);padding:var(--sp-xs)"
+                onChange=${(e) => {
+                  selectedSoloProvider.value = e.target.value;
+                  showToast(
+                    "solo provider: " +
+                      (e.target.value || configuredSoloProvider),
+                    "success",
+                    1500,
+                  );
+                }}
+              >
+                ${soloProviderOptions.map(
+                  ([value, label]) =>
+                    html`<option value=${value}>${label}</option>`,
+                )}
+              </select>
+              <select
                 value=${selectedModelValue}
+                title=${soloProvider + " model"}
                 style="background:var(--sf);color:var(--t2);border:1px solid var(--border);font-family:var(--font-mono);font-size:var(--fs-s);padding:var(--sp-xs)"
                 onChange=${(e) => {
                   if (soloProvider === "codex") {
@@ -1055,6 +1084,7 @@ function ChatSidebar() {
               </select>
               <select
                 value=${selectedEffortValue}
+                title=${soloProvider + " effort"}
                 style="background:var(--sf);color:var(--t2);border:1px solid var(--border);font-family:var(--font-mono);font-size:var(--fs-s);padding:var(--sp-xs)"
                 onChange=${(e) => {
                   if (soloProvider === "codex") {

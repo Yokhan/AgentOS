@@ -30,6 +30,9 @@ const selectedCodexModel = signal(
 const selectedCodexEffort = signal(
   localStorage.getItem("agentos_codex_effort") || "",
 );
+const selectedSoloProvider = signal(
+  localStorage.getItem("agentos_solo_provider") || "",
+);
 effect(() =>
   localStorage.setItem("agentos_claude_model", selectedClaudeModel.value),
 );
@@ -41,6 +44,9 @@ effect(() =>
 );
 effect(() =>
   localStorage.setItem("agentos_codex_effort", selectedCodexEffort.value),
+);
+effect(() =>
+  localStorage.setItem("agentos_solo_provider", selectedSoloProvider.value),
 );
 const subModel = signal("sonnet"); // model for orchestrator's sub-project calls
 const isRec = signal(false);
@@ -159,6 +165,7 @@ export {
   selectedClaudeEffort,
   selectedCodexModel,
   selectedCodexEffort,
+  selectedSoloProvider,
   subModel,
   isRec,
   attFiles,

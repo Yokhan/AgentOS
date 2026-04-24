@@ -13,6 +13,7 @@ pub async fn stream_chat(
     state: State<'_, Arc<AppState>>,
     project: String,
     message: String,
+    provider: Option<String>,
     model: Option<String>,
     reasoning_effort: Option<String>,
 ) -> Result<Value, String> {
@@ -46,6 +47,7 @@ pub async fn stream_chat(
         super::provider_runner::resolve_single_chat_settings(
             &state,
             &project,
+            provider.as_deref(),
             model.as_deref(),
             reasoning_effort.as_deref(),
         );

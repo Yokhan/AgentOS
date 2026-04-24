@@ -102,21 +102,20 @@ pub fn technical_reviewer_provider(state: &AppState) -> ProviderKind {
     )
 }
 
-pub fn single_chat_provider(state: &AppState, project: &str) -> ProviderKind {
-    if project.trim().is_empty() {
-        orchestrator_provider(state)
-    } else {
-        ProviderKind::Claude
-    }
+pub fn single_chat_provider(state: &AppState, explicit_provider: Option<&str>) -> ProviderKind {
+    let default = orchestrator_provider(state);
+    let explicit = explicit_provider.filter(|value| !value.trim().is_empty());
+    parse_provider(explicit, default)
 }
 
 pub fn resolve_single_chat_settings(
     state: &AppState,
     project: &str,
+    explicit_provider: Option<&str>,
     explicit_model: Option<&str>,
     explicit_effort: Option<&str>,
 ) -> (ProviderKind, Option<String>, Option<String>) {
-    let provider = single_chat_provider(state, project);
+    let provider = single_chat_provider(state, explicit_provider);
     if project.trim().is_empty() {
         return (
             provider,
@@ -131,12 +130,8 @@ pub fn resolve_single_chat_settings(
     }
     (
         provider,
-        explicit_model
-            .filter(|m| !m.trim().is_empty())
-            .map(str::to_string),
-        explicit_effort
-            .filter(|e| !e.trim().is_empty())
-            .map(str::to_string),
+        resolve_provider_model(state, provider, explicit_model, None),
+        resolve_provider_effort(state, provider, explicit_effort, None),
     )
 }
 
@@ -1035,6 +1030,52 @@ mod tests {
                 .and_then(|slug| slug.as_str()),
             Some("gpt-5.5")
         );
+    }
+
+    #[test]
+    fn project_solo_chat_can_explicitly_use_codex() {
+        let root = temp_path("project-solo-provider");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("n8n")).unwrap();
+        std::fs::write(
+            root.join("n8n").join("config.json"),
+            serde_json::to_string(&json!({
+                "orchestrator_provider": "claude",
+                "codex_model": "gpt-5.5",
+                "codex_effort": "xhigh"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let state = crate::state::AppState::new(root.clone());
+
+        let (provider, model, effort) =
+            resolve_single_chat_settings(&state, "AgentOS", Some("codex"), None, None);
+
+        assert_eq!(provider, ProviderKind::Codex);
+        assert_eq!(model.as_deref(), Some("gpt-5.5"));
+        assert_eq!(effort.as_deref(), Some("xhigh"));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn project_solo_chat_auto_uses_configured_orchestrator_provider() {
+        let root = temp_path("project-solo-auto-provider");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("n8n")).unwrap();
+        std::fs::write(
+            root.join("n8n").join("config.json"),
+            serde_json::to_string(&json!({ "orchestrator_provider": "codex" })).unwrap(),
+        )
+        .unwrap();
+        let state = crate::state::AppState::new(root.clone());
+
+        let (provider, _, _) = resolve_single_chat_settings(&state, "AgentOS", None, None, None);
+
+        assert_eq!(provider, ProviderKind::Codex);
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
 

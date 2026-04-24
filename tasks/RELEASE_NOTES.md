@@ -1,3 +1,10 @@
+# Agent OS 0.2.13
+
+- Fixed solo provider routing: project chats no longer force Claude when the user selects Codex or when the configured solo/orchestrator provider is Codex.
+- Added a visible solo provider selector (`auto`, `claude`, `codex`) next to model/effort controls.
+- Passed the selected solo provider through the Tauri chat command so frontend choice and backend execution cannot drift.
+- Added regression tests for explicit Codex solo routing and auto routing from the configured orchestrator provider.
+
 # Agent OS 0.2.12
 
 - Added a read-only orchestration scope resolver so Duo knows whether the current context is global, project, strategy, plan, or task instead of guessing from the visible panel.

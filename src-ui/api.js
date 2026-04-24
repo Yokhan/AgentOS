@@ -15,6 +15,7 @@ import {
   selectedClaudeEffort,
   selectedCodexModel,
   selectedCodexEffort,
+  selectedSoloProvider,
   isRec,
   attFiles,
   isOn,
@@ -146,11 +147,14 @@ function clrDr() {
 }
 
 function normalizedSoloProviderSelection() {
-  const soloProvider =
-    !currentProject.value &&
-    permData.value?.provider_status?.roles?.orchestrator_provider === "codex"
-      ? "codex"
-      : "claude";
+  const configuredProvider =
+    permData.value?.provider_status?.roles?.orchestrator_provider || "claude";
+  const explicitProvider = ["claude", "codex"].includes(
+    selectedSoloProvider.value,
+  )
+    ? selectedSoloProvider.value
+    : "";
+  const soloProvider = explicitProvider || configuredProvider;
   return {
     provider: soloProvider,
     ...normalizeSoloSelection(
@@ -942,6 +946,7 @@ async function sendMessage(msg) {
       __invoke("stream_chat", {
         project: proj,
         message: msg,
+        provider: normalizedSelection.provider || null,
         model: normalizedSelection.model || null,
         reasoningEffort: normalizedSelection.effort || null,
       }).catch((e) => {
