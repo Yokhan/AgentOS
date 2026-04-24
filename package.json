@@ -1,6 +1,6 @@
 {
   "name": "agent-os",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Agent OS - Desktop command center for AI agents",
   "private": true,
   "scripts": {

@@ -1,3 +1,7 @@
+# Agent OS 0.2.9
+
+- The startup updater now restarts Agent OS after a downloaded update is installed, so the newly installed UI becomes visible immediately instead of leaving the old running process on screen.
+
 # Agent OS 0.2.8
 
 - The right duo panel now exposes the active orchestrator and a direct `use Codex` / `use Codex as orchestrator` path without digging through runtime controls.

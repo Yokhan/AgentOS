@@ -31,12 +31,7 @@ fn should_check_on_startup<R: Runtime>(app: &AppHandle<R>) -> bool {
 }
 
 fn notify<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
-    let _ = app
-        .notification()
-        .builder()
-        .title(title)
-        .body(body)
-        .show();
+    let _ = app.notification().builder().title(title).body(body).show();
 }
 
 pub fn spawn_startup_update_check<R: Runtime>(app: &AppHandle<R>) {
@@ -78,5 +73,11 @@ pub async fn check_and_install_updates<R: Runtime>(app: &AppHandle<R>) -> Result
         .await
         .map_err(|e| e.to_string())?;
 
-    Ok(())
+    crate::log_info!("[updater] update installed, restarting Agent OS");
+    notify(
+        app,
+        "Agent OS update installed",
+        "Restarting to finish update.",
+    );
+    app.restart()
 }
