@@ -1,3 +1,10 @@
+# Agent OS 0.2.15
+
+- Fixed PA command parsing after provider failures: Codex/OpenAI error output that echoes `[IDENTITY]` or prompt context is no longer scanned for executable AgentOS commands.
+- Ignored command examples inside context blocks and fenced code, so placeholders like `[DELEGATE:Project]`, `[CRON_CREATE:name:schedule]`, and `[INCOME_RECORD:amount:category]` cannot create real delegations, cron entries, alerts, income records, or strategies.
+- Added regression tests for provider-error echoes, identity blocks, fenced examples, and real command parsing.
+- Updated the local Codex CLI to `0.125.0`; `gpt-5.5` now runs through the installed CLI instead of failing with the old-version 400 error.
+
 # Agent OS 0.2.14
 
 - Made the Duo handoff explicit: after a two-agent round the primary action is now `Make plan`, with a direct `Codex leads execution` path that switches a write-enabled Codex participant into the orchestrator role.

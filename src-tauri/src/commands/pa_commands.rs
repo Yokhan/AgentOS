@@ -65,10 +65,14 @@ pub struct ParsedCommand {
 /// Parse and validate all PA commands from response text.
 /// Returns commands in order of appearance with validation status.
 pub fn parse_pa_commands(response: &str, state: &AppState) -> Vec<ParsedCommand> {
+    let response = command_scan_text(response);
+    if response.trim().is_empty() {
+        return Vec::new();
+    }
     let mut commands = Vec::new();
 
     // Delegations (multiple)
-    for caps in RE_DELEGATE.captures_iter(response) {
+    for caps in RE_DELEGATE.captures_iter(&response) {
         let project = caps
             .get(1)
             .map(|m| m.as_str().trim().to_string())
@@ -87,7 +91,7 @@ pub fn parse_pa_commands(response: &str, state: &AppState) -> Vec<ParsedCommand>
     }
 
     // Deploy
-    if let Some(caps) = RE_DEPLOY.captures(response) {
+    if let Some(caps) = RE_DEPLOY.captures(&response) {
         let project = caps
             .get(1)
             .map(|m| m.as_str().trim().to_string())
@@ -101,7 +105,7 @@ pub fn parse_pa_commands(response: &str, state: &AppState) -> Vec<ParsedCommand>
     }
 
     // Health Check
-    if let Some(caps) = RE_HEALTH.captures(response) {
+    if let Some(caps) = RE_HEALTH.captures(&response) {
         let target = caps
             .get(1)
             .map(|m| m.as_str().trim().to_string())
@@ -119,7 +123,7 @@ pub fn parse_pa_commands(response: &str, state: &AppState) -> Vec<ParsedCommand>
     }
 
     // Plan
-    if let Some(caps) = RE_PLAN.captures(response) {
+    if let Some(caps) = RE_PLAN.captures(&response) {
         let title = caps
             .get(1)
             .map(|m| m.as_str().trim().to_string())
@@ -157,7 +161,7 @@ pub fn parse_pa_commands(response: &str, state: &AppState) -> Vec<ParsedCommand>
     }
 
     // Queue
-    if let Some(caps) = RE_QUEUE.captures(response) {
+    if let Some(caps) = RE_QUEUE.captures(&response) {
         let task = caps
             .get(1)
             .map(|m| m.as_str().trim().to_string())
@@ -175,7 +179,7 @@ pub fn parse_pa_commands(response: &str, state: &AppState) -> Vec<ParsedCommand>
     }
 
     // Notify
-    if let Some(caps) = RE_NOTIFY.captures(response) {
+    if let Some(caps) = RE_NOTIFY.captures(&response) {
         let message = caps
             .get(1)
             .map(|m| m.as_str().trim().to_string())
@@ -188,7 +192,7 @@ pub fn parse_pa_commands(response: &str, state: &AppState) -> Vec<ParsedCommand>
     }
 
     // Remember
-    if let Some(caps) = RE_REMEMBER.captures(response) {
+    if let Some(caps) = RE_REMEMBER.captures(&response) {
         let note = caps
             .get(1)
             .map(|m| m.as_str().trim().to_string())
@@ -206,7 +210,7 @@ pub fn parse_pa_commands(response: &str, state: &AppState) -> Vec<ParsedCommand>
     }
 
     // Strategy
-    if let Some(caps) = RE_STRATEGY.captures(response) {
+    if let Some(caps) = RE_STRATEGY.captures(&response) {
         let goal = caps
             .get(1)
             .map(|m| m.as_str().trim().to_string())
@@ -229,10 +233,10 @@ pub fn parse_pa_commands(response: &str, state: &AppState) -> Vec<ParsedCommand>
 
     // Extended delegation commands (DELEGATE_BATCH, CHAIN, RETRY, etc.)
     commands.extend(super::pa_commands_deleg::parse_delegation_commands(
-        response, state,
+        &response, state,
     ));
     // Ops commands (DEPLOY, GIT, MEMORY, CRON, etc.)
-    commands.extend(super::pa_commands_ops::parse_ops_commands(response, state));
+    commands.extend(super::pa_commands_ops::parse_ops_commands(&response, state));
 
     // Log all parsed commands
     for cmd in &commands {
@@ -251,6 +255,66 @@ pub fn parse_pa_commands(response: &str, state: &AppState) -> Vec<ParsedCommand>
     }
 
     commands
+}
+
+fn command_scan_text(response: &str) -> String {
+    let trimmed = response.trim_start();
+    if trimmed.starts_with("Error:") || response.contains("\"type\":\"error\"") {
+        return String::new();
+    }
+
+    let mut text = strip_fenced_code_blocks(response);
+    for block in [
+        "IDENTITY",
+        "PROJECTS",
+        "CATEGORIES",
+        "DELEGATIONS",
+        "STRATEGIES",
+        "QUEUE",
+        "YOUR MEMORY",
+        "RECENT CONVERSATION",
+        "USER MESSAGE",
+    ] {
+        text = strip_named_context_block(&text, block);
+    }
+    text
+}
+
+fn strip_named_context_block(input: &str, block: &str) -> String {
+    let start_marker = format!("[{}", block);
+    let end_marker = format!("[END {}]", block);
+    let mut out = input.to_string();
+
+    loop {
+        let Some(start) = out.find(&start_marker) else {
+            break;
+        };
+        let Some(relative_end) = out[start..].find(&end_marker) else {
+            break;
+        };
+        let end = start + relative_end + end_marker.len();
+        out.replace_range(start..end, "");
+    }
+
+    out
+}
+
+fn strip_fenced_code_blocks(input: &str) -> String {
+    let mut out = String::new();
+    let mut in_fence = false;
+
+    for line in input.lines() {
+        if line.trim_start().starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if !in_fence {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+
+    out
 }
 
 fn validate_delegation(state: &AppState, project: &str, task: &str) -> (bool, Option<String>) {
@@ -436,21 +500,88 @@ pub fn execute_pa_command(state: &AppState, cmd: &PaCommand) -> Option<String> {
 // build_tactic_from_steps moved to strategy.rs
 
 pub fn detect_malformed_commands(response: &str) -> Vec<String> {
+    let response = command_scan_text(response);
+    if response.trim().is_empty() {
+        return Vec::new();
+    }
     let mut warnings = Vec::new();
     if response.to_lowercase().contains("delegate")
         && response.contains('[')
-        && !RE_DELEGATE.is_match(response)
+        && !RE_DELEGATE.is_match(&response)
     {
         warnings.push(
             "Delegation not parsed. Use format: [DELEGATE:ProjectName]task[/DELEGATE]".to_string(),
         );
     }
-    if response.contains("[PLAN:") && !RE_PLAN.is_match(response) {
+    if response.contains("[PLAN:") && !RE_PLAN.is_match(&response) {
         warnings.push("Plan not parsed. Use format: [PLAN:title]steps[/PLAN]".to_string());
     }
-    if response.contains("[STRATEGY:") && !RE_STRATEGY.is_match(response) {
+    if response.contains("[STRATEGY:") && !RE_STRATEGY.is_match(&response) {
         warnings
             .push("Strategy not parsed. Use format: [STRATEGY:goal]context[/STRATEGY]".to_string());
     }
     warnings
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::AppState;
+
+    fn test_state(name: &str) -> AppState {
+        let root = std::env::temp_dir().join(format!(
+            "agentos-pa-commands-{name}-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(root.join("tasks"));
+        AppState::new(root)
+    }
+
+    #[test]
+    fn provider_error_echoing_identity_does_not_parse_commands() {
+        let state = test_state("provider-error");
+        let response = r#"Error: OpenAI Codex v0.121.0
+user
+[IDENTITY]
+[DELEGATE:Project]task[/DELEGATE]
+[CRON_CREATE:name:schedule]task[/CRON_CREATE]
+[INCOME_RECORD:0:category]description[/INCOME_RECORD]
+[END IDENTITY]
+ERROR: {"type":"error","status":400}"#;
+
+        assert!(parse_pa_commands(response, &state).is_empty());
+        assert!(detect_malformed_commands(response).is_empty());
+    }
+
+    #[test]
+    fn identity_context_is_ignored_by_command_parser() {
+        let state = test_state("identity");
+        let response = r#"[IDENTITY]
+[DELEGATE:Project]task[/DELEGATE]
+[QUEUE:task]
+[END IDENTITY]"#;
+
+        assert!(parse_pa_commands(response, &state).is_empty());
+    }
+
+    #[test]
+    fn real_queue_command_still_parses() {
+        let state = test_state("real-command");
+        let commands = parse_pa_commands("[QUEUE:ship the fix]", &state);
+
+        assert_eq!(commands.len(), 1);
+        assert!(commands[0].valid);
+        assert!(matches!(commands[0].cmd, PaCommand::Queue { .. }));
+    }
+
+    #[test]
+    fn fenced_command_examples_are_ignored() {
+        let state = test_state("fenced");
+        let response = "```text\n[QUEUE:example]\n```\nNo action.";
+
+        assert!(parse_pa_commands(response, &state).is_empty());
+    }
 }
