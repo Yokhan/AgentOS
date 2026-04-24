@@ -1,3 +1,10 @@
+# Agent OS 0.2.14
+
+- Made the Duo handoff explicit: after a two-agent round the primary action is now `Make plan`, with a direct `Codex leads execution` path that switches a write-enabled Codex participant into the orchestrator role.
+- Added `open in Duo execute` from the Plans view so a plan can be discussed, scoped, converted into tasks, and executed without hunting through panels.
+- Renamed cockpit-style labels in the execution UI: provider batch buttons now say `run all Codex/Claude tasks`, and manual creation says `create task` instead of internal todo/workflow wording.
+- Kept the underlying model/provider-neutral pipeline intact: Codex can lead execution when selected, while Claude/Opus and Codex child work still route through delegated task execution.
+
 # Agent OS 0.2.13
 
 - Fixed solo provider routing: project chats no longer force Claude when the user selects Codex or when the configured solo/orchestrator provider is Codex.

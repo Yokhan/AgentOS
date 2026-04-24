@@ -738,6 +738,51 @@ ${pd?.config?.codex_command_template || ""}</textarea
 
 function PlansView() {
   const plans = plansData.value;
+  const openPlanInDuo = async (plan) => {
+    const project =
+      (plan.steps || []).find(
+        (step) => step.project && step.project !== "_orchestrator",
+      )?.project || "";
+    if (project) currentProject.value = project;
+    activeScope.value = {
+      kind: "plan",
+      label: "Plan",
+      title: plan.title,
+      project,
+      plan_id: plan.id,
+      counts: {
+        steps: (plan.steps || []).length,
+        active_steps: (plan.steps || []).filter(
+          (step) => !["done", "failed", "cancelled"].includes(step.status),
+        ).length,
+      },
+      breadcrumbs: [
+        { kind: "global", label: "Global" },
+        ...(project ? [{ kind: "project", label: project }] : []),
+        { kind: "plan", label: plan.title },
+      ],
+      available_actions: [
+        { id: "ask_both", label: "Ask both", tone: "neutral" },
+        {
+          id: "execute_next_step",
+          label: "Execute next step",
+          tone: "primary",
+        },
+        { id: "create_work_item", label: "Create task", tone: "neutral" },
+        { id: "replan", label: "Replan", tone: "neutral" },
+      ],
+      summary: `Duo actions apply to plan: ${plan.title}`,
+    };
+    showPlans.value = false;
+    chatCollabMode.value = true;
+    activeRoomTab.value = "execute";
+    try {
+      const session = await ensureDualSession(project);
+      if (session?.id) await loadDualSession(session.id);
+    } catch (e) {
+      showToast("Open plan in Duo error: " + e, "error");
+    }
+  };
   return html`<div class="content">
     <div class="back" onClick=${() => (showPlans.value = false)}>
       ← back to dashboard
@@ -768,15 +813,26 @@ function PlansView() {
           style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-s)"
         >
           <strong style="font-size:var(--fs-m)">${plan.title}</strong>
-          <span
-            style="font-size:var(--fs-s);padding:2px 8px;border:1px solid;color:${plan.status ===
-            "completed"
-              ? "var(--green)"
-              : plan.status === "active"
-                ? "var(--yellow)"
-                : "var(--t3)"}"
-            >${plan.status}</span
+          <div
+            style="display:flex;gap:var(--sp-xs);align-items:center;flex-wrap:wrap"
           >
+            <button
+              class="action-btn"
+              style="font-size:var(--fs-s);padding:3px 8px"
+              onClick=${() => openPlanInDuo(plan)}
+            >
+              open in Duo execute
+            </button>
+            <span
+              style="font-size:var(--fs-s);padding:2px 8px;border:1px solid;color:${plan.status ===
+              "completed"
+                ? "var(--green)"
+                : plan.status === "active"
+                  ? "var(--yellow)"
+                  : "var(--t3)"}"
+              >${plan.status}</span
+            >
+          </div>
         </div>
         <div
           style="display:flex;align-items:center;gap:var(--sp-s);margin-bottom:var(--sp-s)"
@@ -2072,14 +2128,14 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
               disabled=${!!dualBusy.value}
               onClick=${() => queueProviderRound("claude")}
             >
-              run Claude
+              run all Claude tasks
             </button>
             <button
               class="action-btn"
               disabled=${!!dualBusy.value}
               onClick=${() => queueProviderRound("codex")}
             >
-              run Codex
+              run all Codex tasks
             </button>
             <button
               class="action-btn"
@@ -2443,7 +2499,7 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
         <summary
           style="cursor:pointer;font-family:var(--font-mono);font-size:var(--fs-s);color:var(--yellow);margin-bottom:var(--sp-xs)"
         >
-          new task
+          create task
         </summary>
         <div
           style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:var(--sp-xs)"
@@ -2520,7 +2576,7 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
             disabled=${!!dualBusy.value}
             onClick=${createTodo}
           >
-            create todo
+            create task
           </button>
           <button
             class="action-btn"

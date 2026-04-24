@@ -699,6 +699,38 @@ function ChatSidebar() {
     );
     activeRoomTab.value = "collaborate";
   };
+  const focusComposerSoon = () =>
+    setTimeout(() => inputRef.current?.focus(), 0);
+  const draftPlanFromDuo = () => {
+    setDuoNextAction("promote_plan");
+    focusComposerSoon();
+  };
+  const useProviderAsLead = async (provider) => {
+    const candidate =
+      visibleLeadCandidates.find(
+        (participant) =>
+          participant.provider === provider && participant.write_enabled,
+      ) ||
+      visibleLeadCandidates.find(
+        (participant) => participant.provider === provider,
+      );
+    if (!candidate) {
+      showToast(`No ${provider} participant in this Duo room`, "error");
+      return;
+    }
+    if (!candidate.write_enabled) {
+      showToast(
+        `${candidate.label} is review-only. Grant write in execute controls before using it as the orchestrator.`,
+        "error",
+      );
+      return;
+    }
+    await useDuoOrchestrator(candidate.id);
+    setDuoComposerAction("send");
+    setDuoComposerTarget("");
+    setDuoView("execute");
+    focusComposerSoon();
+  };
   const runScopeAction = async (actionId) => {
     if (actionId === "ask_both") {
       setDuoComposerAction("ask_both");
@@ -724,17 +756,16 @@ function ChatSidebar() {
     }
     if (actionId === "create_strategy") {
       setDuoNextAction("promote_strategy");
-      setTimeout(() => inputRef.current?.focus(), 0);
+      focusComposerSoon();
       return;
     }
     if (actionId === "create_plan" || actionId === "replan") {
-      setDuoNextAction("promote_plan");
-      setTimeout(() => inputRef.current?.focus(), 0);
+      draftPlanFromDuo();
       return;
     }
     if (actionId === "queue_task" || actionId === "create_work_item") {
       setDuoNextAction("child_session");
-      setTimeout(() => inputRef.current?.focus(), 0);
+      focusComposerSoon();
       return;
     }
     if (actionId === "review_result") {
@@ -1214,19 +1245,24 @@ function ChatSidebar() {
             <div class="duo-sub">
               ${latestDuoRound.assistants.length}
               response${latestDuoRound.assistants.length > 1 ? "s" : ""} from
-              the last Duo round.
+              the last Duo round. Discuss, convert to a plan, then let the
+              execution lead delegate child work.
             </div>
           </div>
           <button
             class="duo-primary"
             disabled=${!!dualBusy.value}
-            onClick=${() => {
-              setDuoComposerAction("send");
-              setDuoComposerTarget("");
-              setDuoView("execute");
-            }}
+            onClick=${draftPlanFromDuo}
           >
-            Continue
+            Make plan
+          </button>
+          <button
+            class="duo-primary"
+            disabled=${!!dualBusy.value}
+            onClick=${() => useProviderAsLead("codex")}
+            title="Switch Codex into orchestrator role and open execution mode."
+          >
+            Codex leads execution
           </button>
           <details class="duo-small-controls">
             <summary>other actions</summary>
@@ -1262,13 +1298,7 @@ function ChatSidebar() {
                     : " (review)"}
                 </button>`;
               })}
-              <button
-                onClick=${() => {
-                  setDuoNextAction("promote_plan");
-                }}
-              >
-                turn into plan
-              </button>
+              <button onClick=${draftPlanFromDuo}>make plan from round</button>
             </div>
           </details>
         </div>`
@@ -1325,7 +1355,7 @@ function ChatSidebar() {
                         : duoComposerAction === "promote_strategy"
                           ? "strategy"
                           : duoComposerAction === "child_session"
-                            ? "child session"
+                            ? "project room"
                             : "both agents"}
             </strong>
           </span>
@@ -1378,8 +1408,8 @@ function ChatSidebar() {
             ["mention", "@mention"],
             ["rebuttal", "rebuttal"],
             ["promote_strategy", "strategy"],
-            ["promote_plan", "ad-hoc plan"],
-            ["child_session", "child session"],
+            ["promote_plan", "make plan"],
+            ["child_session", "project room"],
           ].map(
             ([id, label]) =>
               html`<button
@@ -1464,7 +1494,7 @@ function ChatSidebar() {
                   return "describe the goal to promote into strategy...";
                 }
                 if (duoComposerAction === "promote_plan") {
-                  return "write ad-hoc plan steps...";
+                  return "write plan steps, e.g. Project: task...";
                 }
                 if (duoComposerAction === "child_session") {
                   return "write 'project: title' or a project-room title...";
