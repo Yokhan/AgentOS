@@ -52,6 +52,7 @@ import {
   dualSessionData,
   dualHistories,
   dualBusy,
+  activeScope,
   showToast,
 } from "/store.js";
 import { normalizeSoloSelection } from "/provider-caps.js";
@@ -397,6 +398,7 @@ async function loadStrategies() {
     if (__IS_TAURI) {
       const r = await __invoke("get_strategies");
       strategies.value = r.strategies || [];
+      loadActiveScope().catch((e) => console.warn("scope refresh:", e));
     }
   } catch (e) {
     console.warn("loadStrategies:", e);
@@ -407,10 +409,48 @@ async function loadPlansData() {
     if (__IS_TAURI) {
       const r = await __invoke("get_plans");
       plansData.value = r.plans || [];
+      loadActiveScope().catch((e) => console.warn("scope refresh:", e));
     }
   } catch (e) {
     console.warn("loadPlans:", e);
   }
+}
+
+async function loadActiveScope(
+  project = currentProject.value || "",
+  sessionId = activeDualSession.value || null,
+) {
+  const fallbackProject = project || "";
+  if (!__IS_TAURI) {
+    activeScope.value = {
+      kind: fallbackProject ? "project" : "global",
+      label: fallbackProject ? "Project" : "Global",
+      title: fallbackProject || "_orchestrator",
+      project: fallbackProject,
+      breadcrumbs: [
+        { kind: "global", label: "Global" },
+        ...(fallbackProject
+          ? [{ kind: "project", label: fallbackProject }]
+          : []),
+      ],
+      available_actions: [
+        { id: "ask_both", label: "Ask both", tone: "neutral" },
+      ],
+      summary: fallbackProject
+        ? `Duo actions apply to project: ${fallbackProject}`
+        : "Duo is operating at global orchestration level.",
+    };
+    return activeScope.value;
+  }
+  const res = await __invoke("get_active_scope", {
+    project: fallbackProject || null,
+    roomSessionId: sessionId || null,
+  });
+  if (res?.status === "ok" && res.scope) {
+    activeScope.value = res.scope;
+    return res.scope;
+  }
+  throw new Error(res?.error || "Cannot resolve active scope");
 }
 async function generateStrategy(goalText, ctx, roomSessionId = null) {
   strategyLoading.value = true;
@@ -1216,6 +1256,10 @@ async function loadDualSession(sessionId) {
       histories[p.id] = h.messages || [];
     }
     dualHistories.value = histories;
+    await loadActiveScope(
+      res.session.project || currentProject.value || "",
+      sessionId,
+    );
   } else {
     showToast(res?.error || "Cannot load session", "error");
   }
@@ -1298,6 +1342,9 @@ async function ensureDualSession(project = "") {
     dualSessionData.value?.session &&
     (dualSessionData.value.session.project || "") === normalized
   ) {
+    loadActiveScope(normalized, dualSessionData.value.session.id).catch((e) =>
+      console.warn("scope refresh:", e),
+    );
     return dualSessionData.value.session;
   }
   try {
@@ -1450,6 +1497,7 @@ export {
   ackSignal,
   loadStrategies,
   loadPlansData,
+  loadActiveScope,
   generateStrategy,
   createAdhocPlanFromRoom,
   createRoomProjectSession,

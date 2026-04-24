@@ -1,3 +1,10 @@
+# Agent OS 0.2.12
+
+- Added a read-only orchestration scope resolver so Duo knows whether the current context is global, project, strategy, plan, or task instead of guessing from the visible panel.
+- Reworked the compact Duo card around that scope: breadcrumb path, scoped actions, and a single lead/mode disclosure replace duplicated primary controls.
+- Mirrored the same scope path in the main Duo workspace so chat, project room, plans, and execution board stay aligned.
+- Added a regression test that verifies a linked plan wins over the project fallback when resolving active scope.
+
 # Agent OS 0.2.11
 
 - Made the Duo flow provider-neutral: the right panel now asks who should lead, lists all room lead candidates, and uses `Execute with <current lead>` instead of hardcoding Codex as the execution path.

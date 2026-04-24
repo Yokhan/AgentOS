@@ -19,6 +19,7 @@ import {
   sideMessages,
   chatCollabMode,
   activeRoomTab,
+  activeScope,
   showToast,
 } from "/store.js";
 import {
@@ -1087,6 +1088,23 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
   const activeOrchestrator = data?.active_orchestrator || null;
   const activeOrchestratorId =
     session?.orchestrator_participant_id || activeOrchestrator?.id || "";
+  const scope = activeScope.value || {
+    kind: session?.project ? "project" : "global",
+    label: session?.project ? "Project" : "Global",
+    title: session?.project || "_orchestrator",
+    breadcrumbs: [
+      { kind: "global", label: "Global" },
+      ...(session?.project
+        ? [{ kind: "project", label: session.project }]
+        : []),
+    ],
+    summary: session?.project
+      ? `Duo actions apply to project: ${session.project}`
+      : "Duo is operating at global orchestration level.",
+  };
+  const scopeCrumbs = Array.isArray(scope.breadcrumbs)
+    ? scope.breadcrumbs
+    : [{ kind: "global", label: "Global" }];
   const writeConflicts = data?.write_conflicts || [];
   const activeLeases = data?.active_leases || [];
   const linkedProjectSessions = data?.linked_project_sessions || [];
@@ -1657,6 +1675,17 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
   if (activeTab === "collaborate") {
     return html`<div style="display:flex;flex-direction:column;gap:var(--sp-s)">
       <div class="panel">
+        <div class="scope-strip" style="margin-bottom:var(--sp-s)">
+          <div class="scope-path">
+            ${scopeCrumbs.map(
+              (crumb, index) =>
+                html`<span class="scope-crumb">
+                  ${index > 0 ? html`<b>/</b>` : null}${crumb.label}
+                </span>`,
+            )}
+          </div>
+          <span class="scope-kind">${scope.label || scope.kind}</span>
+        </div>
         <div
           style="display:flex;justify-content:space-between;gap:var(--sp-s);align-items:flex-start;flex-wrap:wrap"
         >
@@ -1668,7 +1697,7 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
             </div>
             <div style="font-size:var(--fs-s);color:var(--t3)">
               visible second-agent workflow for
-              ${session.project || "_orchestrator"}
+              ${scope.title || session.project || "_orchestrator"}
             </div>
           </div>
           <div
@@ -2012,6 +2041,17 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
   if (activeTab === "execute") {
     return html`<div style="display:flex;flex-direction:column;gap:var(--sp-s)">
       <div class="panel">
+        <div class="scope-strip" style="margin-bottom:var(--sp-s)">
+          <div class="scope-path">
+            ${scopeCrumbs.map(
+              (crumb, index) =>
+                html`<span class="scope-crumb">
+                  ${index > 0 ? html`<b>/</b>` : null}${crumb.label}
+                </span>`,
+            )}
+          </div>
+          <span class="scope-kind">${scope.label || scope.kind}</span>
+        </div>
         <div
           style="display:flex;justify-content:space-between;gap:var(--sp-s);align-items:flex-start;flex-wrap:wrap"
         >

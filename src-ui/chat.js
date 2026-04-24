@@ -50,6 +50,7 @@ import {
   dualSessionData,
   activeDualSession,
   dualBusy,
+  activeScope,
   permData,
 } from "/store.js";
 import {
@@ -76,6 +77,7 @@ import {
   createAdhocPlanFromRoom,
   createRoomProjectSession,
   loadDualSession,
+  loadActiveScope,
   setDualOrchestrator,
 } from "/api.js";
 import {
@@ -97,6 +99,40 @@ function normalizeDuoView(value) {
   if (next === "work" || next === "reviews") return "execute";
   if (next === "collaborate" || next === "execute") return next;
   return "chat";
+}
+
+function fallbackScope(project) {
+  const title = project || "_orchestrator";
+  return {
+    kind: project ? "project" : "global",
+    label: project ? "Project" : "Global",
+    title,
+    project: project || "",
+    breadcrumbs: [
+      { kind: "global", label: "Global" },
+      ...(project ? [{ kind: "project", label: project }] : []),
+    ],
+    available_actions: [
+      { id: "ask_both", label: "Ask both", tone: "neutral" },
+      {
+        id: project ? "create_plan" : "create_strategy",
+        label: project ? "Create plan" : "Create strategy",
+        tone: "primary",
+      },
+    ],
+    summary: project
+      ? `Duo actions apply to project: ${project}`
+      : "Duo is operating at global orchestration level.",
+  };
+}
+
+function scopeNextTitle(scope, leadLabel) {
+  const leader = leadLabel || "Chosen lead";
+  if (scope?.kind === "work_item") return `${leader} continues this task`;
+  if (scope?.kind === "plan") return `${leader} continues this plan`;
+  if (scope?.kind === "strategy") return `${leader} turns strategy into work`;
+  if (scope?.kind === "project") return `${leader} scopes project work`;
+  return `${leader} coordinates globally`;
 }
 
 function Tile({ a }) {
@@ -572,6 +608,13 @@ function ChatSidebar() {
     : participants;
   const roomTarget =
     participants.find((p) => p.id === duoComposerTarget) || null;
+  const scope = activeScope.value || fallbackScope(currentProject.value || "");
+  const scopeCrumbs = Array.isArray(scope.breadcrumbs)
+    ? scope.breadcrumbs
+    : fallbackScope(currentProject.value || "").breadcrumbs;
+  const scopeActions = (scope.available_actions || [])
+    .filter((a) => a?.id && a?.label)
+    .slice(0, 3);
   const latestDuoRound = (() => {
     if (!duoCollaborateMode || isStreaming.value) {
       return null;
@@ -647,6 +690,61 @@ function ChatSidebar() {
     );
     activeRoomTab.value = "collaborate";
   };
+  const runScopeAction = async (actionId) => {
+    if (actionId === "ask_both") {
+      setDuoComposerAction("ask_both");
+      setDuoComposerTarget("");
+      setDuoAdvancedOpen(false);
+      setDuoView("collaborate");
+      setTimeout(() => inputRef.current?.focus(), 0);
+      return;
+    }
+    if (
+      actionId === "execute_with_lead" ||
+      actionId === "execute_next_step" ||
+      actionId === "execute_next"
+    ) {
+      if (!activeOrchestrator && visibleLeadCandidates[0]) {
+        await useDuoOrchestrator(visibleLeadCandidates[0].id);
+      }
+      setDuoComposerAction("send");
+      setDuoComposerTarget("");
+      setDuoView("execute");
+      setTimeout(() => inputRef.current?.focus(), 0);
+      return;
+    }
+    if (actionId === "create_strategy") {
+      setDuoNextAction("promote_strategy");
+      setTimeout(() => inputRef.current?.focus(), 0);
+      return;
+    }
+    if (actionId === "create_plan" || actionId === "replan") {
+      setDuoNextAction("promote_plan");
+      setTimeout(() => inputRef.current?.focus(), 0);
+      return;
+    }
+    if (actionId === "queue_task" || actionId === "create_work_item") {
+      setDuoNextAction("child_session");
+      setTimeout(() => inputRef.current?.focus(), 0);
+      return;
+    }
+    if (actionId === "review_result") {
+      setDuoComposerAction("challenge");
+      setDuoComposerTarget(participants[0]?.id || "");
+      setDuoAdvancedOpen(false);
+      setDuoView("collaborate");
+      setTimeout(() => inputRef.current?.focus(), 0);
+      return;
+    }
+    if (actionId === "pick_project") {
+      showToast(
+        "Pick a project from the main canvas, then Duo will scope to it.",
+        "info",
+      );
+      return;
+    }
+    showToast("Action is not wired yet: " + actionId, "info");
+  };
   const setDuoView = (nextView) => {
     activeRoomTab.value = nextView;
     if (nextView !== "chat") {
@@ -677,6 +775,13 @@ function ChatSidebar() {
       console.warn("embedded duo init failed:", e),
     );
   }, [duoEnabled, currentProject.value]);
+  useEffect(() => {
+    if (!duoEnabled) return;
+    loadActiveScope(
+      currentProject.value || "",
+      activeDualSession.value || null,
+    ).catch((e) => console.warn("scope load failed:", e));
+  }, [duoEnabled, currentProject.value, activeDualSession.value]);
   useEffect(() => {
     if (!duoEnabled) return;
     const normalized = normalizeDuoView(activeRoomTab.value);
@@ -975,20 +1080,30 @@ function ChatSidebar() {
     <${RunningBanner} />
     ${duoEnabled
       ? html`<div class="duo-brief">
+          <div class="scope-strip">
+            <div class="scope-path">
+              ${scopeCrumbs.map(
+                (crumb, index) =>
+                  html`<span class="scope-crumb">
+                    ${index > 0 ? html`<b>/</b>` : null}${crumb.label}
+                  </span>`,
+              )}
+            </div>
+            <span class="scope-kind">${scope.label || scope.kind}</span>
+          </div>
           <div class="duo-brief-top">
             <div>
-              <div class="duo-eyebrow">
-                ${currentProject.value || "_orchestrator"} room
-              </div>
+              <div class="duo-eyebrow">${scope.kind || "global"} scope</div>
               <div class="duo-title">
-                ${activeOrchestrator?.label || "Choose who leads"}
+                ${scope.title || activeOrchestrator?.label || "Choose scope"}
               </div>
               <div class="duo-sub">
-                ${duoExecuteMode
+                ${scope.summary ||
+                (duoExecuteMode
                   ? "Execution board is open in the main canvas."
                   : duoCollaborateMode
                     ? "Ask both agents, then choose who leads the next step."
-                    : "Normal chat mode; Duo room is standing by."}
+                    : "Normal chat mode; Duo room is standing by.")}
               </div>
             </div>
             <span class="duo-pill ${duoExecuteMode ? "hot" : ""}">
@@ -999,39 +1114,22 @@ function ChatSidebar() {
                   : "chat"}
             </span>
           </div>
-          <div class="duo-primary-actions">
-            <button
-              class="duo-primary"
-              disabled=${!!dualBusy.value}
-              onClick=${() => {
-                setDuoComposerAction("ask_both");
-                setDuoComposerTarget("");
-                setDuoAdvancedOpen(false);
-                setDuoView("collaborate");
-              }}
-            >
-              Ask both
-            </button>
-            <button
-              class="duo-primary execute"
-              disabled=${!!dualBusy.value || !visibleLeadCandidates.length}
-              onClick=${async () => {
-                if (!activeOrchestrator && visibleLeadCandidates[0]) {
-                  await useDuoOrchestrator(visibleLeadCandidates[0].id);
-                  return;
-                }
-                setDuoComposerAction("send");
-                setDuoComposerTarget("");
-                setDuoView("execute");
-              }}
-            >
-              ${activeOrchestrator
-                ? "Execute with " + activeOrchestrator.label
-                : "Choose lead"}
-            </button>
+          <div class="scope-actions">
+            ${scopeActions.map(
+              (action) =>
+                html`<button
+                  class="scope-action ${action.tone === "primary"
+                    ? "primary"
+                    : ""}"
+                  disabled=${!!dualBusy.value}
+                  onClick=${() => runScopeAction(action.id)}
+                >
+                  ${action.label}
+                </button>`,
+            )}
           </div>
           <details class="duo-small-controls">
-            <summary>choose lead / routing</summary>
+            <summary>lead / mode</summary>
             <div class="duo-control-grid">
               ${visibleLeadCandidates.map(
                 (participant) =>
@@ -1081,7 +1179,7 @@ function ChatSidebar() {
           <div>
             <div class="duo-eyebrow">recommended next step</div>
             <div class="duo-next-title">
-              ${activeOrchestrator?.label || "Pick an orchestrator"} continues
+              ${scopeNextTitle(scope, activeOrchestrator?.label)}
             </div>
             <div class="duo-sub">
               ${latestDuoRound.assistants.length}

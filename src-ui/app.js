@@ -39,6 +39,7 @@ import {
   loadPerms,
   ensureDualSession,
   loadDualSession,
+  loadActiveScope,
 } from "/api.js";
 import { App } from "/views.js";
 
@@ -53,6 +54,9 @@ effect(() => {
   } else {
     projectPlan.value = null;
   }
+  loadActiveScope(p || "", activeDualSession.value || null).catch((e) =>
+    console.warn("scope load failed:", e),
+  );
 });
 
 // Theme effect

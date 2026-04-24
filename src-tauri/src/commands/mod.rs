@@ -1,6 +1,6 @@
 pub mod acp_client;
-pub mod app_updates;
 pub mod agents;
+pub mod app_updates;
 pub mod auto_approve;
 pub mod category;
 pub mod chat;
@@ -40,6 +40,7 @@ pub mod plans;
 pub mod process_manager;
 pub mod provider_runner;
 pub mod proxy;
+pub mod scope;
 pub mod sensors;
 pub mod signals;
 pub mod status;

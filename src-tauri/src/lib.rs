@@ -195,6 +195,7 @@ pub fn run() {
             commands::plans::get_plans,
             commands::plans::create_plan,
             commands::plans::update_plan_step,
+            commands::scope::get_active_scope,
             // Multi-agent sessions
             commands::multi_agent::create_multi_agent_session,
             commands::multi_agent::list_multi_agent_sessions,

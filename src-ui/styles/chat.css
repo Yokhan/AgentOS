@@ -195,6 +195,38 @@
     flex-direction: column;
     gap: var(--sp-s);
 }
+.scope-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-s);
+    border: 1px solid color-mix(in srgb, var(--cyan) 26%, var(--border));
+    background: color-mix(in srgb, var(--cyan) 7%, transparent);
+    padding: 6px 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.scope-path {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+}
+.scope-crumb {
+    color: var(--t2);
+    white-space: nowrap;
+}
+.scope-crumb b {
+    color: var(--t3);
+    font-weight: 400;
+    margin-right: 4px;
+}
+.scope-kind {
+    color: var(--cyan);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
 .duo-brief-top {
     display: flex;
     align-items: flex-start;
@@ -241,6 +273,32 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--sp-s);
+}
+.scope-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+}
+.scope-action {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 4px 8px;
+    cursor: pointer;
+}
+.scope-action.primary {
+    border-color: var(--cyan);
+    color: var(--cyan);
+}
+.scope-action:hover {
+    border-color: var(--t3);
+    color: var(--text);
+}
+.scope-action:disabled {
+    opacity: 0.45;
+    cursor: default;
 }
 .duo-primary {
     min-height: 34px;
