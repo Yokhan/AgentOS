@@ -77,18 +77,28 @@ function SettingsPage() {
     "default",
     codexStatus,
   );
-  const codexTransport =
-    codexStatus?.transport || pd?.config?.codex_transport || "cli";
+  const codexConfiguredTransport =
+    codexStatus?.configured_transport || pd?.config?.codex_transport || "cli";
+  const codexEffectiveTransport =
+    codexStatus?.effective_transport ||
+    codexStatus?.transport ||
+    codexConfiguredTransport;
+  const codexTransport = codexEffectiveTransport;
   const codexReady = !!codexStatus.ready;
   const codexAvailable = !!codexStatus.available;
   const codexAuthRequired = !!codexStatus.auth_required;
+  const codexRouteNote =
+    codexStatus?.route_note ||
+    (codexEffectiveTransport === "cli"
+      ? "AgentOS will use the Codex CLI for this run."
+      : "AgentOS will use the configured Codex ACP adapter for this run.");
   const codexStateLabel = codexReady
-    ? "Connected"
+    ? `Connected via ${codexEffectiveTransport.toUpperCase()}`
     : !codexAvailable
-      ? codexTransport === "acp"
+      ? codexEffectiveTransport === "acp"
         ? "Runtime not found"
         : "CLI not found"
-      : codexTransport === "acp" && codexAuthRequired
+      : codexEffectiveTransport === "acp" && codexAuthRequired
         ? "Needs sign-in"
         : "Needs setup";
   const codexStateColor = codexReady
@@ -97,16 +107,23 @@ function SettingsPage() {
       ? "var(--yellow)"
       : "var(--accent)";
   const codexHelperText = codexReady
-    ? "Codex is connected and ready for duo mode."
+    ? codexRouteNote
     : !codexAvailable
-      ? codexTransport === "acp"
+      ? codexEffectiveTransport === "acp"
         ? "AgentOS cannot see a Codex ACP runtime yet. Point it to your codex-acp command in Advanced."
         : "AgentOS cannot see a standalone Codex CLI yet."
-      : codexTransport === "acp" && codexAuthRequired
+      : codexEffectiveTransport === "acp" && codexAuthRequired
         ? "The runtime is reachable. Finish login with ChatGPT and then refresh status."
-        : codexTransport === "acp"
+        : codexEffectiveTransport === "acp"
           ? "ACP is reachable but not ready yet. Refresh after login or adapter startup."
           : "CLI is reachable. Pick a model and AgentOS can use the official codex exec flow directly.";
+  const providerOptions = [
+    ["claude", `claude ${prov?.claude?.available ? "ready" : "missing"}`],
+    [
+      "codex",
+      `codex ${codexReady ? `ready via ${codexEffectiveTransport}` : codexStateLabel.toLowerCase()}`,
+    ],
+  ];
   return html`<div class="content">
     <div
       class="back"
@@ -451,8 +468,10 @@ function SettingsPage() {
                 });
               }}
             >
-              <option value="claude">claude</option>
-              <option value="codex">codex</option>
+              ${providerOptions.map(
+                ([value, label]) =>
+                  html`<option value=${value}>${label}</option>`,
+              )}
             </select>
           </div>
           <div>
@@ -473,8 +492,10 @@ function SettingsPage() {
                 });
               }}
             >
-              <option value="codex">codex</option>
-              <option value="claude">claude</option>
+              ${providerOptions.map(
+                ([value, label]) =>
+                  html`<option value=${value}>${label}</option>`,
+              )}
             </select>
           </div>
           <div
@@ -529,7 +550,41 @@ function SettingsPage() {
               </div>
             </div>
             <div style="display:flex;gap:var(--sp-xs);flex-wrap:wrap">
-              ${codexTransport === "acp" && codexAvailable && codexAuthRequired
+              ${codexConfiguredTransport !== "cli"
+                ? html`<button
+                    class="action-btn"
+                    onClick=${() => {
+                      __invoke("set_config", {
+                        key: "codex_transport",
+                        value: "cli",
+                      }).then(() => {
+                        showToast("Codex will use CLI", "success");
+                        loadPerms();
+                      });
+                    }}
+                  >
+                    use CLI
+                  </button>`
+                : null}
+              ${codexConfiguredTransport !== "acp"
+                ? html`<button
+                    class="action-btn"
+                    onClick=${() => {
+                      __invoke("set_config", {
+                        key: "codex_transport",
+                        value: "acp",
+                      }).then(() => {
+                        showToast("Codex will use ACP", "success");
+                        loadPerms();
+                      });
+                    }}
+                  >
+                    use ACP
+                  </button>`
+                : null}
+              ${codexEffectiveTransport === "acp" &&
+              codexAvailable &&
+              codexAuthRequired
                 ? html`<button
                     class="action-btn"
                     onClick=${async () => {
@@ -548,6 +603,43 @@ function SettingsPage() {
               <button class="action-btn" onClick=${() => loadPerms()}>
                 ${codexReady ? "refresh" : "check status"}
               </button>
+            </div>
+          </div>
+          <div
+            style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-xs);font-size:var(--fs-s);font-family:var(--font-mono)"
+          >
+            <div
+              style="border:1px solid var(--border);background:var(--bg-soft);padding:var(--sp-xs);color:var(--t2)"
+            >
+              configured: ${codexConfiguredTransport}
+            </div>
+            <div
+              style="border:1px solid var(--border);background:var(--bg-soft);padding:var(--sp-xs);color:${codexReady
+                ? "var(--green)"
+                : "var(--yellow)"}"
+            >
+              effective: ${codexEffectiveTransport}
+            </div>
+            <div
+              style="border:1px solid var(--border);background:var(--bg-soft);padding:var(--sp-xs);color:${codexStatus?.cli_available
+                ? "var(--green)"
+                : "var(--accent)"}"
+            >
+              cli: ${codexStatus?.cli_available ? "available" : "missing"}
+            </div>
+            <div
+              style="border:1px solid var(--border);background:var(--bg-soft);padding:var(--sp-xs);color:${codexStatus?.acp_ready
+                ? "var(--green)"
+                : codexStatus?.acp_available
+                  ? "var(--yellow)"
+                  : "var(--t3)"}"
+            >
+              acp:
+              ${codexStatus?.acp_ready
+                ? "ready"
+                : codexStatus?.acp_available
+                  ? "not ready"
+                  : "not configured"}
             </div>
           </div>
           <details>
@@ -570,7 +662,7 @@ function SettingsPage() {
                 >
                 <select
                   style="width:100%;background:var(--sf);border:1px solid var(--border);color:var(--text);padding:var(--sp-s);font-family:var(--font-mono);font-size:var(--fs-s)"
-                  value=${codexTransport}
+                  value=${codexConfiguredTransport}
                   onChange=${(e) => {
                     __invoke("set_config", {
                       key: "codex_transport",
@@ -585,7 +677,7 @@ function SettingsPage() {
                   <option value="cli">cli</option>
                 </select>
               </div>
-              ${codexTransport === "acp"
+              ${codexConfiguredTransport === "acp"
                 ? html`<div>
                       <label
                         style="display:block;font-family:var(--font-mono);font-size:var(--fs-s);color:var(--t3);margin-bottom:var(--sp-xs)"
@@ -627,7 +719,7 @@ ${pd?.config?.codex_acp_args || "[]"}</textarea
                       >
                     </div>
                     <div style="font-size:var(--fs-s);color:var(--t3)">
-                      ${codexStatus?.probe ||
+                      ${codexStatus?.acp_probe ||
                       "ACP mode expects an external Codex ACP adapter command."}
                     </div>
                     <div style="font-size:var(--fs-s);color:var(--t3)">
@@ -679,7 +771,7 @@ ${pd?.config?.codex_command_template || ""}</textarea
                       >
                     </div>
                     <div style="font-size:var(--fs-s);color:var(--t3)">
-                      ${codexStatus?.probe ||
+                      ${codexStatus?.cli_probe ||
                       "Use placeholders {prompt_file}, {model}, {effort} in the template."}
                     </div>
                     <div style="font-size:var(--fs-s);color:var(--t3)">

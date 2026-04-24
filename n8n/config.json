@@ -1,7 +1,7 @@
 {
   "codex_effort": "high",
-  "codex_model": "gpt-5.4",
-  "codex_transport": "acp",
+  "codex_model": "gpt-5.5",
+  "codex_transport": "cli",
   "delegation_effort": "high",
   "delegation_model": "sonnet",
   "documents_dir": "C:/Users/iohan/Documents",

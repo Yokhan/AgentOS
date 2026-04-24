@@ -382,6 +382,123 @@ fn codex_effort_config_arg(model: Option<&str>, effort: &str) -> Option<String> 
     Some(format!("model_reasoning_effort=\"{}\"", normalized))
 }
 
+fn codex_wants_runtime_control(model: Option<&str>, reasoning_effort: Option<&str>) -> bool {
+    model.filter(|m| !m.trim().is_empty()).is_some()
+        || reasoning_effort.filter(|e| !e.trim().is_empty()).is_some()
+}
+
+fn effective_codex_transport(
+    state: &AppState,
+    model: Option<&str>,
+    reasoning_effort: Option<&str>,
+) -> CodexTransport {
+    let configured = codex_transport(state);
+    if configured == CodexTransport::Acp
+        && codex_wants_runtime_control(model, reasoning_effort)
+        && codex_can_run_via_cli(state)
+    {
+        return CodexTransport::Cli;
+    }
+    configured
+}
+
+fn extract_error_message_from_json_line(raw: &str) -> Option<String> {
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        let json_part = trimmed
+            .strip_prefix("ERROR:")
+            .map(str::trim)
+            .unwrap_or(trimmed);
+        if !json_part.starts_with('{') {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(json_part) else {
+            continue;
+        };
+        if let Some(message) = value
+            .get("error")
+            .and_then(|error| error.get("message"))
+            .and_then(|message| message.as_str())
+        {
+            return Some(message.trim().to_string());
+        }
+        if let Some(message) = value.get("message").and_then(|message| message.as_str()) {
+            return Some(message.trim().to_string());
+        }
+    }
+    None
+}
+
+fn trim_provider_echo(raw: &str) -> String {
+    let markers = [
+        "\n[IDENTITY]",
+        "\r\n[IDENTITY]",
+        "\n[PROJECTS]",
+        "\r\n[PROJECTS]",
+        "\n[RECENT CONVERSATION]",
+        "\r\n[RECENT CONVERSATION]",
+        "\n[USER MESSAGE]",
+        "\r\n[USER MESSAGE]",
+        "\nuser\n[",
+        "\r\nuser\r\n[",
+    ];
+    let mut cut = raw.len();
+    for marker in markers {
+        if let Some(index) = raw.find(marker) {
+            cut = cut.min(index);
+        }
+    }
+    raw[..cut].trim().to_string()
+}
+
+fn compact_provider_error(
+    provider: &str,
+    model: Option<&str>,
+    transport: Option<CodexTransport>,
+    raw: &str,
+) -> String {
+    let extracted = extract_error_message_from_json_line(raw);
+    let mut detail = extracted.unwrap_or_else(|| trim_provider_echo(raw));
+    if detail.is_empty() {
+        detail = "Provider returned an error without details.".to_string();
+    }
+    if detail.len() > 1200 {
+        detail.truncate(1200);
+        detail.push_str("...");
+    }
+
+    let lower = detail.to_ascii_lowercase();
+    let action = if lower.contains("newer version of codex") {
+        "Action: update Codex CLI (`npm install -g @openai/codex@latest`) or switch to an older model."
+    } else if lower.contains("authentication")
+        || lower.contains("not logged in")
+        || lower.contains("login")
+        || lower.contains("unauthorized")
+    {
+        "Action: finish provider sign-in, then refresh Settings -> Providers."
+    } else if lower.contains("unknown model")
+        || lower.contains("model")
+        || lower.contains("invalid_request_error")
+    {
+        "Action: pick a model that this provider account/runtime supports, then retry."
+    } else {
+        "Action: open Settings -> Providers, check the runtime status, and retry after fixing the provider."
+    };
+
+    let model_part = model
+        .filter(|m| !m.trim().is_empty())
+        .map(|m| format!(" model={}", m.trim()))
+        .unwrap_or_default();
+    let transport_part = transport
+        .map(|t| format!(" transport={}", t.as_str()))
+        .unwrap_or_default();
+
+    format!(
+        "Provider error: {}{}{}\n{}\nDetails: {}",
+        provider, model_part, transport_part, action, detail
+    )
+}
+
 fn probe_command_exists(binary: &str) -> Result<String, String> {
     if Path::new(binary).is_file() {
         return Ok(binary.to_string());
@@ -484,23 +601,40 @@ fn codex_acp_status_snapshot(state: &AppState) -> Value {
         });
     }
     let snapshot = match codex_acp_initialize(state) {
-        Ok((_client, init)) => {
+        Ok((mut client, init)) => {
             let auth_methods = init.auth_methods.clone();
-            json!({
-                "transport": "acp",
-                "command": command,
-                "args": args,
-                "available": true,
-                "ready": true,
-                "authenticated": Value::Null,
-                "probe": "ACP initialized (light probe, session handshake skipped)",
-                "auth_required": false,
-                "auth_methods": auth_methods,
-                "agent_info": init.agent_info,
-                "agent_capabilities": init.agent_capabilities,
-                "protocol_version": init.protocol_version,
-                "session_probe_skipped": true,
-            })
+            match client.new_session(&state.root) {
+                Ok(_) => json!({
+                    "transport": "acp",
+                    "command": command,
+                    "args": args,
+                    "available": true,
+                    "ready": true,
+                    "authenticated": Value::Null,
+                    "probe": "ACP initialized and session probe passed",
+                    "auth_required": false,
+                    "auth_methods": auth_methods,
+                    "agent_info": init.agent_info,
+                    "agent_capabilities": init.agent_capabilities,
+                    "protocol_version": init.protocol_version,
+                    "session_probe_skipped": false,
+                }),
+                Err(err) => json!({
+                    "transport": "acp",
+                    "command": command,
+                    "args": args,
+                    "available": true,
+                    "ready": false,
+                    "authenticated": false,
+                    "probe": format!("ACP initialized but cannot create a chat session: {}", err),
+                    "auth_required": false,
+                    "auth_methods": auth_methods,
+                    "agent_info": init.agent_info,
+                    "agent_capabilities": init.agent_capabilities,
+                    "protocol_version": init.protocol_version,
+                    "session_probe_skipped": false,
+                }),
+            }
         }
         Err(err) => json!({
             "transport": "acp",
@@ -678,20 +812,29 @@ fn run_codex_with_template(
 ) -> String {
     let template = codex_template(state);
     if template.is_empty() {
-        return "Error: codex provider is selected but codex_command_template is not configured"
-            .to_string();
+        return compact_provider_error(
+            "codex",
+            model,
+            Some(CodexTransport::Cli),
+            "codex provider is selected but codex_command_template is not configured",
+        );
     }
 
     let tmp = super::claude_runner::unique_tmp("codex");
     if std::fs::write(&tmp, prompt).is_err() {
-        return "Error: could not write codex temp file".to_string();
+        return compact_provider_error(
+            "codex",
+            model,
+            Some(CodexTransport::Cli),
+            "could not write codex temp file",
+        );
     }
 
     let args = match render_template_args(&template, &tmp, model, reasoning_effort) {
         Ok(args) => args,
         Err(err) => {
             let _ = std::fs::remove_file(&tmp);
-            return format!("Error: {}", err);
+            return compact_provider_error("codex", model, Some(CodexTransport::Cli), &err);
         }
     };
 
@@ -719,14 +862,24 @@ fn run_codex_with_template(
                     stdout
                 }
             } else if !stderr.is_empty() {
-                format!("Error: {}", stderr)
+                compact_provider_error("codex", model, Some(CodexTransport::Cli), &stderr)
             } else if !stdout.is_empty() {
-                format!("Error: {}", stdout)
+                compact_provider_error("codex", model, Some(CodexTransport::Cli), &stdout)
             } else {
-                format!("Error: codex exited with {:?}", output.status.code())
+                compact_provider_error(
+                    "codex",
+                    model,
+                    Some(CodexTransport::Cli),
+                    &format!("codex exited with {:?}", output.status.code()),
+                )
             }
         }
-        Err(e) => format!("Error running codex: {}", e),
+        Err(e) => compact_provider_error(
+            "codex",
+            model,
+            Some(CodexTransport::Cli),
+            &format!("Error running codex: {}", e),
+        ),
     }
 }
 
@@ -742,14 +895,24 @@ fn run_codex_official_cli(
     let output_file = super::claude_runner::unique_tmp("codex-last");
 
     if std::fs::write(&prompt_file, prompt).is_err() {
-        return "Error: could not write Codex temp prompt file".to_string();
+        return compact_provider_error(
+            "codex",
+            model,
+            Some(CodexTransport::Cli),
+            "could not write Codex temp prompt file",
+        );
     }
 
     let stdin_file = match std::fs::File::open(&prompt_file) {
         Ok(file) => file,
         Err(e) => {
             let _ = std::fs::remove_file(&prompt_file);
-            return format!("Error opening Codex temp prompt file: {}", e);
+            return compact_provider_error(
+                "codex",
+                model,
+                Some(CodexTransport::Cli),
+                &format!("Error opening Codex temp prompt file: {}", e),
+            );
         }
     };
 
@@ -787,14 +950,24 @@ fn run_codex_official_cli(
                     .or_else(|| (!stderr.is_empty()).then_some(stderr.clone()))
                     .unwrap_or_else(|| "Agent returned empty response".to_string())
             } else if !stderr.is_empty() {
-                format!("Error: {}", stderr)
+                compact_provider_error("codex", model, Some(CodexTransport::Cli), &stderr)
             } else if !stdout.is_empty() {
-                format!("Error: {}", stdout)
+                compact_provider_error("codex", model, Some(CodexTransport::Cli), &stdout)
             } else {
-                format!("Error: codex exited with {:?}", output.status.code())
+                compact_provider_error(
+                    "codex",
+                    model,
+                    Some(CodexTransport::Cli),
+                    &format!("codex exited with {:?}", output.status.code()),
+                )
             }
         }
-        Err(e) => format!("Error running codex: {}", e),
+        Err(e) => compact_provider_error(
+            "codex",
+            model,
+            Some(CodexTransport::Cli),
+            &format!("Error running codex: {}", e),
+        ),
     };
 
     let _ = std::fs::remove_file(&prompt_file);
@@ -806,7 +979,7 @@ fn run_codex_via_acp(
     state: &AppState,
     cwd: &Path,
     prompt: &str,
-    _model: Option<&str>,
+    model: Option<&str>,
     _reasoning_effort: Option<&str>,
 ) -> String {
     match codex_acp_initialize(state) {
@@ -819,16 +992,23 @@ fn run_codex_via_acp(
                     .unwrap_or("")
                     .to_string();
                 if session_id.is_empty() {
-                    return "Error: ACP session/new did not return sessionId".to_string();
+                    return compact_provider_error(
+                        "codex",
+                        model,
+                        Some(CodexTransport::Acp),
+                        "ACP session/new did not return sessionId",
+                    );
                 }
                 match client.prompt(&session_id, prompt) {
                     Ok(text) => text,
-                    Err(err) => format!("Error: {}", err),
+                    Err(err) => {
+                        compact_provider_error("codex", model, Some(CodexTransport::Acp), &err)
+                    }
                 }
             }
-            Err(err) => format!("Error: {}", err),
+            Err(err) => compact_provider_error("codex", model, Some(CodexTransport::Acp), &err),
         },
-        Err(err) => format!("Error: {}", err),
+        Err(err) => compact_provider_error("codex", model, Some(CodexTransport::Acp), &err),
     }
 }
 
@@ -853,7 +1033,7 @@ pub fn run_provider_with_opts(
             model,
             reasoning_effort,
         ),
-        ProviderKind::Codex => match codex_transport(state) {
+        ProviderKind::Codex => match effective_codex_transport(state, model, reasoning_effort) {
             CodexTransport::Cli => {
                 if codex_template(state).is_empty() {
                     run_codex_official_cli(state, cwd, prompt, model, reasoning_effort)
@@ -861,15 +1041,7 @@ pub fn run_provider_with_opts(
                     run_codex_with_template(state, cwd, prompt, model, reasoning_effort)
                 }
             }
-            CodexTransport::Acp => {
-                let wants_runtime_control = model.filter(|m| !m.is_empty()).is_some()
-                    || reasoning_effort.filter(|e| !e.is_empty()).is_some();
-                if wants_runtime_control && codex_can_run_via_cli(state) {
-                    run_codex_official_cli(state, cwd, prompt, model, reasoning_effort)
-                } else {
-                    run_codex_via_acp(state, cwd, prompt, model, reasoning_effort)
-                }
-            }
+            CodexTransport::Acp => run_codex_via_acp(state, cwd, prompt, model, reasoning_effort),
         },
     }
 }
@@ -881,12 +1053,67 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
 
     let claude_binary = resolve_provider_binary(state, ProviderKind::Claude);
     let claude_probe = probe_binary(&claude_binary);
-    let transport = codex_transport(state);
+    let configured_transport = codex_transport(state);
     let codex_template = codex_template(state);
     let codex_binary = resolve_codex_binary(state);
     let codex_probe = probe_binary(&codex_binary);
-    let codex_acp = codex_acp_status_snapshot(state);
+    let codex_acp = if configured_transport == CodexTransport::Acp {
+        codex_acp_status_snapshot(state)
+    } else {
+        let command = resolve_codex_acp_command(state);
+        json!({
+            "transport": "acp",
+            "command": command,
+            "args": [],
+            "available": probe_command_exists(&resolve_codex_acp_command(state)).is_ok(),
+            "ready": false,
+            "authenticated": Value::Null,
+            "probe": "ACP is not active. Switch Codex transport to ACP to run a full adapter/session probe.",
+            "auth_required": false,
+            "auth_methods": [],
+            "session_probe_skipped": true,
+        })
+    };
     let codex_models = codex_available_models(&codex_acp);
+    let codex_model = cfg
+        .get("codex_model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let codex_effort = cfg
+        .get("codex_effort")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let effective_transport = effective_codex_transport(
+        state,
+        (!codex_model.is_empty()).then_some(codex_model),
+        (!codex_effort.is_empty()).then_some(codex_effort),
+    );
+    let acp_available = codex_acp
+        .get("available")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let acp_ready = codex_acp
+        .get("ready")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let cli_available = codex_probe.is_ok();
+    let effective_ready = match effective_transport {
+        CodexTransport::Cli => cli_available,
+        CodexTransport::Acp => acp_ready,
+    };
+    let effective_available = match effective_transport {
+        CodexTransport::Cli => cli_available,
+        CodexTransport::Acp => acp_available,
+    };
+    let route_note = if configured_transport == CodexTransport::Acp
+        && effective_transport == CodexTransport::Cli
+    {
+        "ACP is configured, but selected model/effort needs runtime control. AgentOS will use the Codex CLI fallback for this run."
+    } else if effective_transport == CodexTransport::Cli {
+        "AgentOS will use the official Codex CLI for this run."
+    } else {
+        "AgentOS will use the configured Codex ACP adapter for this run."
+    };
 
     json!({
         "roles": {
@@ -902,23 +1129,28 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
                 "effort": cfg.get("orchestrator_effort").and_then(|v| v.as_str()).unwrap_or(""),
             },
             "codex": {
-                "transport": transport.as_str(),
-                "binary": if transport == CodexTransport::Cli { Value::String(codex_binary.clone()) } else { Value::Null },
-                "available": if transport == CodexTransport::Cli { Value::Bool(codex_probe.is_ok()) } else { codex_acp.get("available").cloned().unwrap_or(Value::Bool(false)) },
-                "probe": if transport == CodexTransport::Cli { Value::String(codex_probe.clone().unwrap_or_else(|e| e)) } else { codex_acp.get("probe").cloned().unwrap_or(Value::String("ACP unavailable".to_string())) },
-                "model": cfg.get("codex_model").and_then(|v| v.as_str()).unwrap_or(""),
-                "effort": cfg.get("codex_effort").and_then(|v| v.as_str()).unwrap_or(""),
+                "transport": effective_transport.as_str(),
+                "configured_transport": configured_transport.as_str(),
+                "effective_transport": effective_transport.as_str(),
+                "route_note": route_note,
+                "binary": if effective_transport == CodexTransport::Cli { Value::String(codex_binary.clone()) } else { Value::Null },
+                "available": effective_available,
+                "probe": if effective_transport == CodexTransport::Cli { Value::String(codex_probe.clone().unwrap_or_else(|e| e)) } else { codex_acp.get("probe").cloned().unwrap_or(Value::String("ACP unavailable".to_string())) },
+                "cli_available": cli_available,
+                "cli_probe": codex_probe.clone().unwrap_or_else(|e| e),
+                "cli_binary": codex_binary,
+                "acp_available": acp_available,
+                "acp_ready": acp_ready,
+                "model": codex_model,
+                "effort": codex_effort,
                 "command_template": codex_template,
-                "ready": if transport == CodexTransport::Cli {
-                    Value::Bool(codex_probe.is_ok())
-                } else {
-                    codex_acp.get("ready").cloned().unwrap_or(Value::Bool(false))
-                },
+                "ready": effective_ready,
                 "authenticated": codex_acp.get("authenticated").cloned().unwrap_or(Value::Null),
                 "auth_required": codex_acp.get("auth_required").cloned().unwrap_or(Value::Null),
                 "auth_methods": codex_acp.get("auth_methods").cloned().unwrap_or(Value::Array(vec![])),
                 "acp_command": codex_acp.get("command").cloned().unwrap_or(Value::Null),
                 "acp_args": codex_acp.get("args").cloned().unwrap_or(Value::Array(vec![])),
+                "acp_probe": codex_acp.get("probe").cloned().unwrap_or(Value::String("ACP unavailable".to_string())),
                 "models": codex_models,
             }
         },
@@ -1030,6 +1262,23 @@ mod tests {
                 .and_then(|slug| slug.as_str()),
             Some("gpt-5.5")
         );
+    }
+
+    #[test]
+    fn provider_error_is_compact_and_does_not_echo_context() {
+        let raw = r#"ERROR: {"type":"error","error":{"message":"Model gpt-5.5 requires a newer version of Codex."}}
+user
+[IDENTITY]
+/queue title="fake" goal="must not parse""#;
+
+        let compact =
+            compact_provider_error("codex", Some("gpt-5.5"), Some(CodexTransport::Cli), raw);
+
+        assert!(compact.contains("Provider error: codex model=gpt-5.5 transport=cli"));
+        assert!(compact.contains("update Codex CLI"));
+        assert!(compact.contains("requires a newer version of Codex"));
+        assert!(!compact.contains("[IDENTITY]"));
+        assert!(!compact.contains("/queue"));
     }
 
     #[test]

@@ -96,7 +96,11 @@ pub fn run() {
     let root = project_root();
     persist_bootstrap_root(&root);
     logger::init(&root);
-    log_info!("Agent OS v0.2.0 starting — root: {:?}", root);
+    log_info!(
+        "Agent OS v{} starting - root: {:?}",
+        env!("CARGO_PKG_VERSION"),
+        root
+    );
 
     // Single shared AppState — both Tauri commands and HTTP API use the same instance
     let shared = Arc::new(state::AppState::new(root.clone()));

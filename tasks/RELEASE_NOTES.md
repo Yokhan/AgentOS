@@ -1,3 +1,11 @@
+# Agent OS 0.2.16
+
+- Made Codex runtime selection explicit: Settings now shows configured transport, effective route, CLI status, ACP status, and one-click `use CLI` / `use ACP` switches.
+- Set the local Codex route to CLI for `gpt-5.5`; ACP is no longer allowed to look `ready` unless it can create an actual chat session.
+- Compact provider failures before they reach chat: model/runtime/auth errors now show an actionable fix instead of raw stderr or echoed prompt context.
+- Hardened Codex ACP handling against stdout log noise and made the optional ACP smoke test skip incompatible adapters instead of failing the whole suite.
+- Fixed startup logging to report the package version instead of the stale `v0.2.0` string.
+
 # Agent OS 0.2.15
 
 - Fixed PA command parsing after provider failures: Codex/OpenAI error output that echoes `[IDENTITY]` or prompt context is no longer scanned for executable AgentOS commands.
