@@ -5,6 +5,8 @@ use crate::state::AppState;
 /// Build full PA prompt: system context + chat history + delegation status + user message.
 /// PA sees everything it needs to make decisions.
 pub fn build_full_pa_prompt(state: &AppState, user_message: &str) -> String {
+    let policy = build_response_policy_context(user_message);
+    let template_policy = build_agent_template_context(state);
     let identity = build_identity_context(state);
     let context = build_project_context(state);
     let categories = super::category::build_category_context(state);
@@ -17,23 +19,111 @@ pub fn build_full_pa_prompt(state: &AppState, user_message: &str) -> String {
     let memory = build_pa_memory(state);
 
     format!(
-        "{identity}\n{context}\n{categories}\n{deleg_status}\n{strategies}\n{gates}\n{signals}\n{queue}\n{memory}\n{history}\n[USER MESSAGE]\n{user_message}",
+        "{policy}\n{template_policy}\n{identity}\n{context}\n{categories}\n{deleg_status}\n{strategies}\n{gates}\n{signals}\n{queue}\n{memory}\n{history}\n[USER MESSAGE]\n{user_message}",
     )
+}
+
+pub fn build_response_policy_context(user_message: &str) -> String {
+    let target_language = if user_message
+        .chars()
+        .any(|c| ('\u{0400}'..='\u{04FF}').contains(&c))
+    {
+        "Russian"
+    } else {
+        "the user's language"
+    };
+
+    format!(
+        "[RESPONSE POLICY]\n\
+         - Answer in {target_language}. Match the user's language for all user-facing prose.\n\
+         - If the user writes in Cyrillic/Russian, reply in Russian even when AgentOS context, command output, model names, or PA command tags are English.\n\
+         - Keep PA command tags, file paths, model names, and literal UI labels exact; do not translate command syntax.\n\
+         - Lead with the practical result. Be concise, concrete, and avoid build-log narration unless it changes a decision.\n\
+         - Treat this policy as the user-facing chat contract for orchestrator, duo, and auto-continue turns.\n\
+         [END RESPONSE POLICY]\n"
+    )
+}
+
+fn build_agent_template_context(state: &AppState) -> String {
+    let candidates = vec![
+        state.root.join("AGENTS.md"),
+        state.root.join("CLAUDE.md"),
+        state
+            .docs_dir
+            .join("agent-project-template")
+            .join("AGENTS.md"),
+        state
+            .docs_dir
+            .join("agent-project-template")
+            .join("CLAUDE.md"),
+    ];
+    let mut chunks = Vec::new();
+    for path in candidates {
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let mut selected = Vec::new();
+        for heading in ["## Philosophy", "## Work Report Style", "## DON'T"] {
+            if let Some(section) = extract_template_section(&content, heading) {
+                selected.push(section);
+            }
+        }
+        if selected.is_empty() {
+            continue;
+        }
+        let label = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("agent instructions");
+        let body: String = selected.join("\n\n").chars().take(3500).collect();
+        chunks.push(format!("Source: {}\n{}", label, body));
+        if chunks.len() >= 2 {
+            break;
+        }
+    }
+    if chunks.is_empty() {
+        return String::new();
+    }
+    format!(
+        "[AGENT TEMPLATE POLICY]\n{}\n[END AGENT TEMPLATE POLICY]\n",
+        chunks.join("\n\n---\n")
+    )
+}
+
+fn extract_template_section(content: &str, heading: &str) -> Option<String> {
+    let start = content.find(heading)?;
+    let rest = &content[start..];
+    let end = rest[heading.len()..]
+        .find("\n## ")
+        .map(|idx| heading.len() + idx)
+        .unwrap_or(rest.len());
+    Some(rest[..end].trim().to_string())
 }
 
 fn build_identity_context(state: &AppState) -> String {
     let project_count = {
         let cache = state.scan_cache.lock().unwrap_or_else(|e| e.into_inner());
-        cache.data.as_ref()
-            .and_then(|d| d.get("agents").and_then(|a| a.as_array()).or_else(|| d.as_array()))
+        cache
+            .data
+            .as_ref()
+            .and_then(|d| {
+                d.get("agents")
+                    .and_then(|a| a.as_array())
+                    .or_else(|| d.as_array())
+            })
             .map(|a| a.len())
             .unwrap_or(0)
     };
     let seg_count = state.segments.lock().map(|s| s.len()).unwrap_or(0);
-    let active_deleg = state.delegations.lock()
-        .map(|d| d.values().filter(|v| !v.status.is_terminal()).count()).unwrap_or(0);
+    let active_deleg = state
+        .delegations
+        .lock()
+        .map(|d| d.values().filter(|v| !v.status.is_terminal()).count())
+        .unwrap_or(0);
     let _active_plans = super::plans::load_all_plans_internal(state)
-        .iter().filter(|p| p.status == crate::commands::status::PlanStatus::Active).count();
+        .iter()
+        .filter(|p| p.status == crate::commands::status::PlanStatus::Active)
+        .count();
     let uptime_min = state.uptime_secs() / 60;
 
     format!(
@@ -130,7 +220,9 @@ fn build_identity_context(state: &AppState) -> String {
 fn build_queue_context(state: &AppState) -> String {
     let path = state.root.join("tasks").join("queue.md");
     match std::fs::read_to_string(&path) {
-        Ok(content) if !content.trim().is_empty() => format!("[QUEUE]\n{}\n[END QUEUE]", content.trim()),
+        Ok(content) if !content.trim().is_empty() => {
+            format!("[QUEUE]\n{}\n[END QUEUE]", content.trim())
+        }
         _ => String::new(),
     }
 }
@@ -151,7 +243,9 @@ fn build_pa_memory(state: &AppState) -> String {
             }
         }
     }
-    if notes.is_empty() { return String::new(); }
+    if notes.is_empty() {
+        return String::new();
+    }
     format!("[YOUR MEMORY]\n{}\n[END MEMORY]\n", notes.join("\n"))
 }
 
@@ -194,8 +288,13 @@ fn build_chat_history(state: &AppState) -> String {
             history.push(format!("{}: {}", role_label, short));
         }
     }
-    if history.is_empty() { return String::new(); }
-    format!("[RECENT CONVERSATION]\n{}\n[END CONVERSATION]\n", history.join("\n"))
+    if history.is_empty() {
+        return String::new();
+    }
+    format!(
+        "[RECENT CONVERSATION]\n{}\n[END CONVERSATION]\n",
+        history.join("\n")
+    )
 }
 
 fn build_delegation_status(state: &AppState) -> String {
@@ -203,38 +302,70 @@ fn build_delegation_status(state: &AppState) -> String {
         Ok(d) => d,
         Err(_) => return String::new(),
     };
-    let active: Vec<String> = delegations.values()
+    let active: Vec<String> = delegations
+        .values()
         .filter(|d| !d.status.is_terminal())
-        .map(|d| format!("  - {} [{}]: {}", d.project, d.status, d.task.chars().take(60).collect::<String>()))
+        .map(|d| {
+            format!(
+                "  - {} [{}]: {}",
+                d.project,
+                d.status,
+                d.task.chars().take(60).collect::<String>()
+            )
+        })
         .collect();
-    let recent_done: Vec<String> = delegations.values()
+    let recent_done: Vec<String> = delegations
+        .values()
         .filter(|d| d.status.is_terminal())
         .take(20) // Limit context size (#19)
         .map(|d| {
-            let resp: String = d.response.as_deref().unwrap_or("").chars().take(100).collect();
+            let resp: String = d
+                .response
+                .as_deref()
+                .unwrap_or("")
+                .chars()
+                .take(100)
+                .collect();
             format!("  - {} [{}]: {}", d.project, d.status, resp)
         })
         .collect();
-    if active.is_empty() && recent_done.is_empty() { return String::new(); }
+    if active.is_empty() && recent_done.is_empty() {
+        return String::new();
+    }
     let mut s = "[DELEGATIONS]\n".to_string();
-    if !active.is_empty() { s += &format!("Active:\n{}\n", active.join("\n")); }
-    if !recent_done.is_empty() { s += &format!("Recent results:\n{}\n", recent_done.join("\n")); }
+    if !active.is_empty() {
+        s += &format!("Active:\n{}\n", active.join("\n"));
+    }
+    if !recent_done.is_empty() {
+        s += &format!("Recent results:\n{}\n", recent_done.join("\n"));
+    }
     s += "[END DELEGATIONS]\n";
     s
 }
 
 fn build_project_context(state: &AppState) -> String {
     // Use full scanner data for rich context
-    let ps = state.project_segment.lock().unwrap_or_else(|e| e.into_inner());
+    let ps = state
+        .project_segment
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let segments = state.segments.lock().unwrap_or_else(|e| e.into_inner());
     let projects = {
         let cache = state.scan_cache.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(data) = &cache.data {
-            if let Some(arr) = data.get("agents").and_then(|a| a.as_array()).or_else(|| data.as_array()) {
-                arr.iter().filter_map(|v| {
-                    serde_json::from_value::<crate::scanner::ProjectInfo>(v.clone()).ok()
-                }).collect::<Vec<_>>()
-            } else { Vec::new() }
+            if let Some(arr) = data
+                .get("agents")
+                .and_then(|a| a.as_array())
+                .or_else(|| data.as_array())
+            {
+                arr.iter()
+                    .filter_map(|v| {
+                        serde_json::from_value::<crate::scanner::ProjectInfo>(v.clone()).ok()
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            }
         } else {
             drop(cache);
             crate::scanner::scan_projects(&state.docs_dir, &ps)
@@ -244,22 +375,54 @@ fn build_project_context(state: &AppState) -> String {
     // Group by category
     let mut lines = vec![format!("[PROJECTS BY CATEGORY ({} total)]", projects.len())];
     for (cat_name, cat_projects) in segments.iter() {
-        let in_cat: Vec<&crate::scanner::ProjectInfo> = projects.iter().filter(|p| cat_projects.contains(&p.name)).collect();
-        if in_cat.is_empty() { continue; }
+        let in_cat: Vec<&crate::scanner::ProjectInfo> = projects
+            .iter()
+            .filter(|p| cat_projects.contains(&p.name))
+            .collect();
+        if in_cat.is_empty() {
+            continue;
+        }
         let working = in_cat.iter().filter(|p| p.status == "working").count();
         let blocked = in_cat.iter().filter(|p| p.blockers).count();
-        lines.push(format!("\n{} ({}, {} working, {} blocked):", cat_name, in_cat.len(), working, blocked));
+        lines.push(format!(
+            "\n{} ({}, {} working, {} blocked):",
+            cat_name,
+            in_cat.len(),
+            working,
+            blocked
+        ));
         for p in &in_cat {
-            let mut info = format!("  {} [{}{}{}d]", p.name, p.status, if p.blockers { " BLOCKED" } else { "" }, p.days);
-            if !p.blocker_text.is_empty() { info += &format!(" blocker: {}", p.blocker_text.chars().take(80).collect::<String>()); }
-            if !p.task.is_empty() { info += &format!(" task: {}", p.task.chars().take(60).collect::<String>()); }
-            if !p.mcp_servers.is_empty() { info += &format!(" mcp: {}", p.mcp_servers.join(",")); }
+            let mut info = format!(
+                "  {} [{}{}{}d]",
+                p.name,
+                p.status,
+                if p.blockers { " BLOCKED" } else { "" },
+                p.days
+            );
+            if !p.blocker_text.is_empty() {
+                info += &format!(
+                    " blocker: {}",
+                    p.blocker_text.chars().take(80).collect::<String>()
+                );
+            }
+            if !p.task.is_empty() {
+                info += &format!(" task: {}", p.task.chars().take(60).collect::<String>());
+            }
+            if !p.mcp_servers.is_empty() {
+                info += &format!(" mcp: {}", p.mcp_servers.join(","));
+            }
             lines.push(info);
         }
     }
     // Unassigned projects
-    let assigned: std::collections::HashSet<&str> = segments.values().flat_map(|v| v.iter().map(|s| s.as_str())).collect();
-    let unassigned: Vec<&crate::scanner::ProjectInfo> = projects.iter().filter(|p| !assigned.contains(p.name.as_str())).collect();
+    let assigned: std::collections::HashSet<&str> = segments
+        .values()
+        .flat_map(|v| v.iter().map(|s| s.as_str()))
+        .collect();
+    let unassigned: Vec<&crate::scanner::ProjectInfo> = projects
+        .iter()
+        .filter(|p| !assigned.contains(p.name.as_str()))
+        .collect();
     if !unassigned.is_empty() {
         lines.push(format!("\nOther ({}):", unassigned.len()));
         for p in &unassigned {
@@ -268,4 +431,28 @@ fn build_project_context(state: &AppState) -> String {
     }
     lines.push("[END PROJECTS]".to_string());
     lines.join("\n") + "\n"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_response_policy_context, extract_template_section};
+
+    #[test]
+    fn response_policy_detects_russian_user_language() {
+        let policy = build_response_policy_context("Проверь чат и отвечай нормально");
+
+        assert!(policy.contains("Answer in Russian"));
+        assert!(policy.contains("reply in Russian"));
+        assert!(policy.contains("Keep PA command tags"));
+    }
+
+    #[test]
+    fn template_section_extraction_stops_at_next_heading() {
+        let content = "Intro\n## Work Report Style\nResult first\nDetails\n## Next\nOther";
+
+        let section = extract_template_section(content, "## Work Report Style").unwrap();
+
+        assert!(section.contains("Result first"));
+        assert!(!section.contains("## Next"));
+    }
 }

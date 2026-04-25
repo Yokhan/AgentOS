@@ -141,7 +141,7 @@ pub async fn stream_chat(
     );
     let prompt = if plan_mode {
         format!(
-            "{}\n\n[AGENTOS RUN MODE]\nPlan mode is ON. Read and reason only. Do not edit files, do not run write operations, and do not emit AgentOS PA command tags. Return a plan, questions, or a concrete blocker.",
+            "{}\n\n[AGENTOS RUN MODE]\nPlan mode is ON. Read and reason only. Do not edit files, do not run write operations, and do not emit AgentOS PA command tags. Return a plan, questions, or a concrete blocker. Preserve [RESPONSE POLICY]: match the user's language for prose.",
             prompt
         )
     } else {
@@ -887,7 +887,7 @@ fn build_auto_continue_prompt(turn: usize, feedback: &PaLoopFeedback) -> String 
          Results:\n{}\n\n\
          Continue autonomously from these results. Stop by returning a final status with no PA command tags when the task is complete or blocked. \
          Emit the next PA command tags only when another AgentOS action is actually required. \
-         Do not ask the user to type continue.\n\
+         Do not ask the user to type continue. Continue in the same user-facing language as the conversation; if recent user messages are Russian/Cyrillic, reply in Russian.\n\
          Auto-continue turn: {}/{} safety ceiling. Actionable commands: {}. Warnings: {}.",
         feedback.items
             .iter()

@@ -2341,14 +2341,6 @@ function TextBlock({ text, stripCommands, prefix }) {
   }
   const t = stripPaCommandLines(text, stripCommands);
   if (!t) return null;
-  if (t.length > 800)
-    return html`<details key=${prefix}>
-      <summary style="cursor:pointer;color:var(--t2);font-size:var(--fs-s)">
-        ${t.substring(0, 200).replace(/\n/g, " ")}...
-        <span style="color:var(--accent)">show more</span>
-      </summary>
-      <div dangerouslySetInnerHTML=${{ __html: md(t) }}></div>
-    </details>`;
   return html`<div
     key=${prefix}
     dangerouslySetInnerHTML=${{ __html: md(t) }}

@@ -1131,6 +1131,8 @@ fn build_agent_prompt(
     let orchestrator = session_orchestrator_participant(state, session);
     let is_orchestrator =
         orchestrator.map(|current| current.id.as_str()) == Some(participant.id.as_str());
+    prompt.push_str(&super::chat_parse::build_response_policy_context(message));
+    prompt.push('\n');
     prompt.push_str("You are operating inside AgentOS multi-agent orchestration.\n");
     prompt.push_str(&format!(
         "Session: {} ({})\nMode: {:?}\nProject: {}\nRole: {}\nParticipant: {}\n\n",
@@ -1327,7 +1329,7 @@ fn build_room_auto_continue_message(turn: usize, feedback: &RoomPaFeedback) -> S
          AgentOS executed the PA commands from your previous response.\n\
          Results:\n{}\n\n\
          Continue the room task autonomously. Stop by returning a final status with no PA command tags when complete or blocked. \
-         Emit the next PA command tags only when another AgentOS action is actually required. Do not ask the user to type continue.\n\
+         Emit the next PA command tags only when another AgentOS action is actually required. Do not ask the user to type continue. Continue in the same user-facing language as the conversation; if recent user messages are Russian/Cyrillic, reply in Russian.\n\
          Auto-continue turn: {}/{} safety ceiling. Actionable commands: {}. Warnings: {}.",
         feedback.items
             .iter()

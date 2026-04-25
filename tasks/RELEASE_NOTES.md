@@ -1,3 +1,10 @@
+# Agent OS 0.2.31
+
+- Fixed orchestrator/chat language drift: solo, plan mode, auto-continue, and Duo prompts now inject a shared response policy that keeps user-facing prose in the user's language, including Russian/Cyrillic conversations.
+- Connected orchestrator prompts to the agent-template behavioral contract by injecting relevant template policy sections such as Philosophy, Work Report Style, and Don't rules.
+- Stopped collapsing normal assistant answers after 800 characters; only raw diagnostics/command dumps keep the compact details rendering.
+- Added regression tests for Russian response-policy detection and template policy section extraction.
+
 # Agent OS 0.2.30
 
 - Added a live run lifecycle for chat streaming: `run_started`, `run_progress`, and `run_done` events now describe provider, model, mode, access, phase, detail, and outcome.
