@@ -1,3 +1,8 @@
+# Agent OS 0.2.19
+
+- Corrected the execution-lead prompt to use the real failed-delegation diagnostic command: `[DELEGATE_STATUS:?failed]`.
+- Hardened Duo Execute so the selected lead is promoted through the orchestrator path if their room state does not currently have write enabled.
+
 # Agent OS 0.2.18
 
 - Fixed Duo Execute message routing: the composer now sends execution prompts to the selected room lead/orchestrator instead of falling back to solo chat.

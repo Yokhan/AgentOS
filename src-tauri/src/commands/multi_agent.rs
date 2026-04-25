@@ -1210,7 +1210,7 @@ fn build_agent_prompt(
         prompt.push_str("Executable PA command tags must be on their own lines outside fenced code blocks. Tags inside fenced code blocks are examples only and will be ignored.\n");
         prompt.push_str("Common commands:\n");
         prompt.push_str("- [DASHBOARD_FULL]\n");
-        prompt.push_str("- [DELEGATE_STATUS:failed]\n");
+        prompt.push_str("- [DELEGATE_STATUS:?failed]\n");
         prompt.push_str("- [GIT_STATUS_ALL]\n");
         prompt.push_str("- [TEMPLATE_AUDIT]\n");
         prompt.push_str("- [DELEGATE:Project]task[/DELEGATE]\n");
@@ -3944,7 +3944,7 @@ mod tests {
         assert!(prompt.contains("selected you as the execution lead/orchestrator"));
         assert!(prompt.contains("outside fenced code blocks"));
         assert!(prompt.contains("[DASHBOARD_FULL]"));
-        assert!(prompt.contains("[DELEGATE_STATUS:failed]"));
+        assert!(prompt.contains("[DELEGATE_STATUS:?failed]"));
         assert!(prompt.contains("[DELEGATE:Project]task[/DELEGATE]"));
         assert!(participant_has_round_write_access(&participant, false));
     }

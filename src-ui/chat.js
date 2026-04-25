@@ -911,7 +911,11 @@ function ChatSidebar() {
           showToast("Pick an execution lead first", "error");
           return;
         }
-        if (!activeOrchestrator || activeOrchestrator.id !== lead.id) {
+        if (
+          !activeOrchestrator ||
+          activeOrchestrator.id !== lead.id ||
+          !lead.write_enabled
+        ) {
           await useDuoOrchestrator(lead.id);
         }
         activeRoomTab.value = "execute";
