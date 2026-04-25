@@ -1792,6 +1792,29 @@ function isNoiseResult(text) {
   );
 }
 
+function summarizeTraceOutput(text, status) {
+  const clean = cleanTraceText(text || "").trim();
+  if (!clean) return status === "queued" ? "not executed" : "";
+  if (isNoiseResult(clean)) return "no matches";
+  const lines = clean
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(/^#+\s*/, "")
+        .replace(/\*\*/g, "")
+        .replace(/`/g, "")
+        .trim(),
+    )
+    .filter(Boolean);
+  const firstSignal =
+    lines.find((line) =>
+      /error|failed|warning|blocked|summary|delegations|git status|template|health/i.test(
+        line,
+      ),
+    ) || lines[0];
+  return previewLine(firstSignal || clean, 110);
+}
+
 function buildPaTraceRows(blocks, commands = []) {
   const rows = [];
   let commandIndex = 0;
@@ -1804,8 +1827,11 @@ function buildPaTraceRows(blocks, commands = []) {
   };
   for (const block of blocks || []) {
     const text = cleanTraceText(block.text || "");
+    const explicitCommand = block.command || "";
     if (block.type === "pa_status") {
-      const command = consumeCommand(extractPaCommand(text)) || nextCommand();
+      const command =
+        consumeCommand(explicitCommand || extractPaCommand(text)) ||
+        nextCommand();
       const lower = text.toLowerCase();
       rows.push({
         type: "status",
@@ -1819,35 +1845,47 @@ function buildPaTraceRows(blocks, commands = []) {
           text.replace(command, "").replace(/^running\s*/i, ""),
         ),
         output: "",
+        summary: "",
       });
       continue;
     }
     if (block.type === "pa_result") {
+      const resultCommand = explicitCommand || extractPaCommand(text);
       const last = [...rows]
         .reverse()
-        .find((row) => row.type === "status" && !row.output);
+        .find(
+          (row) =>
+            row.type === "status" &&
+            !row.output &&
+            (!resultCommand || row.command === resultCommand),
+        );
       if (last) {
         last.status = "done";
         last.output = text;
+        last.summary = summarizeTraceOutput(text, "done");
       } else {
-        const command = consumeCommand(extractPaCommand(text)) || nextCommand();
+        const command = consumeCommand(resultCommand) || nextCommand();
         rows.push({
           type: "result",
           status: "done",
           command,
           label: isNoiseResult(text) ? "" : previewLine(text, 72) || "result",
           output: text,
+          summary: summarizeTraceOutput(text, "done"),
         });
       }
       continue;
     }
-    const command = consumeCommand(extractPaCommand(text)) || nextCommand();
+    const command =
+      consumeCommand(explicitCommand || extractPaCommand(text)) ||
+      nextCommand();
     rows.push({
       type: "warning",
       status: "warning",
       command,
       label: "warning",
       output: text,
+      summary: summarizeTraceOutput(text, "warning"),
     });
   }
   while (commandIndex < commands.length) {
@@ -1857,21 +1895,53 @@ function buildPaTraceRows(blocks, commands = []) {
       command: nextCommand(),
       label: "not executed",
       output: "",
+      summary: "not executed",
     });
   }
   return rows;
 }
 
-function PaTraceOutput({ text, warning, open }) {
-  if (!text) return null;
-  const body = html`<pre class="pa-trace-output ${warning ? "is-warning" : ""}">
-${text}</pre
-  >`;
-  return html`<details class="pa-trace-more" open=${open}>
-    <summary>
-      ${previewLine(text, 120) || "empty output"} <span>output</span>
+function copyTraceRows(rows) {
+  const text = rows
+    .map((row, i) => {
+      const head = `${i + 1}. ${row.status.toUpperCase()} ${row.command || "PA command"} - ${row.summary || row.label || ""}`;
+      return row.output ? `${head}\n${row.output}` : head;
+    })
+    .join("\n\n");
+  navigator.clipboard.writeText(text);
+  showToast("Run copied", "success", 1500);
+}
+
+function PaTraceRow({ row, index }) {
+  const noisy = isNoiseResult(row.output);
+  const hasOutput = !!row.output && !noisy;
+  const cls =
+    row.status === "warning"
+      ? "is-warning"
+      : row.status === "running"
+        ? "is-running"
+        : row.status === "done"
+          ? "is-done"
+          : row.status === "queued"
+            ? "is-queued"
+            : "";
+  return html`<details class="run-row ${cls}" key=${"run-row" + index}>
+    <summary class="run-row-summary">
+      <span class="run-index">${index + 1}</span>
+      <span class="run-state">${row.status}</span>
+      <span class="run-command">${row.command || "PA command"}</span>
+      <span class="run-summary">
+        ${noisy ? "no matches" : row.summary || row.label || "completed"}
+      </span>
+      <span class="run-open">${hasOutput ? "details" : ""}</span>
     </summary>
-    ${body}
+    ${hasOutput
+      ? html`<pre
+          class="run-output ${row.status === "warning" ? "is-warning" : ""}"
+        >
+${row.output}</pre
+        >`
+      : null}
   </details>`;
 }
 
@@ -1880,55 +1950,35 @@ function PaTrace({ blocks, commands }) {
   if (!rows.length) return null;
   const commandCount = rows.length;
   const warningCount = rows.filter((row) => row.status === "warning").length;
+  const doneCount = rows.filter((row) => row.status === "done").length;
+  const runningCount = rows.filter((row) => row.status === "running").length;
   const noisyCount = rows.filter((row) => isNoiseResult(row.output)).length;
-  const running = rows.find((row) => row.status === "running");
-  const title = running
-    ? `Running ${running.command || "PA command"}`
-    : `Ran ${commandCount} PA command${commandCount === 1 ? "" : "s"}`;
-  return html`<details class="pa-trace" open=${!!running || !!warningCount}>
-    <summary class="pa-trace-summary">
-      <span class="pa-trace-kicker">${running ? "running" : "tools"}</span>
-      <span class="pa-trace-title">${title}</span>
-      ${noisyCount
-        ? html`<span class="pa-trace-muted">${noisyCount} empty</span>`
-        : null}
-      ${warningCount
-        ? html`<span class="pa-trace-warn">${warningCount} warning</span>`
-        : null}
-    </summary>
-    <div class="pa-trace-body">
-      ${rows.map((row, i) => {
-        const noisy = isNoiseResult(row.output);
-        const cls =
-          row.status === "warning"
-            ? "is-warning"
-            : row.status === "running"
-              ? "is-running"
-              : row.status === "done"
-                ? "is-done"
-                : "";
-        return html`<div class="pa-trace-row ${cls}" key=${"pa-row" + i}>
-          <div class="pa-trace-row-head">
-            <span class="pa-trace-state">${row.status}</span>
-            <span class="pa-trace-command">${row.command || "PA command"}</span>
-            ${row.label
-              ? html`<span class="pa-trace-label">${row.label}</span>`
-              : null}
-            ${noisy
-              ? html`<span class="pa-trace-label">no matches</span>`
-              : null}
-          </div>
-          ${noisy
-            ? null
-            : html`<${PaTraceOutput}
-                text=${row.output}
-                warning=${row.status === "warning"}
-                open=${row.status === "warning" || row.status === "running"}
-              />`}
-        </div>`;
-      })}
+  const headline = runningCount
+    ? `${runningCount} running`
+    : warningCount
+      ? `${warningCount} warning${warningCount === 1 ? "" : "s"}`
+      : `${doneCount}/${commandCount} complete`;
+  return html`<div class="run-card">
+    <div class="run-head">
+      <div class="run-head-main">
+        <span class="run-kicker">run</span>
+        <span class="run-title"
+          >${commandCount} PA command${commandCount === 1 ? "" : "s"}</span
+        >
+        <span class="run-headline">${headline}</span>
+      </div>
+      <div class="run-badges">
+        ${noisyCount ? html`<span>${noisyCount} empty</span>` : null}
+        ${warningCount
+          ? html`<span class="warn">${warningCount} warn</span>`
+          : null}
+        <button type="button" onClick=${() => copyTraceRows(rows)}>copy</button>
+      </div>
     </div>
-  </details>`;
+    <div class="run-table">
+      ${rows.map((row, i) => html`<${PaTraceRow} row=${row} index=${i} />`)}
+    </div>
+  </div>`;
 }
 
 function TextBlock({ text, stripCommands, prefix }) {

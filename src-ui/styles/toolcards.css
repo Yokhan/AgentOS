@@ -195,111 +195,148 @@
     white-space: nowrap;
 }
 
-/* PA command trace - keeps orchestration feedback inside one chat turn */
-.pa-trace {
+/* Execution run card - compact command timeline inside one assistant turn */
+.run-card {
     margin: var(--sp-xs) 0;
     border: 1px solid var(--border);
     background: var(--sf);
     border-radius: 3px;
     overflow: hidden;
 }
-.pa-trace-summary {
+.run-head {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--sp-s);
     padding: 6px var(--sp-s);
     font-family: var(--font-mono);
     font-size: var(--fs-s);
-    cursor: pointer;
-    user-select: none;
-    list-style: none;
     min-height: 28px;
+    border-bottom: 1px solid var(--border);
 }
-.pa-trace-summary::-webkit-details-marker {
-    display: none;
-}
-.pa-trace-summary:hover {
-    background: var(--sf2);
-}
-.pa-trace-kicker {
-    color: var(--t3);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-size: var(--fs-s);
-}
-.pa-trace-title {
-    color: var(--text);
-    font-weight: 600;
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.pa-trace-warn {
-    color: var(--accent);
-    border: 1px solid var(--accent);
-    padding: 1px 5px;
-    text-transform: uppercase;
-    font-size: var(--fs-s);
-}
-.pa-trace-muted {
-    color: var(--t3);
-    border: 1px solid var(--border);
-    padding: 1px 5px;
-    text-transform: uppercase;
-    font-size: var(--fs-s);
-}
-.pa-trace-body {
-    border-top: 1px solid var(--border);
-    padding: 0;
-}
-.pa-trace-row {
-    padding: 5px var(--sp-s);
-    border-top: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
-}
-.pa-trace-row:first-child {
-    border-top: none;
-}
-.pa-trace-row-head {
+.run-head-main {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--sp-s);
     min-width: 0;
-    font-family: var(--font-mono);
-    font-size: var(--fs-s);
+    flex: 1;
 }
-.pa-trace-state {
-    min-width: 46px;
+.run-kicker {
+    color: var(--t3);
     text-transform: uppercase;
     letter-spacing: 1px;
-    color: var(--t3);
     font-size: var(--fs-s);
 }
-.pa-trace-row.is-running .pa-trace-state {
-    color: var(--cyan);
-}
-.pa-trace-row.is-done .pa-trace-state {
-    color: var(--green);
-}
-.pa-trace-row.is-warning .pa-trace-state {
-    color: var(--accent);
-}
-.pa-trace-command {
-    color: var(--cyan);
+.run-title {
+    color: var(--text);
     font-weight: 600;
     white-space: nowrap;
-    max-width: 42%;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
-.pa-trace-label {
+.run-headline {
     color: var(--t2);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.pa-trace-output {
-    margin: var(--sp-xs) 0 0 0;
+.run-badges {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.run-badges span,
+.run-badges button {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--t3);
+    padding: 1px 5px;
+    font-size: var(--fs-s);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+}
+.run-badges button {
+    cursor: pointer;
+}
+.run-badges button:hover {
+    color: var(--text);
+    border-color: var(--t3);
+}
+.run-badges .warn {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+.run-table {
+    display: flex;
+    flex-direction: column;
+}
+.run-row {
+    border: 0;
+    border-top: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
+}
+.run-row:first-child {
+    border-top: none;
+}
+.run-row-summary {
+    display: grid;
+    grid-template-columns: 24px 58px minmax(120px, 0.7fr) minmax(
+            120px,
+            1.4fr
+        ) auto;
+    align-items: center;
+    gap: 6px;
+    padding: 5px var(--sp-s);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    cursor: pointer;
+    list-style: none;
+    min-height: 28px;
+}
+.run-row-summary::-webkit-details-marker {
+    display: none;
+}
+.run-row-summary:hover {
+    background: var(--sf2);
+}
+.run-index {
+    color: var(--t3);
+    text-align: right;
+}
+.run-state {
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--t3);
+    font-size: var(--fs-s);
+}
+.run-row.is-running .run-state {
+    color: var(--cyan);
+}
+.run-row.is-done .run-state {
+    color: var(--green);
+}
+.run-row.is-warning .run-state {
+    color: var(--accent);
+}
+.run-command {
+    color: var(--cyan);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.run-summary {
+    color: var(--t2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.run-open {
+    color: var(--accent);
+    text-align: right;
+    text-transform: uppercase;
+    font-size: var(--fs-s);
+}
+.run-output {
+    margin: 0 var(--sp-s) var(--sp-s) calc(var(--sp-s) + 88px);
     padding: var(--sp-xs);
     border: 1px solid var(--border);
     background: var(--bg);
@@ -311,33 +348,24 @@
     max-height: 360px;
     overflow: auto;
 }
-.pa-trace-output.is-warning {
+.run-output.is-warning {
     border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
     color: var(--accent);
 }
-.pa-trace-more {
-    margin-top: 3px;
-}
-.pa-trace-more summary {
-    font-family: var(--font-mono);
-    font-size: var(--fs-s);
-    color: var(--t2);
-    cursor: pointer;
-    list-style: none;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    padding: 3px 6px;
-}
-.pa-trace-more summary::-webkit-details-marker {
-    display: none;
-}
-.pa-trace-more summary span {
-    color: var(--accent);
-    float: right;
-    margin-left: var(--sp-s);
+@media (max-width: 760px) {
+    .run-row-summary {
+        grid-template-columns: 20px 54px minmax(90px, 1fr) auto;
+    }
+    .run-summary {
+        grid-column: 3 / 5;
+    }
+    .run-open {
+        grid-column: 4;
+        grid-row: 1;
+    }
+    .run-output {
+        margin-left: var(--sp-s);
+    }
 }
 
 /* Enhanced Delegation Card */

@@ -1,3 +1,9 @@
+# Agent OS 0.2.25
+
+- Reworked PA execution rendering into a compact `RunCard`: one run header, command rows, short summaries, and per-row details instead of a visible stdout wall.
+- Added structured `pa_command` metadata to new PA command feedback events, so future run cards do not have to infer command/result links from assistant prose.
+- Kept legacy chat compatibility through inference while making new streaming runs structurally matched by command.
+
 # Agent OS 0.2.24
 
 - Made the chat sidebar resizable from its left edge and widened assistant/tool bubbles to use the full panel width.

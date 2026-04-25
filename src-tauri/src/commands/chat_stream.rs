@@ -17,6 +17,7 @@ fn append_chat_system(
     chat_file: &Path,
     event_type: &str,
     text: &str,
+    command: Option<&str>,
     label: &str,
 ) {
     crate::commands::jsonl::append_jsonl_logged(
@@ -26,6 +27,7 @@ fn append_chat_system(
             "role": "system",
             "kind": "pa_feedback",
             "pa_type": event_type,
+            "pa_command": command,
             "msg": text
         }),
         label,
@@ -38,10 +40,15 @@ fn append_pa_feedback(
     stream_buf: &Path,
     event_type: &str,
     text: &str,
+    command: Option<&str>,
     label: &str,
 ) {
-    append_stream_event(stream_buf, json!({"type": event_type, "text": text}), label);
-    append_chat_system(state, chat_file, event_type, text, label);
+    append_stream_event(
+        stream_buf,
+        json!({"type": event_type, "text": text, "command": command}),
+        label,
+    );
+    append_chat_system(state, chat_file, event_type, text, command, label);
 }
 
 #[tauri::command]
@@ -130,12 +137,15 @@ pub async fn stream_chat(
                 for parsed in &commands {
                     if !parsed.valid {
                         if let Some(err) = &parsed.error {
+                            let command_label =
+                                super::pa_commands::describe_pa_command(&parsed.cmd);
                             append_pa_feedback(
                                 &state_arc,
                                 &chat_file_bg,
                                 &stream_buf_bg,
                                 "warning",
                                 err,
+                                Some(command_label.as_str()),
                                 "stream codex warning",
                             );
                         }
@@ -148,6 +158,7 @@ pub async fn stream_chat(
                         &stream_buf_bg,
                         "pa_status",
                         &format!("Running {}", command_label),
+                        Some(command_label.as_str()),
                         "stream codex pa start",
                     );
                     if let Some(text) =
@@ -159,6 +170,7 @@ pub async fn stream_chat(
                             &stream_buf_bg,
                             "pa_result",
                             &text,
+                            Some(command_label.as_str()),
                             "stream codex pa result",
                         );
                     } else {
@@ -168,6 +180,7 @@ pub async fn stream_chat(
                             &stream_buf_bg,
                             "pa_status",
                             &format!("Completed {} (no output)", command_label),
+                            Some(command_label.as_str()),
                             "stream codex pa complete",
                         );
                     }
@@ -179,6 +192,7 @@ pub async fn stream_chat(
                         &stream_buf_bg,
                         "warning",
                         &warning,
+                        None,
                         "stream codex malformed cmd",
                     );
                 }
@@ -563,12 +577,14 @@ fn stream_reader_loop(
         for parsed in &commands {
             if !parsed.valid {
                 if let Some(err) = &parsed.error {
+                    let command_label = super::pa_commands::describe_pa_command(&parsed.cmd);
                     append_pa_feedback(
                         state,
                         chat_file,
                         stream_buf,
                         "warning",
                         err,
+                        Some(command_label.as_str()),
                         "stream warning",
                     );
                 }
@@ -581,6 +597,7 @@ fn stream_reader_loop(
                 stream_buf,
                 "pa_status",
                 &format!("Running {}", command_label),
+                Some(command_label.as_str()),
                 "stream pa start",
             );
             // Execute command via shared function and emit result to stream
@@ -591,6 +608,7 @@ fn stream_reader_loop(
                     stream_buf,
                     "pa_result",
                     &text,
+                    Some(command_label.as_str()),
                     "stream pa result",
                 );
             } else {
@@ -600,6 +618,7 @@ fn stream_reader_loop(
                     stream_buf,
                     "pa_status",
                     &format!("Completed {} (no output)", command_label),
+                    Some(command_label.as_str()),
                     "stream pa complete",
                 );
             }
@@ -612,6 +631,7 @@ fn stream_reader_loop(
                 stream_buf,
                 "warning",
                 &w,
+                None,
                 "stream malformed cmd",
             );
         }

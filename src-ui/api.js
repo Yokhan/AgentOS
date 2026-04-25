@@ -285,7 +285,7 @@ function legacyPaFeedbackType(msg) {
   return "pa_result";
 }
 
-function appendPaFeedbackTo(prev, type, text) {
+function appendPaFeedbackTo(prev, type, text, command = "") {
   prev.chain = prev.chain?.length
     ? [...prev.chain]
     : prev.msg
@@ -294,6 +294,7 @@ function appendPaFeedbackTo(prev, type, text) {
   prev.chain.push({
     type,
     text: text || "",
+    command: command || "",
   });
 }
 
@@ -324,7 +325,12 @@ async function loadChat(p) {
       if (m.kind === "pa_feedback") {
         const prev = msgs[msgs.length - 1];
         if (prev && prev.role === "assistant") {
-          appendPaFeedbackTo(prev, m.pa_type || "pa_result", m.msg || "");
+          appendPaFeedbackTo(
+            prev,
+            m.pa_type || "pa_result",
+            m.msg || "",
+            m.pa_command || "",
+          );
           continue;
         }
       }
@@ -1124,6 +1130,7 @@ async function sendMessage(msg) {
                 chain.push({
                   type: evt.type,
                   text: evt.text || "",
+                  command: evt.command || "",
                 });
                 streamChain.value = [...chain];
               }
