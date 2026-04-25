@@ -1,3 +1,10 @@
+# Agent OS 0.2.20
+
+- Made chat the visible execution journal for PA commands: command results and warnings now stream live and persist as system messages in chat history.
+- Fixed solo orchestrator stream rendering for PA results, so responses like `[DASHBOARD_FULL]` and `[TEMPLATE_AUDIT]` no longer look like inert text after execution.
+- Limited Codex solo PA command execution to the orchestrator chat instead of project chats.
+- Fixed parsing of multiple `[DELEGATE_STATUS:...]` commands in one agent response and added regression coverage for the diagnostic batch shown in chat.
+
 # Agent OS 0.2.19
 
 - Corrected the execution-lead prompt to use the real failed-delegation diagnostic command: `[DELEGATE_STATUS:?failed]`.

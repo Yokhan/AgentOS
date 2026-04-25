@@ -1061,6 +1061,14 @@ async function sendMessage(msg) {
                 chain.push({ type: "system", label: evt.system });
                 streamChain.value = [...chain];
               }
+              // PA command execution feedback
+              if (evt.type === "pa_result" || evt.type === "warning") {
+                chain.push({
+                  type: evt.type,
+                  text: evt.text || "",
+                });
+                streamChain.value = [...chain];
+              }
               // Result stats
               if (evt.type === "result") {
                 lastStats.value = {

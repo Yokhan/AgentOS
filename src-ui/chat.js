@@ -1803,6 +1803,14 @@ function ChatMsg({ m }) {
             >
               ••• ${b.label}
             </div>`;
+          if (b.type === "pa_result" || b.type === "warning")
+            return html`<div
+              key=${"pa" + i}
+              class="tc-output ${b.type === "warning" ? "tc-out-err" : ""}"
+              style="margin:var(--sp-xs) 0;font-family:var(--font-mono);font-size:var(--fs-s);white-space:pre-wrap"
+            >
+              ${b.type === "warning" ? "warning" : "pa result"}: ${b.text || ""}
+            </div>`;
           if (b.type === "result")
             return html`<div
               key=${"r" + i}
@@ -1882,6 +1890,14 @@ function StreamBubble() {
           style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
         >
           ••• ${b.label}
+        </div>`;
+      if (b.type === "pa_result" || b.type === "warning")
+        return html`<div
+          key=${"spa" + i}
+          class="tc-output ${b.type === "warning" ? "tc-out-err" : ""}"
+          style="margin:var(--sp-xs) 0;font-family:var(--font-mono);font-size:var(--fs-s);white-space:pre-wrap"
+        >
+          ${b.type === "warning" ? "warning" : "pa result"}: ${b.text || ""}
         </div>`;
       return null;
     })}

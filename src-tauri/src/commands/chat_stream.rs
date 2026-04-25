@@ -4,8 +4,33 @@ use super::process_manager::{clear_activity, kill_existing, set_activity, track_
 use crate::state::AppState;
 use serde_json::{json, Value};
 use std::io::BufRead;
+use std::path::Path;
 use std::sync::Arc;
 use tauri::State;
+
+fn append_stream_event(stream_buf: &Path, event: Value, label: &str) {
+    crate::commands::jsonl::append_jsonl_logged(stream_buf, &event, label);
+}
+
+fn append_chat_system(state: &AppState, chat_file: &Path, text: &str, label: &str) {
+    crate::commands::jsonl::append_jsonl_logged(
+        chat_file,
+        &json!({"ts": state.now_iso(), "role": "system", "msg": text}),
+        label,
+    );
+}
+
+fn append_pa_feedback(
+    state: &AppState,
+    chat_file: &Path,
+    stream_buf: &Path,
+    event_type: &str,
+    text: &str,
+    label: &str,
+) {
+    append_stream_event(stream_buf, json!({"type": event_type, "text": text}), label);
+    append_chat_system(state, chat_file, text, label);
+}
 
 #[tauri::command]
 pub async fn stream_chat(
@@ -52,6 +77,8 @@ pub async fn stream_chat(
             reasoning_effort.as_deref(),
         );
 
+    let is_orchestrator = project.is_empty();
+
     if matches!(provider, super::provider_runner::ProviderKind::Codex) {
         let state_arc = Arc::clone(&state);
         let prompt_bg = prompt.clone();
@@ -60,6 +87,7 @@ pub async fn stream_chat(
         let chat_key_bg = chat_key.clone();
         let chat_file_bg = chat_file.clone();
         let stream_buf_bg = stream_buf.clone();
+        let is_orchestrator_bg = is_orchestrator;
         std::thread::spawn(move || {
             let response = super::provider_runner::run_provider_with_opts(
                 &state_arc,
@@ -78,41 +106,53 @@ pub async fn stream_chat(
                 "stream codex response",
             );
             super::claude_runner::log_chat_event(&state_arc.root, &chat_key_bg, &response);
-
-            let commands = super::pa_commands::parse_pa_commands(&response, &state_arc);
-            let warnings = super::pa_commands::detect_malformed_commands(&response);
-            for parsed in &commands {
-                if !parsed.valid {
-                    if let Some(err) = &parsed.error {
-                        crate::commands::jsonl::append_jsonl_logged(
-                            &stream_buf_bg,
-                            &json!({"type":"warning","text": err}),
-                            "stream codex warning",
-                        );
-                    }
-                    continue;
-                }
-                if let Some(text) = super::pa_commands::execute_pa_command(&state_arc, &parsed.cmd)
-                {
-                    crate::commands::jsonl::append_jsonl_logged(
-                        &stream_buf_bg,
-                        &json!({"type":"pa_result","text": text}),
-                        "stream codex pa result",
-                    );
-                }
-            }
-            for warning in warnings {
-                crate::commands::jsonl::append_jsonl_logged(
-                    &stream_buf_bg,
-                    &json!({"type":"warning","text": warning}),
-                    "stream codex malformed cmd",
-                );
-            }
             crate::commands::jsonl::append_jsonl_logged(
                 &stream_buf_bg,
                 &json!({"type":"text","text": response}),
                 "stream codex text",
             );
+
+            if is_orchestrator_bg {
+                let commands = super::pa_commands::parse_pa_commands(&response, &state_arc);
+                let warnings = super::pa_commands::detect_malformed_commands(&response);
+                for parsed in &commands {
+                    if !parsed.valid {
+                        if let Some(err) = &parsed.error {
+                            append_pa_feedback(
+                                &state_arc,
+                                &chat_file_bg,
+                                &stream_buf_bg,
+                                "warning",
+                                err,
+                                "stream codex warning",
+                            );
+                        }
+                        continue;
+                    }
+                    if let Some(text) =
+                        super::pa_commands::execute_pa_command(&state_arc, &parsed.cmd)
+                    {
+                        append_pa_feedback(
+                            &state_arc,
+                            &chat_file_bg,
+                            &stream_buf_bg,
+                            "pa_result",
+                            &text,
+                            "stream codex pa result",
+                        );
+                    }
+                }
+                for warning in warnings {
+                    append_pa_feedback(
+                        &state_arc,
+                        &chat_file_bg,
+                        &stream_buf_bg,
+                        "warning",
+                        &warning,
+                        "stream codex malformed cmd",
+                    );
+                }
+            }
             crate::commands::jsonl::append_jsonl_logged(
                 &stream_buf_bg,
                 &json!({"type":"done","text": response,"tools":[]}),
@@ -169,7 +209,6 @@ pub async fn stream_chat(
 
     // Clone values needed by the background thread
     let state_arc = Arc::clone(&state);
-    let is_orchestrator = project.is_empty();
     let chat_key_bg = chat_key.clone();
     let stream_buf_bg = stream_buf.clone();
     let chat_file_bg = chat_file.clone();
@@ -494,9 +533,12 @@ fn stream_reader_loop(
         for parsed in &commands {
             if !parsed.valid {
                 if let Some(err) = &parsed.error {
-                    crate::commands::jsonl::append_jsonl_logged(
+                    append_pa_feedback(
+                        state,
+                        chat_file,
                         stream_buf,
-                        &json!({"type":"warning","text":err}),
+                        "warning",
+                        err,
                         "stream warning",
                     );
                 }
@@ -504,18 +546,24 @@ fn stream_reader_loop(
             }
             // Execute command via shared function and emit result to stream
             if let Some(text) = super::pa_commands::execute_pa_command(state, &parsed.cmd) {
-                crate::commands::jsonl::append_jsonl_logged(
+                append_pa_feedback(
+                    state,
+                    chat_file,
                     stream_buf,
-                    &json!({"type":"pa_result","text":text}),
+                    "pa_result",
+                    &text,
                     "stream pa result",
                 );
             }
         }
 
         for w in warnings {
-            crate::commands::jsonl::append_jsonl_logged(
+            append_pa_feedback(
+                state,
+                chat_file,
                 stream_buf,
-                &json!({"type":"warning","text":w}),
+                "warning",
+                &w,
                 "stream malformed cmd",
             );
         }

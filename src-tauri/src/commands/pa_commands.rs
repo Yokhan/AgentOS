@@ -584,4 +584,53 @@ ERROR: {"type":"error","status":400}"#;
 
         assert!(parse_pa_commands(response, &state).is_empty());
     }
+
+    #[test]
+    fn orchestrator_diagnostic_command_batch_parses_from_chat() {
+        let state = test_state("diagnostic-batch");
+        let response = r#"Starting diagnostics.
+
+[DELEGATE_STATUS:?stale]
+
+[DELEGATE_STATUS:?failed]
+
+[DELEGATE_LOG:?today]
+
+[GIT_STATUS_ALL]
+
+[TEMPLATE_AUDIT]
+
+[HEALTH_CHECK:all]
+
+[DASHBOARD_FULL]"#;
+
+        let commands = parse_pa_commands(response, &state);
+
+        assert_eq!(commands.len(), 7);
+        assert!(commands.iter().all(|cmd| cmd.valid));
+        assert!(commands.iter().any(|cmd| matches!(
+            &cmd.cmd,
+            PaCommand::HealthCheck { target } if target == "all"
+        )));
+        assert!(commands.iter().any(|cmd| matches!(
+            &cmd.cmd,
+            PaCommand::DelegExt(super::super::pa_commands_deleg::DelegPaCommand::Status { filter }) if filter == "?failed"
+        )));
+        assert!(commands.iter().any(|cmd| matches!(
+            &cmd.cmd,
+            PaCommand::DelegExt(super::super::pa_commands_deleg::DelegPaCommand::Log { filter }) if filter == "?today"
+        )));
+        assert!(commands.iter().any(|cmd| matches!(
+            &cmd.cmd,
+            PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::GitStatusAll)
+        )));
+        assert!(commands.iter().any(|cmd| matches!(
+            &cmd.cmd,
+            PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::TemplateAudit)
+        )));
+        assert!(commands.iter().any(|cmd| matches!(
+            &cmd.cmd,
+            PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::DashboardFull)
+        )));
+    }
 }
