@@ -1,3 +1,7 @@
+# Agent OS 0.2.23
+
+- Folded legacy PA `SYSTEM` messages from existing chat history into the previous assistant execution trace, so old conversations stop showing separate command-result bubbles.
+
 # Agent OS 0.2.22
 
 - Grouped PA command feedback into the assistant chat turn instead of scattering execution output as separate `SYSTEM` messages.

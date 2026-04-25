@@ -268,6 +268,35 @@ async function loadSegments() {
   }
 }
 let _chatLoadId = 0;
+const PA_COMMAND_TOKEN = /\[[A-Z][A-Z0-9_]*(?::[^\]]*)?\]/;
+
+function messageContainsPaCommand(msg) {
+  return PA_COMMAND_TOKEN.test(msg || "");
+}
+
+function legacyPaFeedbackType(msg) {
+  const text = msg || "";
+  if (/^(Running|Completed)\s+\[[A-Z][A-Z0-9_]*(?::[^\]]*)?\]/i.test(text)) {
+    return "pa_status";
+  }
+  if (/warning|malformed|invalid|error/i.test(text)) {
+    return "warning";
+  }
+  return "pa_result";
+}
+
+function appendPaFeedbackTo(prev, type, text) {
+  prev.chain = prev.chain?.length
+    ? [...prev.chain]
+    : prev.msg
+      ? [{ type: "text", text: prev.msg }]
+      : [];
+  prev.chain.push({
+    type,
+    text: text || "",
+  });
+}
+
 async function loadChat(p) {
   const myId = ++_chatLoadId;
   try {
@@ -295,15 +324,21 @@ async function loadChat(p) {
       if (m.kind === "pa_feedback") {
         const prev = msgs[msgs.length - 1];
         if (prev && prev.role === "assistant") {
-          prev.chain = prev.chain?.length
-            ? [...prev.chain]
-            : prev.msg
-              ? [{ type: "text", text: prev.msg }]
-              : [];
-          prev.chain.push({
-            type: m.pa_type || "pa_result",
-            text: m.msg || "",
-          });
+          appendPaFeedbackTo(prev, m.pa_type || "pa_result", m.msg || "");
+          continue;
+        }
+      }
+      if (m.role === "system") {
+        const prev = msgs[msgs.length - 1];
+        const prevIsPaTurn =
+          prev &&
+          prev.role === "assistant" &&
+          (messageContainsPaCommand(prev.msg) ||
+            (prev.chain || []).some((b) =>
+              ["pa_status", "pa_result", "warning"].includes(b.type),
+            ));
+        if (prevIsPaTurn) {
+          appendPaFeedbackTo(prev, legacyPaFeedbackType(m.msg), m.msg || "");
           continue;
         }
       }
