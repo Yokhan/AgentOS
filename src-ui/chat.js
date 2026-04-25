@@ -563,6 +563,10 @@ function ChatSidebar() {
   const msgsRef = useRef();
   const fileRef = useRef();
   const prevCount = useRef(0);
+  const [chatWidth, setChatWidth] = useState(() => {
+    const saved = Number(localStorage.getItem("agentos.chatWidth") || 0);
+    return saved > 0 ? saved : null;
+  });
   const showScrollBtn = signal(false);
   const duoEnabled = chatCollabMode.value === "duo";
   const duoView = duoEnabled ? normalizeDuoView(activeRoomTab.value) : "chat";
@@ -1001,8 +1005,27 @@ function ChatSidebar() {
     isDrag.value = false;
     if (e.dataTransfer?.files?.length) hdlFiles(e.dataTransfer.files);
   };
+  const startResize = (e) => {
+    e.preventDefault();
+    const max = Math.floor(window.innerWidth * 0.72);
+    const min = 360;
+    const move = (ev) => {
+      const next = Math.max(min, Math.min(max, window.innerWidth - ev.clientX));
+      setChatWidth(next);
+      localStorage.setItem("agentos.chatWidth", String(next));
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      document.body.classList.remove("chat-resizing");
+    };
+    document.body.classList.add("chat-resizing");
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
   return html`<div
     class="chat-side"
+    style=${chatWidth ? `width:${chatWidth}px` : ""}
     onDragOver=${(e) => {
       e.preventDefault();
       isDrag.value = true;
@@ -1010,6 +1033,11 @@ function ChatSidebar() {
     onDragLeave=${() => (isDrag.value = false)}
     onDrop=${onDrop}
   >
+    <div
+      class="chat-resize-handle"
+      title="Drag to resize chat"
+      onMouseDown=${startResize}
+    />
     <div
       class="ch-title"
       style="display:flex;justify-content:space-between;align-items:center"
@@ -1677,6 +1705,7 @@ function ProgressBar({ activity, elapsed }) {
   </div>`;
 }
 
+const PA_COMMAND_PATTERN = /\[[A-Z][A-Z0-9_]*(?::[^\]]*)?\]/g;
 const PA_COMMAND_LINE = /^\s*\[[A-Z][A-Z0-9_]*(?::[^\]]*)?\]\s*$/;
 
 function isPaFeedbackBlock(block) {
@@ -1691,16 +1720,28 @@ function isPaFeedbackBlock(block) {
 function groupChainBlocks(chain) {
   const out = [];
   let paBlocks = [];
+  let pendingCommands = [];
   const flushPa = () => {
     if (!paBlocks.length) return;
-    out.push({ type: "pa_trace", blocks: paBlocks });
+    out.push({
+      type: "pa_trace",
+      blocks: paBlocks,
+      commands: pendingCommands,
+    });
     paBlocks = [];
+    pendingCommands = [];
   };
   for (const block of chain || []) {
     if (isPaFeedbackBlock(block)) {
       paBlocks.push(block);
     } else {
       flushPa();
+      if (block?.type === "text") {
+        pendingCommands = [
+          ...pendingCommands,
+          ...extractPaCommands(block.text || ""),
+        ];
+      }
       out.push(block);
     }
   }
@@ -1720,8 +1761,12 @@ function stripPaCommandLines(text, shouldStrip) {
 }
 
 function extractPaCommand(text) {
-  const match = String(text || "").match(/\[[A-Z][A-Z0-9_]*(?::[^\]]*)?\]/);
+  const match = String(text || "").match(PA_COMMAND_PATTERN);
   return match ? match[0] : "";
+}
+
+function extractPaCommands(text) {
+  return [...String(text || "").matchAll(PA_COMMAND_PATTERN)].map((m) => m[0]);
 }
 
 function previewLine(text, limit = 96) {
@@ -1731,12 +1776,36 @@ function previewLine(text, limit = 96) {
   return oneLine.length > limit ? oneLine.slice(0, limit) + "..." : oneLine;
 }
 
-function buildPaTraceRows(blocks) {
+function cleanTraceText(text) {
+  return String(text || "")
+    .replace(/\u0432\u045a\u201c/g, "OK")
+    .replace(/\u0432\u045a\u2014/g, "FAIL")
+    .replace(/\u0432\u0459\u00a0/g, "WARN")
+    .replace(/\u0432\u2020\u2019/g, "->")
+    .replace(/\u0432\u2020\u2018/g, " ahead")
+    .replace(/\u0432\u2020\u201c/g, " behind");
+}
+
+function isNoiseResult(text) {
+  return /^(no matching delegations\.|no matching log entries\.|no output\.?)$/i.test(
+    String(text || "").trim(),
+  );
+}
+
+function buildPaTraceRows(blocks, commands = []) {
   const rows = [];
+  let commandIndex = 0;
+  const nextCommand = () => commands[commandIndex++] || "";
+  const consumeCommand = (command) => {
+    if (!command) return "";
+    const exact = commands.indexOf(command, commandIndex);
+    if (exact >= commandIndex) commandIndex = exact + 1;
+    return command;
+  };
   for (const block of blocks || []) {
-    const text = block.text || "";
+    const text = cleanTraceText(block.text || "");
     if (block.type === "pa_status") {
-      const command = extractPaCommand(text);
+      const command = consumeCommand(extractPaCommand(text)) || nextCommand();
       const lower = text.toLowerCase();
       rows.push({
         type: "status",
@@ -1761,48 +1830,57 @@ function buildPaTraceRows(blocks) {
         last.status = "done";
         last.output = text;
       } else {
+        const command = consumeCommand(extractPaCommand(text)) || nextCommand();
         rows.push({
           type: "result",
           status: "done",
-          command: extractPaCommand(text),
-          label: "result",
+          command,
+          label: isNoiseResult(text) ? "" : previewLine(text, 72) || "result",
           output: text,
         });
       }
       continue;
     }
+    const command = consumeCommand(extractPaCommand(text)) || nextCommand();
     rows.push({
       type: "warning",
       status: "warning",
-      command: extractPaCommand(text),
+      command,
       label: "warning",
       output: text,
+    });
+  }
+  while (commandIndex < commands.length) {
+    rows.push({
+      type: "status",
+      status: "queued",
+      command: nextCommand(),
+      label: "not executed",
+      output: "",
     });
   }
   return rows;
 }
 
-function PaTraceOutput({ text, warning }) {
+function PaTraceOutput({ text, warning, open }) {
   if (!text) return null;
-  const long = text.length > 900 || text.split(/\r?\n/).length > 14;
   const body = html`<pre class="pa-trace-output ${warning ? "is-warning" : ""}">
 ${text}</pre
   >`;
-  if (!long) return body;
-  return html`<details class="pa-trace-more">
-    <summary>${previewLine(text, 130)} <span>show full output</span></summary>
+  return html`<details class="pa-trace-more" open=${open}>
+    <summary>
+      ${previewLine(text, 120) || "empty output"} <span>output</span>
+    </summary>
     ${body}
   </details>`;
 }
 
-function PaTrace({ blocks }) {
-  const rows = buildPaTraceRows(blocks);
+function PaTrace({ blocks, commands }) {
+  const rows = buildPaTraceRows(blocks, commands);
   if (!rows.length) return null;
-  const commandCount =
-    rows.filter((row) => row.command).length ||
-    blocks.filter((block) => block.type === "pa_status").length ||
-    rows.length;
+  const commandCount = rows.length;
   const warningCount = rows.filter((row) => row.status === "warning").length;
+  const noisyCount = rows.filter((row) => isNoiseResult(row.output)).length;
   const running = rows.find((row) => row.status === "running");
   const title = running
     ? `Running ${running.command || "PA command"}`
@@ -1811,12 +1889,16 @@ function PaTrace({ blocks }) {
     <summary class="pa-trace-summary">
       <span class="pa-trace-kicker">${running ? "running" : "tools"}</span>
       <span class="pa-trace-title">${title}</span>
+      ${noisyCount
+        ? html`<span class="pa-trace-muted">${noisyCount} empty</span>`
+        : null}
       ${warningCount
         ? html`<span class="pa-trace-warn">${warningCount} warning</span>`
         : null}
     </summary>
     <div class="pa-trace-body">
       ${rows.map((row, i) => {
+        const noisy = isNoiseResult(row.output);
         const cls =
           row.status === "warning"
             ? "is-warning"
@@ -1832,11 +1914,17 @@ function PaTrace({ blocks }) {
             ${row.label
               ? html`<span class="pa-trace-label">${row.label}</span>`
               : null}
+            ${noisy
+              ? html`<span class="pa-trace-label">no matches</span>`
+              : null}
           </div>
-          <${PaTraceOutput}
-            text=${row.output}
-            warning=${row.status === "warning"}
-          />
+          ${noisy
+            ? null
+            : html`<${PaTraceOutput}
+                text=${row.output}
+                warning=${row.status === "warning"}
+                open=${row.status === "warning" || row.status === "running"}
+              />`}
         </div>`;
       })}
     </div>
@@ -1973,7 +2061,11 @@ function ChatMsg({ m }) {
           if (b.type === "thinking")
             return html`<${ThinkBlock} key=${"th" + i} b=${b} />`;
           if (b.type === "pa_trace")
-            return html`<${PaTrace} key=${"pat" + i} blocks=${b.blocks} />`;
+            return html`<${PaTrace}
+              key=${"pat" + i}
+              blocks=${b.blocks}
+              commands=${b.commands}
+            />`;
           if (b.type === "system")
             return html`<div
               key=${"s" + i}
@@ -2076,7 +2168,11 @@ function StreamBubble() {
       if (b.type === "thinking")
         return html`<${ThinkBlock} key=${"sth" + i} b=${b} />`;
       if (b.type === "pa_trace")
-        return html`<${PaTrace} key=${"spat" + i} blocks=${b.blocks} />`;
+        return html`<${PaTrace}
+          key=${"spat" + i}
+          blocks=${b.blocks}
+          commands=${b.commands}
+        />`;
       if (b.type === "system")
         return html`<div
           key=${"ss" + i}

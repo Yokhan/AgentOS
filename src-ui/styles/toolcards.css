@@ -207,12 +207,13 @@
     display: flex;
     align-items: center;
     gap: var(--sp-s);
-    padding: var(--sp-xs) var(--sp-m);
+    padding: 6px var(--sp-s);
     font-family: var(--font-mono);
     font-size: var(--fs-s);
     cursor: pointer;
     user-select: none;
     list-style: none;
+    min-height: 28px;
 }
 .pa-trace-summary::-webkit-details-marker {
     display: none;
@@ -241,12 +242,19 @@
     text-transform: uppercase;
     font-size: var(--fs-s);
 }
+.pa-trace-muted {
+    color: var(--t3);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    text-transform: uppercase;
+    font-size: var(--fs-s);
+}
 .pa-trace-body {
     border-top: 1px solid var(--border);
-    padding: var(--sp-2xs) 0;
+    padding: 0;
 }
 .pa-trace-row {
-    padding: var(--sp-xs) var(--sp-m);
+    padding: 5px var(--sp-s);
     border-top: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
 }
 .pa-trace-row:first-child {
@@ -255,13 +263,13 @@
 .pa-trace-row-head {
     display: flex;
     align-items: center;
-    gap: var(--sp-s);
+    gap: 6px;
     min-width: 0;
     font-family: var(--font-mono);
     font-size: var(--fs-s);
 }
 .pa-trace-state {
-    min-width: 64px;
+    min-width: 46px;
     text-transform: uppercase;
     letter-spacing: 1px;
     color: var(--t3);
@@ -280,6 +288,9 @@
     color: var(--cyan);
     font-weight: 600;
     white-space: nowrap;
+    max-width: 42%;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .pa-trace-label {
     color: var(--t2);
@@ -297,7 +308,7 @@
     font-size: var(--fs-s);
     line-height: var(--lh);
     white-space: pre-wrap;
-    max-height: 260px;
+    max-height: 360px;
     overflow: auto;
 }
 .pa-trace-output.is-warning {
@@ -305,7 +316,7 @@
     color: var(--accent);
 }
 .pa-trace-more {
-    margin-top: var(--sp-xs);
+    margin-top: 3px;
 }
 .pa-trace-more summary {
     font-family: var(--font-mono);
@@ -316,12 +327,17 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    padding: 3px 6px;
 }
 .pa-trace-more summary::-webkit-details-marker {
     display: none;
 }
 .pa-trace-more summary span {
     color: var(--accent);
+    float: right;
+    margin-left: var(--sp-s);
 }
 
 /* Enhanced Delegation Card */

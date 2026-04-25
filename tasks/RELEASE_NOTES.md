@@ -1,3 +1,9 @@
+# Agent OS 0.2.24
+
+- Made the chat sidebar resizable from its left edge and widened assistant/tool bubbles to use the full panel width.
+- Made PA execution traces compact: command results are collapsed by default, no-match outputs render as quiet row states, and batch commands are counted/matched to their results.
+- Normalized common mojibake markers in PA trace output so old git/template results stop displaying broken check/arrow symbols.
+
 # Agent OS 0.2.23
 
 - Folded legacy PA `SYSTEM` messages from existing chat history into the previous assistant execution trace, so old conversations stop showing separate command-result bubbles.

@@ -25,7 +25,7 @@
   /* Radii */
   --r:2px;
   /* Chat sidebar */
-  --chat-w:min(520px, 35vw);
+  --chat-w:clamp(420px, 35vw, 640px);
 }
 [data-theme="light"]{
   --bg:#f4f4f8;--sf:#e8e8f0;--sf2:#dddde8;--border:#b0b0c0;
@@ -80,7 +80,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-body);overflo
 /* === MAIN: dashboard view === */
 .main{flex:1;display:flex;overflow:hidden;min-height:0}
 .content{flex:1;padding:var(--sp-l);overflow-y:auto}
-.chat-side{width:var(--chat-w);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.chat-side{width:var(--chat-w);min-width:360px;max-width:72vw;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;position:relative}
+.chat-resize-handle{position:absolute;left:0;top:0;bottom:0;width:8px;cursor:col-resize;z-index:20}
+.chat-resize-handle:hover{background:color-mix(in srgb, var(--cyan) 18%, transparent)}
+body.chat-resizing{cursor:col-resize;user-select:none}
 
 /* === STATS ROW === */
 .stats{display:flex;gap:var(--sp-s);margin-bottom:var(--sp-m)}
@@ -149,4 +152,3 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-body);overflo
 .dep-tag{background:var(--sf2);padding:1px 6px;border-radius:3px}
 .dep-current{color:var(--text);border:1px solid var(--border)}
 .dep-arrow{color:var(--yellow)}
-
