@@ -65,6 +65,7 @@ import {
   execSlash,
   handlePaste,
   loadChat,
+  loadPerms,
   loadModules,
   loadProjectPlan,
   sendMessage,
@@ -135,6 +136,10 @@ function scopeNextTitle(scope, leadLabel) {
   if (scope?.kind === "strategy") return `${leader} turns strategy into work`;
   if (scope?.kind === "project") return `${leader} scopes project work`;
   return `${leader} coordinates globally`;
+}
+
+function shortModelLabel(model) {
+  return String(model || "auto").replace(/^gpt-/, "gpt ");
 }
 
 function Tile({ a }) {
@@ -558,6 +563,96 @@ function RunningBanner() {
   </div>`;
 }
 
+function ChatContextBar({
+  duoEnabled,
+  duoView,
+  soloProvider,
+  selectedModelValue,
+  selectedEffortValue,
+  scope,
+  pendingCount,
+  runningCount,
+  modelCount,
+  insertPrompt,
+  refreshProviders,
+}) {
+  const scopeTitle = currentProject.value || scope?.title || "_orchestrator";
+  const route = duoEnabled
+    ? `duo:${duoView}`
+    : `${soloProvider || "auto"} / ${shortModelLabel(selectedModelValue)}${
+        selectedEffortValue ? " / " + selectedEffortValue : ""
+      }`;
+  const hot = runningCount > 0 || pendingCount > 0;
+  const quickActions = [
+    {
+      id: "recheck",
+      label: "recheck",
+      prompt:
+        "[DELEGATE_STATUS:?failed]\n[DELEGATE_STATUS:?pending]\n[HEALTH_CHECK:all]\n[DASHBOARD_FULL]",
+    },
+    {
+      id: "template",
+      label: "template",
+      prompt: "[TEMPLATE_AUDIT]\n[GIT_STATUS_ALL]",
+    },
+    {
+      id: "handoff",
+      label: "handoff",
+      prompt:
+        "Summarize current state, blockers, next actions, and what should be delegated. Do not execute yet.",
+    },
+  ];
+  return html`<div class="chat-context-bar">
+    <div class="chat-context-main">
+      <span class="ctx-dot ${hot ? "hot" : ""}"></span>
+      <div>
+        <div class="ctx-label">work area</div>
+        <div class="ctx-route">${scopeTitle} -> ${route}</div>
+      </div>
+    </div>
+    <div class="chat-context-metrics">
+      ${runningCount
+        ? html`<span class="hot">${runningCount} running</span>`
+        : null}
+      ${pendingCount ? html`<span>${pendingCount} pending</span>` : null}
+      ${soloProvider === "codex"
+        ? html`<span>${Math.max(0, modelCount - 1)} models</span>`
+        : null}
+    </div>
+    <div class="chat-flow-rail">
+      <span class="active">chat</span>
+      <span class=${duoEnabled && duoView === "collaborate" ? "active" : ""}>
+        compare
+      </span>
+      <span>plan</span>
+      <span class=${duoEnabled && duoView === "execute" ? "active hot" : ""}>
+        execute
+      </span>
+    </div>
+    <div class="chat-quick-actions">
+      ${soloProvider === "codex"
+        ? html`<button
+            type="button"
+            title="Refresh provider status and Codex/ACP model list"
+            onClick=${refreshProviders}
+          >
+            refresh models
+          </button>`
+        : null}
+      ${quickActions.map(
+        (action) =>
+          html`<button
+            type="button"
+            title=${"Insert " + action.id + " prompt"}
+            onClick=${() => insertPrompt(action.prompt)}
+          >
+            ${action.label}
+          </button>`,
+      )}
+    </div>
+  </div>`;
+}
+
 function ChatSidebar() {
   const inputRef = useRef();
   const msgsRef = useRef();
@@ -629,6 +724,29 @@ function ChatSidebar() {
   const scopeActions = (scope.available_actions || [])
     .filter((a) => a?.id && a?.label)
     .slice(0, 3);
+  const delegationList = Object.values(delegations.value || {});
+  const pendingCount = delegationList.filter(
+    (d) => d?.status === "pending" || d?.status === "scheduled",
+  ).length;
+  const runningCount = delegationList.filter(
+    (d) => d?.status === "running" || d?.status === "escalated",
+  ).length;
+  const insertPrompt = (text) => {
+    const target = inputRef.current;
+    if (!target) return;
+    const current = target.value.trim();
+    target.value = current ? `${current}\n${text}` : text;
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    target.focus();
+  };
+  const refreshProviders = async () => {
+    try {
+      await loadPerms();
+      showToast("Provider models refreshed", "success", 1500);
+    } catch (e) {
+      showToast("Provider refresh failed: " + e, "error");
+    }
+  };
   const latestDuoRound = (() => {
     if (!duoCollaborateMode || isStreaming.value) {
       return null;
@@ -732,6 +850,22 @@ function ChatSidebar() {
     setDuoView("execute");
     focusComposerSoon();
   };
+  const openExecutionWithLead = async () => {
+    const lead =
+      activeOrchestrator ||
+      visibleLeadCandidates.find((participant) => participant.write_enabled) ||
+      visibleLeadCandidates[0] ||
+      null;
+    if (!lead) {
+      showToast("Pick an execution lead first", "error");
+      return;
+    }
+    await useDuoOrchestrator(lead.id);
+    setDuoComposerAction("send");
+    setDuoComposerTarget("");
+    setDuoView("execute");
+    focusComposerSoon();
+  };
   const runScopeAction = async (actionId) => {
     if (actionId === "ask_both") {
       setDuoComposerAction("ask_both");
@@ -779,7 +913,7 @@ function ChatSidebar() {
     }
     if (actionId === "pick_project") {
       showToast(
-        "Pick a project from the main canvas, then Duo will scope to it.",
+        "Pick a project from the main canvas, then Duo will focus it.",
         "info",
       );
       return;
@@ -1177,6 +1311,19 @@ function ChatSidebar() {
               </select>`}
       </span>
     </div>
+    <${ChatContextBar}
+      duoEnabled=${duoEnabled}
+      duoView=${duoView}
+      soloProvider=${soloProvider}
+      selectedModelValue=${selectedModelValue}
+      selectedEffortValue=${selectedEffortValue}
+      scope=${scope}
+      pendingCount=${pendingCount}
+      runningCount=${runningCount}
+      modelCount=${modelOptions.length}
+      insertPrompt=${insertPrompt}
+      refreshProviders=${refreshProviders}
+    />
     ${isDrag.value ? html`<div class="drop-zone">Drop files here</div>` : null}
     <${RunningBanner} />
     ${duoEnabled
@@ -1194,9 +1341,11 @@ function ChatSidebar() {
           </div>
           <div class="duo-brief-top">
             <div>
-              <div class="duo-eyebrow">${scope.kind || "global"} scope</div>
+              <div class="duo-eyebrow">${scope.kind || "global"} context</div>
               <div class="duo-title">
-                ${scope.title || activeOrchestrator?.label || "Choose scope"}
+                ${scope.title ||
+                activeOrchestrator?.label ||
+                "Choose work area"}
               </div>
               <div class="duo-sub">
                 ${scope.summary ||
@@ -1272,6 +1421,32 @@ function ChatSidebar() {
       onScroll=${onScroll}
       style="position:relative"
     >
+      ${!sideMessages.value.length && !isStreaming.value
+        ? html`<div class="chat-empty-state">
+            <div class="chat-empty-title">Start from intent, not mode.</div>
+            <div class="chat-empty-copy">
+              Discuss with one agent, ask Duo to compare, or insert a diagnostic
+              bundle. The composer route below shows where the next message
+              goes.
+            </div>
+            <div class="chat-empty-actions">
+              <button
+                onClick=${() =>
+                  insertPrompt(
+                    "Review current project state and propose the safest next step. Do not execute yet.",
+                  )}
+              >
+                review state
+              </button>
+              <button
+                onClick=${() =>
+                  insertPrompt("[HEALTH_CHECK:all]\n[DASHBOARD_FULL]")}
+              >
+                health bundle
+              </button>
+            </div>
+          </div>`
+        : null}
       ${sideMessages.value.map((m, i) => html`<${ChatMsg} key=${i} m=${m} />`)}
       ${duoCollaborateMode
         ? html`<${DuoLiveStatus} session=${duoSession} />`
@@ -1302,10 +1477,10 @@ function ChatSidebar() {
           <button
             class="duo-primary"
             disabled=${!!dualBusy.value}
-            onClick=${() => useProviderAsLead("codex")}
-            title="Switch Codex into orchestrator role and open execution mode."
+            onClick=${openExecutionWithLead}
+            title="Use the selected lead as orchestrator and open execution mode."
           >
-            Codex leads execution
+            Lead executes
           </button>
           <details class="duo-small-controls">
             <summary>other actions</summary>
@@ -1344,6 +1519,12 @@ function ChatSidebar() {
                     : " (review)"}
                 </button>`;
               })}
+              <button onClick=${() => useProviderAsLead("claude")}>
+                prefer Claude lead
+              </button>
+              <button onClick=${() => useProviderAsLead("codex")}>
+                prefer Codex lead
+              </button>
               <button onClick=${draftPlanFromDuo}>make plan from round</button>
             </div>
           </details>
@@ -1449,6 +1630,18 @@ function ChatSidebar() {
                 )}
               </select>`
             : null}
+        </div>`
+      : null}
+    ${!duoWorkspaceInCanvas
+      ? html`<div class="composer-intent">
+          <span>
+            Route:
+            <strong>
+              ${soloProvider || "auto"} / ${shortModelLabel(selectedModelValue)}
+              ${selectedEffortValue ? " / " + selectedEffortValue : ""}
+            </strong>
+          </span>
+          <span>Enter sends, Shift+Enter adds line</span>
         </div>`
       : null}
     ${duoCollaborateMode && duoAdvancedOpen
@@ -1760,6 +1953,86 @@ function stripPaCommandLines(text, shouldStrip) {
     .trim();
 }
 
+function commandLinesFromText(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => PA_COMMAND_LINE.test(line));
+}
+
+function isCommandOnlyText(text) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines.length > 0 && lines.every((line) => PA_COMMAND_LINE.test(line));
+}
+
+function looksLikeRawDiagnosticDump(text) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 4) return false;
+  const hits = lines.filter((line) =>
+    /===|summary:|warnings?:|errors?:|pending|dirty|clean|no matching|template versions|git status|health check/i.test(
+      line,
+    ),
+  ).length;
+  return hits >= 3 && hits / lines.length >= 0.45;
+}
+
+function CommandBatchCard({ text }) {
+  const commands = commandLinesFromText(text);
+  if (!commands.length) return null;
+  return html`<details class="command-draft-card">
+    <summary>
+      <span>command batch</span>
+      <b>${commands.length}</b>
+      <em>prepared by agent</em>
+      <button
+        type="button"
+        onClick=${(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          navigator.clipboard.writeText(commands.join("\n"));
+          showToast("Commands copied", "success", 1500);
+        }}
+      >
+        copy
+      </button>
+    </summary>
+    <div class="command-draft-list">
+      ${commands.map((cmd, i) => html`<code key=${"cmd" + i}>${cmd}</code>`)}
+    </div>
+  </details>`;
+}
+
+function DiagnosticDumpCard({ text }) {
+  const lineCount = String(text || "")
+    .split(/\r?\n/)
+    .filter(Boolean).length;
+  return html`<details class="diagnostic-dump-card">
+    <summary>
+      <span>raw diagnostics hidden</span>
+      <b>${lineCount} lines</b>
+      <em>covered by run card</em>
+      <button
+        type="button"
+        onClick=${(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          navigator.clipboard.writeText(text || "");
+          showToast("Diagnostics copied", "success", 1500);
+        }}
+      >
+        copy
+      </button>
+    </summary>
+    <pre>${text}</pre>
+  </details>`;
+}
+
 function extractPaCommand(text) {
   const match = String(text || "").match(PA_COMMAND_PATTERN);
   return match ? match[0] : "";
@@ -1790,6 +2063,34 @@ function isNoiseResult(text) {
   return /^(no matching delegations\.|no matching log entries\.|no output\.?)$/i.test(
     String(text || "").trim(),
   );
+}
+
+function classifyTraceStatus(text, fallback = "done") {
+  const t = String(text || "");
+  if (/error|failed|blocked|not parsed|permission denied/i.test(t)) {
+    return "warning";
+  }
+  if (/warnings?:\s*[1-9]|errors?:\s*[1-9]/i.test(t)) {
+    return "warning";
+  }
+  return fallback;
+}
+
+function traceHint(text) {
+  const t = String(text || "");
+  if (/Delegation not parsed/i.test(t)) {
+    return "Use [DELEGATE:Project]task[/DELEGATE], or run status/log commands without base delegate syntax.";
+  }
+  if (/permission denied|write access|review-only/i.test(t)) {
+    return "Pick a write-enabled lead or grant provider permissions before executing.";
+  }
+  if (/warnings?:\s*[1-9]|errors?:\s*[1-9]/i.test(t)) {
+    return "Inspect warning projects before continuing the rollout.";
+  }
+  if (/no matching/i.test(t)) {
+    return "No matching state found. This is informational unless you expected pending work.";
+  }
+  return "";
 }
 
 function summarizeTraceOutput(text, status) {
@@ -1860,18 +2161,21 @@ function buildPaTraceRows(blocks, commands = []) {
             (!resultCommand || row.command === resultCommand),
         );
       if (last) {
-        last.status = "done";
+        last.status = classifyTraceStatus(text, "done");
         last.output = text;
-        last.summary = summarizeTraceOutput(text, "done");
+        last.summary = summarizeTraceOutput(text, last.status);
+        last.hint = traceHint(text);
       } else {
         const command = consumeCommand(resultCommand) || nextCommand();
+        const status = classifyTraceStatus(text, "done");
         rows.push({
           type: "result",
-          status: "done",
+          status,
           command,
           label: isNoiseResult(text) ? "" : previewLine(text, 72) || "result",
           output: text,
-          summary: summarizeTraceOutput(text, "done"),
+          summary: summarizeTraceOutput(text, status),
+          hint: traceHint(text),
         });
       }
       continue;
@@ -1886,6 +2190,7 @@ function buildPaTraceRows(blocks, commands = []) {
       label: "warning",
       output: text,
       summary: summarizeTraceOutput(text, "warning"),
+      hint: traceHint(text),
     });
   }
   while (commandIndex < commands.length) {
@@ -1912,7 +2217,7 @@ function copyTraceRows(rows) {
   showToast("Run copied", "success", 1500);
 }
 
-function PaTraceRow({ row, index }) {
+function PaTraceRow({ row, index, forceOpen }) {
   const noisy = isNoiseResult(row.output);
   const hasOutput = !!row.output && !noisy;
   const cls =
@@ -1925,7 +2230,11 @@ function PaTraceRow({ row, index }) {
           : row.status === "queued"
             ? "is-queued"
             : "";
-  return html`<details class="run-row ${cls}" key=${"run-row" + index}>
+  return html`<details
+    class="run-row ${cls}"
+    key=${"run-row" + index}
+    open=${forceOpen || row.status === "running"}
+  >
     <summary class="run-row-summary">
       <span class="run-index">${index + 1}</span>
       <span class="run-state">${row.status}</span>
@@ -1936,16 +2245,21 @@ function PaTraceRow({ row, index }) {
       <span class="run-open">${hasOutput ? "details" : ""}</span>
     </summary>
     ${hasOutput
-      ? html`<pre
-          class="run-output ${row.status === "warning" ? "is-warning" : ""}"
-        >
+      ? html`${row.hint
+            ? html`<div class="run-hint-body">${row.hint}</div>`
+            : null}
+          <pre
+            class="run-output ${row.status === "warning" ? "is-warning" : ""}"
+          >
 ${row.output}</pre
-        >`
+          >`
       : null}
   </details>`;
 }
 
 function PaTrace({ blocks, commands }) {
+  const [filter, setFilter] = useState("all");
+  const [expanded, setExpanded] = useState(false);
   const rows = buildPaTraceRows(blocks, commands);
   if (!rows.length) return null;
   const commandCount = rows.length;
@@ -1953,6 +2267,15 @@ function PaTrace({ blocks, commands }) {
   const doneCount = rows.filter((row) => row.status === "done").length;
   const runningCount = rows.filter((row) => row.status === "running").length;
   const noisyCount = rows.filter((row) => isNoiseResult(row.output)).length;
+  const outputCount = rows.filter(
+    (row) => row.output && !isNoiseResult(row.output),
+  ).length;
+  const visibleRows = rows.filter((row) => {
+    if (filter === "problems")
+      return row.status === "warning" || row.status === "running";
+    if (filter === "outputs") return row.output && !isNoiseResult(row.output);
+    return true;
+  });
   const headline = runningCount
     ? `${runningCount} running`
     : warningCount
@@ -1972,16 +2295,58 @@ function PaTrace({ blocks, commands }) {
         ${warningCount
           ? html`<span class="warn">${warningCount} warn</span>`
           : null}
+        ${outputCount ? html`<span>${outputCount} output</span>` : null}
+        <button
+          type="button"
+          class=${filter === "all" ? "active" : ""}
+          onClick=${() => setFilter("all")}
+        >
+          all
+        </button>
+        <button
+          type="button"
+          class=${filter === "problems" ? "active" : ""}
+          onClick=${() => setFilter("problems")}
+        >
+          issues
+        </button>
+        <button
+          type="button"
+          class=${filter === "outputs" ? "active" : ""}
+          onClick=${() => setFilter("outputs")}
+        >
+          outputs
+        </button>
+        <button type="button" onClick=${() => setExpanded(!expanded)}>
+          ${expanded ? "collapse" : "expand"}
+        </button>
         <button type="button" onClick=${() => copyTraceRows(rows)}>copy</button>
       </div>
     </div>
     <div class="run-table">
-      ${rows.map((row, i) => html`<${PaTraceRow} row=${row} index=${i} />`)}
+      ${visibleRows.length
+        ? visibleRows.map(
+            (row, i) =>
+              html`<${PaTraceRow}
+                row=${row}
+                index=${rows.indexOf(row)}
+                forceOpen=${expanded}
+                key=${"visible-row" + i}
+              />`,
+          )
+        : html`<div class="run-empty-filter">No rows for this filter.</div>`}
     </div>
   </div>`;
 }
 
 function TextBlock({ text, stripCommands, prefix }) {
+  if (isCommandOnlyText(text)) {
+    if (stripCommands) return null;
+    return html`<${CommandBatchCard} key=${prefix} text=${text} />`;
+  }
+  if (stripCommands && looksLikeRawDiagnosticDump(text)) {
+    return html`<${DiagnosticDumpCard} key=${prefix} text=${text} />`;
+  }
   const t = stripPaCommandLines(text, stripCommands);
   if (!t) return null;
   if (t.length > 800)
@@ -2025,6 +2390,12 @@ function ChatMsg({ m }) {
   if (!m.msg && !m.chain?.length) return null;
   // System messages — enhanced styling
   if (m.role === "system") {
+    if (/^Session started/i.test(m.msg || "")) {
+      return html`<div class="session-divider">
+        <span>${m.msg}</span>
+        <em>${ft(m.ts)}</em>
+      </div>`;
+    }
     const isSuccess =
       (m.msg || "").includes("✓") || (m.msg || "").includes("complete");
     const isFail =
@@ -2127,7 +2498,13 @@ function ChatMsg({ m }) {
             b.type === "pa_result" ||
             b.type === "warning" ||
             b.type === "pa_status"
-          )
+          ) {
+            if (hasPaTrace && looksLikeRawDiagnosticDump(b.text || "")) {
+              return html`<${DiagnosticDumpCard}
+                key=${"pa-dump" + i}
+                text=${b.text || ""}
+              />`;
+            }
             return html`<div
               key=${"pa" + i}
               class="tc-output ${b.type === "warning" ? "tc-out-err" : ""}"
@@ -2140,6 +2517,7 @@ function ChatMsg({ m }) {
                   : "pa result"}:
               ${b.text || ""}
             </div>`;
+          }
           if (b.type === "result")
             return html`<div
               key=${"r" + i}
@@ -2152,14 +2530,19 @@ function ChatMsg({ m }) {
             </div>`;
           return null;
         })
-      : html`<div
-          dangerouslySetInnerHTML=${{
-            __html:
-              m.role === "assistant"
-                ? md(clean)
-                : esc(isViaPA ? (m.msg || "").replace("[via PA] ", "") : m.msg),
-          }}
-        ></div>`}
+      : m.role === "assistant"
+        ? html`<${TextBlock}
+            text=${clean}
+            stripCommands=${false}
+            prefix="flat"
+          />`
+        : html`<div
+            dangerouslySetInnerHTML=${{
+              __html: esc(
+                isViaPA ? (m.msg || "").replace("[via PA] ", "") : m.msg,
+              ),
+            }}
+          ></div>`}
     ${canCopy
       ? html`<button
           class="msg-copy"

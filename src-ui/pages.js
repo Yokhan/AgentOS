@@ -431,13 +431,13 @@ function SettingsPage() {
             </select>
           </div>
           <div style="font-size:var(--fs-s);color:var(--t2)">
-            These are current OpenAI/Codex-style model names. Your ChatGPT plan
-            may not allow every option.
+            Model choices merge ACP capabilities, the local Codex model cache,
+            and AgentOS fallbacks. Use refresh in chat after updating Codex.
           </div>
           <div style="font-size:var(--fs-s);color:var(--t3)">
-            Effort choices are model-aware now. GPT-5.4 and GPT-5.2 support
-            <code>none..xhigh</code>, Codex-specific models usually support
-            <code>low..xhigh</code>, and GPT-5.1 family stays at
+            Effort choices are model-aware now. GPT-5.5, GPT-5.4 and GPT-5.2
+            support <code>none..xhigh</code>, Codex-specific models usually
+            support <code>low..xhigh</code>, and GPT-5.1 family stays at
             <code>none..high</code>.
           </div>
         </div>

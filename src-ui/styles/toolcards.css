@@ -261,6 +261,11 @@
     color: var(--text);
     border-color: var(--t3);
 }
+.run-badges button.active {
+    color: var(--bg);
+    background: var(--cyan);
+    border-color: var(--cyan);
+}
 .run-badges .warn {
     color: var(--accent);
     border-color: var(--accent);
@@ -268,6 +273,8 @@
 .run-table {
     display: flex;
     flex-direction: column;
+    max-height: min(420px, 48vh);
+    overflow: auto;
 }
 .run-row {
     border: 0;
@@ -278,10 +285,9 @@
 }
 .run-row-summary {
     display: grid;
-    grid-template-columns: 24px 58px minmax(120px, 0.7fr) minmax(
-            120px,
-            1.4fr
-        ) auto;
+    grid-template-columns:
+        24px 58px minmax(120px, 0.7fr) minmax(120px, 1.4fr)
+        auto;
     align-items: center;
     gap: 6px;
     padding: 5px var(--sp-s);
@@ -316,6 +322,9 @@
 .run-row.is-warning .run-state {
     color: var(--accent);
 }
+.run-row.is-warning .run-row-summary {
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
 .run-command {
     color: var(--cyan);
     font-weight: 600;
@@ -335,6 +344,16 @@
     text-transform: uppercase;
     font-size: var(--fs-s);
 }
+.run-hint-body {
+    margin: var(--sp-xs) var(--sp-s) 0 calc(var(--sp-s) + 88px);
+    padding: var(--sp-xs) var(--sp-s);
+    border: 1px solid color-mix(in srgb, var(--yellow) 45%, var(--border));
+    background: color-mix(in srgb, var(--yellow) 7%, transparent);
+    color: var(--yellow);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    line-height: 1.45;
+}
 .run-output {
     margin: 0 var(--sp-s) var(--sp-s) calc(var(--sp-s) + 88px);
     padding: var(--sp-xs);
@@ -352,6 +371,92 @@
     border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
     color: var(--accent);
 }
+.run-empty-filter {
+    padding: var(--sp-m);
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.command-draft-card,
+.diagnostic-dump-card {
+    border: 1px solid var(--border);
+    background: var(--sf);
+    margin: var(--sp-xs) 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.command-draft-card summary,
+.diagnostic-dump-card summary {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-s);
+    padding: var(--sp-xs) var(--sp-s);
+    cursor: pointer;
+    list-style: none;
+    color: var(--t2);
+}
+.command-draft-card summary::-webkit-details-marker,
+.diagnostic-dump-card summary::-webkit-details-marker {
+    display: none;
+}
+.command-draft-card summary span,
+.diagnostic-dump-card summary span {
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.command-draft-card summary b,
+.diagnostic-dump-card summary b {
+    color: var(--cyan);
+    font-weight: 600;
+}
+.command-draft-card summary em,
+.diagnostic-dump-card summary em {
+    color: var(--t3);
+    font-style: normal;
+    margin-left: auto;
+}
+.command-draft-card summary button,
+.diagnostic-dump-card summary button {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 1px 5px;
+    cursor: pointer;
+    text-transform: uppercase;
+}
+.command-draft-card summary button:hover,
+.diagnostic-dump-card summary button:hover {
+    color: var(--text);
+    border-color: var(--cyan);
+}
+.command-draft-list {
+    border-top: 1px dashed var(--border);
+    padding: var(--sp-xs) var(--sp-s);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.command-draft-list code {
+    display: block;
+    color: var(--cyan);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 3px 6px;
+    white-space: pre-wrap;
+}
+.diagnostic-dump-card pre {
+    margin: 0;
+    border-top: 1px dashed var(--border);
+    background: var(--bg);
+    color: var(--t2);
+    max-height: 260px;
+    overflow: auto;
+    padding: var(--sp-s);
+    white-space: pre-wrap;
+}
 @media (max-width: 760px) {
     .run-row-summary {
         grid-template-columns: 20px 54px minmax(90px, 1fr) auto;
@@ -364,6 +469,9 @@
         grid-row: 1;
     }
     .run-output {
+        margin-left: var(--sp-s);
+    }
+    .run-hint-body {
         margin-left: var(--sp-s);
     }
 }

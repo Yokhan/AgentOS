@@ -1,3 +1,12 @@
+# Agent OS 0.2.26
+
+- Reworked the chat sidebar into a clearer working surface: context bar, active route, model/provider visibility, delegation counts, quick diagnostics, and a chat -> compare -> plan -> execute flow rail.
+- Hid raw PA command/dump noise when a run card is available; standalone command-only replies now render as compact command batch cards with copy actions.
+- Made run cards more actionable: filters for all/issues/outputs, capped scroll height, collapsed warning details, copy controls, and contextual hints for malformed delegation, permission, warning, and empty-result cases.
+- Made Duo execution provider-neutral again: the primary handoff is `Lead executes`, with explicit lead choices in details instead of hardcoding Codex.
+- Added chat-side provider refresh for Codex/ACP models and updated settings copy to explain ACP/cache/fallback model discovery including GPT-5.5.
+- Fixed malformed-command warnings so `[DELEGATE_STATUS]`, `[DELEGATE_LOG]`, and `[DELEGATE_CANCEL]` no longer trigger the base `[DELEGATE:Project]...[/DELEGATE]` warning.
+
 # Agent OS 0.2.25
 
 - Reworked PA execution rendering into a compact `RunCard`: one run header, command rows, short summaries, and per-row details instead of a visible stdout wall.

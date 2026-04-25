@@ -654,10 +654,7 @@ pub fn detect_malformed_commands(response: &str) -> Vec<String> {
         return Vec::new();
     }
     let mut warnings = Vec::new();
-    if response.to_lowercase().contains("delegate")
-        && response.contains('[')
-        && !RE_DELEGATE.is_match(&response)
-    {
+    if response.contains("[DELEGATE:") && !RE_DELEGATE.is_match(&response) {
         warnings.push(
             "Delegation not parsed. Use format: [DELEGATE:ProjectName]task[/DELEGATE]".to_string(),
         );
@@ -781,5 +778,23 @@ ERROR: {"type":"error","status":400}"#;
             &cmd.cmd,
             PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::DashboardFull)
         )));
+    }
+
+    #[test]
+    fn extended_delegation_commands_do_not_emit_base_delegate_warning() {
+        let response = r#"[DELEGATE_STATUS:?pending]
+
+[DELEGATE_LOG:?today]
+
+[DELEGATE_CANCEL:177581519117]"#;
+
+        assert!(detect_malformed_commands(response).is_empty());
+    }
+
+    #[test]
+    fn malformed_base_delegate_still_warns() {
+        let response = "[DELEGATE:AgentOS]missing closing tag";
+
+        assert_eq!(detect_malformed_commands(response).len(), 1);
     }
 }
