@@ -1257,61 +1257,88 @@ fn build_agent_prompt(
     prompt
 }
 
-const ROOM_AUTO_CONTINUE_TURNS: usize = 3;
+const ROOM_AUTO_CONTINUE_TURNS: usize = 20;
+const ROOM_AUTO_CONTINUE_REPEAT_LIMIT: usize = 2;
 
-fn execute_room_pa_commands(state: &AppState, response: &str) -> (Vec<String>, Vec<String>) {
+#[derive(Default)]
+struct RoomPaFeedback {
+    items: Vec<String>,
+    fragments: Vec<String>,
+    actionable: usize,
+    warnings: usize,
+}
+
+impl RoomPaFeedback {
+    fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
+    fn signature(&self) -> String {
+        self.items.join("\n")
+    }
+}
+
+fn execute_room_pa_commands(state: &AppState, response: &str) -> RoomPaFeedback {
     let commands = super::pa_commands::parse_pa_commands(response, state);
     let warnings = super::pa_commands::detect_malformed_commands(response);
-    let mut feedback = Vec::new();
-    let mut fragments = Vec::new();
+    let mut feedback = RoomPaFeedback::default();
 
     for parsed in &commands {
         if !parsed.valid {
             if let Some(err) = &parsed.error {
-                feedback.push(format!("warning -> {}", err));
-                fragments.push(format!("**Warning:** {}", err));
+                feedback.warnings += 1;
+                feedback.items.push(format!("warning -> {}", err));
+                feedback.fragments.push(format!("**Warning:** {}", err));
             }
             continue;
         }
         let command_label = super::pa_commands::describe_pa_command(&parsed.cmd);
+        feedback.actionable += 1;
         match super::pa_commands::execute_pa_command(state, &parsed.cmd) {
             Some(text) => {
                 let preview = super::claude_runner::safe_truncate(&text, 900);
-                feedback.push(format!("{} -> {}", command_label, preview));
-                fragments.push(format!("{}:\n{}", command_label, text));
+                feedback
+                    .items
+                    .push(format!("{} -> {}", command_label, preview));
+                feedback
+                    .fragments
+                    .push(format!("{}:\n{}", command_label, text));
             }
             None => {
                 let done = format!("Completed {} (no output)", command_label);
-                feedback.push(done.clone());
-                fragments.push(done);
+                feedback.items.push(done.clone());
+                feedback.fragments.push(done);
             }
         }
     }
 
     for warning in warnings {
-        feedback.push(format!("warning -> {}", warning));
-        fragments.push(format!("**Note:** {}", warning));
+        feedback.warnings += 1;
+        feedback.items.push(format!("warning -> {}", warning));
+        feedback.fragments.push(format!("**Note:** {}", warning));
     }
 
-    (feedback, fragments)
+    feedback
 }
 
-fn build_room_auto_continue_message(turn: usize, feedback: &[String]) -> String {
+fn build_room_auto_continue_message(turn: usize, feedback: &RoomPaFeedback) -> String {
     format!(
         "[AUTO-CONTINUE AFTER AGENTOS COMMANDS]\n\
          AgentOS executed the PA commands from your previous response.\n\
          Results:\n{}\n\n\
-         Continue the room task autonomously. If more action is needed, emit the next PA command tags on their own lines. \
-         If complete or blocked, report final status and concrete blocker. Do not ask the user to type continue.\n\
-         Auto-continue turn: {}/{}.",
-        feedback
+         Continue the room task autonomously. Stop by returning a final status with no PA command tags when complete or blocked. \
+         Emit the next PA command tags only when another AgentOS action is actually required. Do not ask the user to type continue.\n\
+         Auto-continue turn: {}/{} safety ceiling. Actionable commands: {}. Warnings: {}.",
+        feedback.items
             .iter()
             .enumerate()
             .map(|(idx, item)| format!("{}. {}", idx + 1, item))
             .collect::<Vec<_>>()
             .join("\n"),
         turn,
-        ROOM_AUTO_CONTINUE_TURNS
+        ROOM_AUTO_CONTINUE_TURNS,
+        feedback.actionable,
+        feedback.warnings
     )
 }
 
@@ -2034,15 +2061,30 @@ fn run_session_agent_core(
     let mut final_response = response.clone();
     let mut loop_response = response;
     if participant_can_execute_pa_commands(state, session, participant, analysis_only) {
+        let mut last_signature = String::new();
+        let mut repeat_count = 0usize;
         for turn in 1..=ROOM_AUTO_CONTINUE_TURNS {
-            let (feedback, fragments) = execute_room_pa_commands(state, &loop_response);
+            let feedback = execute_room_pa_commands(state, &loop_response);
             if feedback.is_empty() {
                 break;
             }
 
-            if !fragments.is_empty() {
+            let signature = feedback.signature();
+            if signature == last_signature {
+                repeat_count += 1;
+            } else {
+                last_signature = signature;
+                repeat_count = 1;
+            }
+
+            if !feedback.fragments.is_empty() {
                 final_response += "\n\n---\n";
-                final_response += &fragments.join("\n\n---\n");
+                final_response += &feedback.fragments.join("\n\n---\n");
+            }
+
+            if repeat_count >= ROOM_AUTO_CONTINUE_REPEAT_LIMIT {
+                final_response += "\n\n---\nAuto-run stopped because the agent repeated the same command result loop.";
+                break;
             }
 
             let continuation_message = build_room_auto_continue_message(turn, &feedback);

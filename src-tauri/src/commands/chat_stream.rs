@@ -1,6 +1,8 @@
 //! Streaming chat: stream_chat, poll_stream, stop_chat, is_chat_running.
 use super::claude_runner::{get_permission_path, unique_tmp};
-use super::process_manager::{clear_activity, kill_existing, set_activity, track_pid, untrack_pid};
+use super::process_manager::{
+    clear_activity, clear_cancel, is_cancelled, kill_existing, set_activity, track_pid, untrack_pid,
+};
 use crate::state::AppState;
 use serde_json::{json, Value};
 use std::io::BufRead;
@@ -79,6 +81,7 @@ pub async fn stream_chat(
 
     // Kill any existing process for this chat (prevents zombie accumulation)
     kill_existing(&state, &chat_key);
+    clear_cancel(&state, &chat_key);
 
     // Stream buffer file — per chat_key so multiple chats don't collide
     let stream_buf = state
@@ -558,7 +561,25 @@ fn stream_reader_loop(
     );
 }
 
-const MAX_AUTO_CONTINUE_TURNS: usize = 3;
+const MAX_AUTO_CONTINUE_TURNS: usize = 20;
+const AUTO_CONTINUE_REPEAT_LIMIT: usize = 2;
+
+#[derive(Default)]
+struct PaLoopFeedback {
+    items: Vec<String>,
+    actionable: usize,
+    warnings: usize,
+}
+
+impl PaLoopFeedback {
+    fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
+    fn signature(&self) -> String {
+        self.items.join("\n")
+    }
+}
 
 fn feedback_preview(text: &str) -> String {
     let clean = text.replace('\r', "").trim().to_string();
@@ -576,10 +597,10 @@ fn execute_pa_commands_for_agent_loop(
     stream_buf: &Path,
     response: &str,
     label_prefix: &str,
-) -> Vec<String> {
+) -> PaLoopFeedback {
     let commands = super::pa_commands::parse_pa_commands(response, state);
     let warnings = super::pa_commands::detect_malformed_commands(response);
-    let mut feedback = Vec::new();
+    let mut feedback = PaLoopFeedback::default();
 
     for parsed in &commands {
         if !parsed.valid {
@@ -594,12 +615,16 @@ fn execute_pa_commands_for_agent_loop(
                     Some(command_label.as_str()),
                     &format!("{} warning", label_prefix),
                 );
-                feedback.push(format!("{} -> warning: {}", command_label, err));
+                feedback.warnings += 1;
+                feedback
+                    .items
+                    .push(format!("{} -> warning: {}", command_label, err));
             }
             continue;
         }
 
         let command_label = super::pa_commands::describe_pa_command(&parsed.cmd);
+        feedback.actionable += 1;
         append_pa_feedback(
             state,
             chat_file,
@@ -620,7 +645,9 @@ fn execute_pa_commands_for_agent_loop(
                 Some(command_label.as_str()),
                 &format!("{} pa result", label_prefix),
             );
-            feedback.push(format!("{} -> {}", command_label, feedback_preview(&text)));
+            feedback
+                .items
+                .push(format!("{} -> {}", command_label, feedback_preview(&text)));
         } else {
             let done = format!("Completed {} (no output)", command_label);
             append_pa_feedback(
@@ -632,7 +659,7 @@ fn execute_pa_commands_for_agent_loop(
                 Some(command_label.as_str()),
                 &format!("{} pa complete", label_prefix),
             );
-            feedback.push(done);
+            feedback.items.push(done);
         }
     }
 
@@ -646,28 +673,32 @@ fn execute_pa_commands_for_agent_loop(
             None,
             &format!("{} malformed cmd", label_prefix),
         );
-        feedback.push(format!("warning -> {}", warning));
+        feedback.warnings += 1;
+        feedback.items.push(format!("warning -> {}", warning));
     }
 
     feedback
 }
 
-fn build_auto_continue_prompt(turn: usize, feedback: &[String]) -> String {
+fn build_auto_continue_prompt(turn: usize, feedback: &PaLoopFeedback) -> String {
     format!(
         "[AUTO-CONTINUE AFTER AGENTOS COMMANDS]\n\
          AgentOS executed the PA commands from your previous response.\n\
          Results:\n{}\n\n\
-         Continue autonomously from these results. If more action is needed, emit the next PA command tags on their own lines. \
-         If the task is complete or blocked, report the final status and concrete blocker. Do not ask the user to type continue.\n\
-         Auto-continue turn: {}/{}.",
-        feedback
+         Continue autonomously from these results. Stop by returning a final status with no PA command tags when the task is complete or blocked. \
+         Emit the next PA command tags only when another AgentOS action is actually required. \
+         Do not ask the user to type continue.\n\
+         Auto-continue turn: {}/{} safety ceiling. Actionable commands: {}. Warnings: {}.",
+        feedback.items
             .iter()
             .enumerate()
             .map(|(idx, item)| format!("{}. {}", idx + 1, item))
             .collect::<Vec<_>>()
             .join("\n"),
         turn,
-        MAX_AUTO_CONTINUE_TURNS
+        MAX_AUTO_CONTINUE_TURNS,
+        feedback.actionable,
+        feedback.warnings
     )
 }
 
@@ -686,8 +717,23 @@ fn run_pa_agent_loop(
 ) -> String {
     let mut response = first_response.to_string();
     let mut final_response = response.clone();
+    let mut last_signature = String::new();
+    let mut repeat_count = 0usize;
 
     for turn in 1..=MAX_AUTO_CONTINUE_TURNS {
+        if is_cancelled(state, chat_key) {
+            append_pa_feedback(
+                state,
+                chat_file,
+                stream_buf,
+                "warning",
+                "Auto-run stopped by user.",
+                None,
+                &format!("{} auto cancelled", label_prefix),
+            );
+            break;
+        }
+
         let feedback = execute_pa_commands_for_agent_loop(
             state,
             chat_file,
@@ -699,15 +745,48 @@ fn run_pa_agent_loop(
             break;
         }
 
+        let signature = feedback.signature();
+        if signature == last_signature {
+            repeat_count += 1;
+        } else {
+            last_signature = signature;
+            repeat_count = 1;
+        }
+        if repeat_count >= AUTO_CONTINUE_REPEAT_LIMIT {
+            append_pa_feedback(
+                state,
+                chat_file,
+                stream_buf,
+                "warning",
+                "Auto-run stopped because the agent repeated the same command result loop.",
+                None,
+                &format!("{} auto repeat stop", label_prefix),
+            );
+            break;
+        }
+
+        if is_cancelled(state, chat_key) {
+            append_pa_feedback(
+                state,
+                chat_file,
+                stream_buf,
+                "warning",
+                "Auto-run stopped by user after the current command batch.",
+                None,
+                &format!("{} auto cancelled after commands", label_prefix),
+            );
+            break;
+        }
+
         append_pa_feedback(
             state,
             chat_file,
             stream_buf,
             "pa_status",
             &format!(
-                "Auto-continuing after {} PA result{}",
-                feedback.len(),
-                if feedback.len() == 1 { "" } else { "s" }
+                "Auto-continuing after {} AgentOS action{}",
+                feedback.items.len(),
+                if feedback.items.len() == 1 { "" } else { "s" }
             ),
             None,
             &format!("{} auto continue", label_prefix),
@@ -726,6 +805,19 @@ fn run_pa_agent_loop(
         );
         final_response = response.clone();
 
+        if is_cancelled(state, chat_key) {
+            append_pa_feedback(
+                state,
+                chat_file,
+                stream_buf,
+                "warning",
+                "Auto-run stopped by user.",
+                None,
+                &format!("{} auto cancelled after agent", label_prefix),
+            );
+            break;
+        }
+
         let ts = state.now_iso();
         let asst_entry = json!({"ts": ts, "role": "assistant", "msg": response});
         crate::commands::jsonl::append_jsonl_logged(
@@ -739,6 +831,10 @@ fn run_pa_agent_loop(
             json!({"type":"text","text": response}),
             &format!("{} auto text", label_prefix),
         );
+    }
+
+    if !is_cancelled(state, chat_key) {
+        clear_cancel(state, chat_key);
     }
 
     final_response

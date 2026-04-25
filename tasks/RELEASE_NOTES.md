@@ -1,3 +1,10 @@
+# Agent OS 0.2.28
+
+- Replaced the fixed 3-turn auto-continue cap with a state-based AgentOS loop: continue while the agent produces actionable PA commands, stop when no more commands are emitted, when the user stops the chat, or when a repeat loop is detected.
+- Raised the auto-run safety ceiling to 20 continuation turns as an emergency guardrail, not a normal workflow limit.
+- Added chat cancellation state so `Stop` interrupts the AgentOS auto-run loop between command batches and follow-up agent turns, and the next chat run starts cleanly.
+- Applied the same state-based command loop and repeat-loop guard to Duo execution leads.
+
 # Agent OS 0.2.27
 
 - Fixed desktop stream polling for project chats: the frontend now polls the correct per-project stream buffer instead of always reading `_orchestrator`.

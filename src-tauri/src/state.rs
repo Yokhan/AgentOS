@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -385,6 +385,8 @@ pub struct AppState {
     pub file_leases: Mutex<HashMap<String, FileLease>>,
     /// Running child process PIDs by chat_key — used to kill zombies
     pub running_pids: Mutex<HashMap<String, u32>>,
+    /// Chat keys explicitly cancelled by the user. Checked by agent loops between actions.
+    pub chat_cancellations: Mutex<HashSet<String>>,
     /// Running activities by project — in-memory, no file race conditions
     pub activities: Mutex<HashMap<String, serde_json::Value>>,
     /// Agent feedback inbox — delegation results accumulate here
@@ -450,6 +452,7 @@ impl AppState {
             work_items: Mutex::new(work_items),
             file_leases: Mutex::new(file_leases),
             running_pids: Mutex::new(HashMap::new()),
+            chat_cancellations: Mutex::new(HashSet::new()),
             dir_busy: Mutex::new(std::collections::HashSet::new()),
             activities: Mutex::new(HashMap::new()),
             inbox: Mutex::new(Vec::new()),
