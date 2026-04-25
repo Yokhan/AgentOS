@@ -1,3 +1,11 @@
+# Agent OS 0.2.29
+
+- Simplified solo chat controls to a KISS surface: one `act/plan` toggle, one `read/write/full` access selector, provider, model, and effort in the main chat header.
+- Removed the nested solo `work area -> chat/compare/plan/execute` rail and the redundant composer route strip that made chat feel like a cockpit inside a cockpit.
+- Made `Plan` mode a real backend contract: it forces read-only permissions and disables AgentOS PA command execution from that response.
+- Wired `read/write/full` access into solo streaming so Codex/Claude receive the matching permission profile for the current message.
+- Updated solo empty state and placeholder copy so the primary action is simply telling the selected agent what to do.
+
 # Agent OS 0.2.28
 
 - Replaced the fixed 3-turn auto-continue cap with a state-based AgentOS loop: continue while the agent produces actionable PA commands, stop when no more commands are emitted, when the user stops the chat, or when a repeat loop is detected.

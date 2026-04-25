@@ -33,6 +33,12 @@ const selectedCodexEffort = signal(
 const selectedSoloProvider = signal(
   localStorage.getItem("agentos_solo_provider") || "",
 );
+const chatRunMode = signal(
+  localStorage.getItem("agentos_chat_run_mode") || "act",
+);
+const chatAccessLevel = signal(
+  localStorage.getItem("agentos_chat_access_level") || "write",
+);
 effect(() =>
   localStorage.setItem("agentos_claude_model", selectedClaudeModel.value),
 );
@@ -47,6 +53,10 @@ effect(() =>
 );
 effect(() =>
   localStorage.setItem("agentos_solo_provider", selectedSoloProvider.value),
+);
+effect(() => localStorage.setItem("agentos_chat_run_mode", chatRunMode.value));
+effect(() =>
+  localStorage.setItem("agentos_chat_access_level", chatAccessLevel.value),
 );
 const subModel = signal("sonnet"); // model for orchestrator's sub-project calls
 const isRec = signal(false);
@@ -166,6 +176,8 @@ export {
   selectedCodexModel,
   selectedCodexEffort,
   selectedSoloProvider,
+  chatRunMode,
+  chatAccessLevel,
   subModel,
   isRec,
   attFiles,

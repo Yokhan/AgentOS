@@ -23,6 +23,8 @@ import {
   selectedCodexModel,
   selectedCodexEffort,
   selectedSoloProvider,
+  chatRunMode,
+  chatAccessLevel,
   isRec,
   attFiles,
   isOn,
@@ -65,7 +67,6 @@ import {
   execSlash,
   handlePaste,
   loadChat,
-  loadPerms,
   loadModules,
   loadProjectPlan,
   sendMessage,
@@ -563,96 +564,6 @@ function RunningBanner() {
   </div>`;
 }
 
-function ChatContextBar({
-  duoEnabled,
-  duoView,
-  soloProvider,
-  selectedModelValue,
-  selectedEffortValue,
-  scope,
-  pendingCount,
-  runningCount,
-  modelCount,
-  insertPrompt,
-  refreshProviders,
-}) {
-  const scopeTitle = currentProject.value || scope?.title || "_orchestrator";
-  const route = duoEnabled
-    ? `duo:${duoView}`
-    : `${soloProvider || "auto"} / ${shortModelLabel(selectedModelValue)}${
-        selectedEffortValue ? " / " + selectedEffortValue : ""
-      }`;
-  const hot = runningCount > 0 || pendingCount > 0;
-  const quickActions = [
-    {
-      id: "recheck",
-      label: "recheck",
-      prompt:
-        "[DELEGATE_STATUS:?failed]\n[DELEGATE_STATUS:?pending]\n[HEALTH_CHECK:all]\n[DASHBOARD_FULL]",
-    },
-    {
-      id: "template",
-      label: "template",
-      prompt: "[TEMPLATE_AUDIT]\n[GIT_STATUS_ALL]",
-    },
-    {
-      id: "handoff",
-      label: "handoff",
-      prompt:
-        "Summarize current state, blockers, next actions, and what should be delegated. Do not execute yet.",
-    },
-  ];
-  return html`<div class="chat-context-bar">
-    <div class="chat-context-main">
-      <span class="ctx-dot ${hot ? "hot" : ""}"></span>
-      <div>
-        <div class="ctx-label">work area</div>
-        <div class="ctx-route">${scopeTitle} -> ${route}</div>
-      </div>
-    </div>
-    <div class="chat-context-metrics">
-      ${runningCount
-        ? html`<span class="hot">${runningCount} running</span>`
-        : null}
-      ${pendingCount ? html`<span>${pendingCount} pending</span>` : null}
-      ${soloProvider === "codex"
-        ? html`<span>${Math.max(0, modelCount - 1)} models</span>`
-        : null}
-    </div>
-    <div class="chat-flow-rail">
-      <span class="active">chat</span>
-      <span class=${duoEnabled && duoView === "collaborate" ? "active" : ""}>
-        compare
-      </span>
-      <span>plan</span>
-      <span class=${duoEnabled && duoView === "execute" ? "active hot" : ""}>
-        execute
-      </span>
-    </div>
-    <div class="chat-quick-actions">
-      ${soloProvider === "codex"
-        ? html`<button
-            type="button"
-            title="Refresh provider status and Codex/ACP model list"
-            onClick=${refreshProviders}
-          >
-            refresh models
-          </button>`
-        : null}
-      ${quickActions.map(
-        (action) =>
-          html`<button
-            type="button"
-            title=${"Insert " + action.id + " prompt"}
-            onClick=${() => insertPrompt(action.prompt)}
-          >
-            ${action.label}
-          </button>`,
-      )}
-    </div>
-  </div>`;
-}
-
 function ChatSidebar() {
   const inputRef = useRef();
   const msgsRef = useRef();
@@ -680,6 +591,11 @@ function ChatSidebar() {
     ["", "auto: " + configuredSoloProvider],
     ["claude", "claude"],
     ["codex", "codex"],
+  ];
+  const accessOptions = [
+    ["read", "read"],
+    ["write", "write"],
+    ["full", "full"],
   ];
   const selectedModelValue =
     soloProvider === "codex"
@@ -724,13 +640,6 @@ function ChatSidebar() {
   const scopeActions = (scope.available_actions || [])
     .filter((a) => a?.id && a?.label)
     .slice(0, 3);
-  const delegationList = Object.values(delegations.value || {});
-  const pendingCount = delegationList.filter(
-    (d) => d?.status === "pending" || d?.status === "scheduled",
-  ).length;
-  const runningCount = delegationList.filter(
-    (d) => d?.status === "running" || d?.status === "escalated",
-  ).length;
   const insertPrompt = (text) => {
     const target = inputRef.current;
     if (!target) return;
@@ -738,14 +647,6 @@ function ChatSidebar() {
     target.value = current ? `${current}\n${text}` : text;
     target.dispatchEvent(new Event("input", { bubbles: true }));
     target.focus();
-  };
-  const refreshProviders = async () => {
-    try {
-      await loadPerms();
-      showToast("Provider models refreshed", "success", 1500);
-    } catch (e) {
-      showToast("Provider refresh failed: " + e, "error");
-    }
   };
   const latestDuoRound = (() => {
     if (!duoCollaborateMode || isStreaming.value) {
@@ -1246,7 +1147,46 @@ function ChatSidebar() {
         </button>
         ${duoEnabled
           ? null
-          : html`<select
+          : html`<button
+                type="button"
+                class="chat-mode-toggle ${chatRunMode.value === "plan"
+                  ? "plan"
+                  : "act"}"
+                title=${chatRunMode.value === "plan"
+                  ? "Plan mode: read-only, no AgentOS command execution"
+                  : "Act mode: execute with selected access"}
+                onClick=${() => {
+                  chatRunMode.value =
+                    chatRunMode.value === "plan" ? "act" : "plan";
+                  showToast(
+                    chatRunMode.value === "plan"
+                      ? "Plan mode: read-only"
+                      : "Act mode",
+                    "success",
+                    1500,
+                  );
+                }}
+              >
+                ${chatRunMode.value === "plan" ? "plan" : "act"}
+              </button>
+              <select
+                value=${chatRunMode.value === "plan"
+                  ? "read"
+                  : chatAccessLevel.value}
+                title="Access level for Act mode"
+                disabled=${chatRunMode.value === "plan"}
+                class="chat-access-select"
+                onChange=${(e) => {
+                  chatAccessLevel.value = e.target.value;
+                  showToast("access: " + e.target.value, "success", 1500);
+                }}
+              >
+                ${accessOptions.map(
+                  ([value, label]) =>
+                    html`<option value=${value}>${label}</option>`,
+                )}
+              </select>
+              <select
                 value=${selectedSoloProvider.value}
                 title="Solo provider"
                 style="background:var(--sf);color:var(--t2);border:1px solid var(--border);font-family:var(--font-mono);font-size:var(--fs-s);padding:var(--sp-xs)"
@@ -1311,19 +1251,6 @@ function ChatSidebar() {
               </select>`}
       </span>
     </div>
-    <${ChatContextBar}
-      duoEnabled=${duoEnabled}
-      duoView=${duoView}
-      soloProvider=${soloProvider}
-      selectedModelValue=${selectedModelValue}
-      selectedEffortValue=${selectedEffortValue}
-      scope=${scope}
-      pendingCount=${pendingCount}
-      runningCount=${runningCount}
-      modelCount=${modelOptions.length}
-      insertPrompt=${insertPrompt}
-      refreshProviders=${refreshProviders}
-    />
     ${isDrag.value ? html`<div class="drop-zone">Drop files here</div>` : null}
     <${RunningBanner} />
     ${duoEnabled
@@ -1423,11 +1350,11 @@ function ChatSidebar() {
     >
       ${!sideMessages.value.length && !isStreaming.value
         ? html`<div class="chat-empty-state">
-            <div class="chat-empty-title">Start from intent, not mode.</div>
+            <div class="chat-empty-title">Tell the agent what to do.</div>
             <div class="chat-empty-copy">
-              Discuss with one agent, ask Duo to compare, or insert a diagnostic
-              bundle. The composer route below shows where the next message
-              goes.
+              Use the header for model, plan mode, and access. Type normally;
+              the agent should plan, execute, or report a blocker without extra
+              routing steps.
             </div>
             <div class="chat-empty-actions">
               <button
@@ -1632,18 +1559,6 @@ function ChatSidebar() {
             : null}
         </div>`
       : null}
-    ${!duoWorkspaceInCanvas
-      ? html`<div class="composer-intent">
-          <span>
-            Route:
-            <strong>
-              ${soloProvider || "auto"} / ${shortModelLabel(selectedModelValue)}
-              ${selectedEffortValue ? " / " + selectedEffortValue : ""}
-            </strong>
-          </span>
-          <span>Enter sends, Shift+Enter adds line</span>
-        </div>`
-      : null}
     ${duoCollaborateMode && duoAdvancedOpen
       ? html`<div
           style="display:flex;gap:var(--sp-xs);flex-wrap:wrap;padding:0 var(--sp-s) var(--sp-s);background:var(--bg-soft)"
@@ -1745,7 +1660,9 @@ function ChatSidebar() {
                 }
                 return "ask both agents for review...";
               })()
-            : "talk to " + sideTitle.value + "..."}
+            : chatRunMode.value === "plan"
+              ? "ask for a plan..."
+              : "tell " + sideTitle.value + " what to do..."}
         rows="1"
         style=${isStreaming.value ? "opacity:0.5" : ""}
         onKeyDown=${onKey}

@@ -16,6 +16,8 @@ import {
   selectedCodexModel,
   selectedCodexEffort,
   selectedSoloProvider,
+  chatRunMode,
+  chatAccessLevel,
   isRec,
   attFiles,
   isOn,
@@ -157,6 +159,8 @@ function normalizedSoloProviderSelection() {
   const soloProvider = explicitProvider || configuredProvider;
   return {
     provider: soloProvider,
+    runMode: chatRunMode.value === "plan" ? "plan" : "act",
+    accessLevel: chatAccessLevel.value || "write",
     ...normalizeSoloSelection(
       soloProvider,
       soloProvider === "codex"
@@ -1014,6 +1018,8 @@ async function sendMessage(msg) {
         provider: normalizedSelection.provider || null,
         model: normalizedSelection.model || null,
         reasoningEffort: normalizedSelection.effort || null,
+        runMode: normalizedSelection.runMode || "act",
+        permissionProfile: normalizedSelection.accessLevel || "write",
       })
         .then((res) => {
           if (res?.status === "error") {

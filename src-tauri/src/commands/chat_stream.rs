@@ -1,5 +1,5 @@
 //! Streaming chat: stream_chat, poll_stream, stop_chat, is_chat_running.
-use super::claude_runner::{get_permission_path, unique_tmp};
+use super::claude_runner::{get_permission_path, get_permission_path_for_profile, unique_tmp};
 use super::process_manager::{
     clear_activity, clear_cancel, is_cancelled, kill_existing, set_activity, track_pid, untrack_pid,
 };
@@ -53,6 +53,34 @@ fn append_pa_feedback(
     append_chat_system(state, chat_file, event_type, text, command, label);
 }
 
+fn permission_path_for_chat(
+    state: &AppState,
+    chat_key: &str,
+    permission_profile: Option<&str>,
+    plan_mode: bool,
+) -> String {
+    if plan_mode {
+        return get_permission_path_for_profile(state, "restrictive");
+    }
+    match permission_profile
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "read" | "readonly" | "read-only" | "restrictive" => {
+            get_permission_path_for_profile(state, "restrictive")
+        }
+        "full" | "permissive" | "danger" | "danger-full-access" => {
+            get_permission_path_for_profile(state, "permissive")
+        }
+        "write" | "workspace" | "workspace-write" | "balanced" => {
+            get_permission_path_for_profile(state, "balanced")
+        }
+        _ => get_permission_path(state, chat_key),
+    }
+}
+
 #[tauri::command]
 pub async fn stream_chat(
     _app: tauri::AppHandle,
@@ -62,6 +90,8 @@ pub async fn stream_chat(
     provider: Option<String>,
     model: Option<String>,
     reasoning_effort: Option<String>,
+    run_mode: Option<String>,
+    permission_profile: Option<String>,
 ) -> Result<Value, String> {
     if message.is_empty() {
         return Ok(json!({"status": "error", "error": "Empty message"}));
@@ -74,8 +104,26 @@ pub async fn stream_chat(
     };
     let prompt =
         super::chat_core::prepare_chat(&state, &chat_key, &chat_file, &message, project.is_empty());
+    let plan_mode = matches!(
+        run_mode
+            .as_deref()
+            .unwrap_or("act")
+            .trim()
+            .to_ascii_lowercase()
+            .as_str(),
+        "plan" | "planning"
+    );
+    let prompt = if plan_mode {
+        format!(
+            "{}\n\n[AGENTOS RUN MODE]\nPlan mode is ON. Read and reason only. Do not edit files, do not run write operations, and do not emit AgentOS PA command tags. Return a plan, questions, or a concrete blocker.",
+            prompt
+        )
+    } else {
+        prompt
+    };
 
-    let perm_path = get_permission_path(&state, &chat_key);
+    let perm_path =
+        permission_path_for_chat(&state, &chat_key, permission_profile.as_deref(), plan_mode);
     let detail: String = message.chars().take(50).collect();
     set_activity(&state, &chat_key, "streaming", &detail);
 
@@ -100,6 +148,7 @@ pub async fn stream_chat(
         );
 
     let is_orchestrator = project.is_empty();
+    let allow_pa_loop = is_orchestrator && !plan_mode;
 
     if matches!(provider, super::provider_runner::ProviderKind::Codex) {
         let state_arc = Arc::clone(&state);
@@ -109,7 +158,7 @@ pub async fn stream_chat(
         let chat_key_bg = chat_key.clone();
         let chat_file_bg = chat_file.clone();
         let stream_buf_bg = stream_buf.clone();
-        let is_orchestrator_bg = is_orchestrator;
+        let allow_pa_loop_bg = allow_pa_loop;
         std::thread::spawn(move || {
             let response = super::provider_runner::run_provider_with_opts(
                 &state_arc,
@@ -134,7 +183,7 @@ pub async fn stream_chat(
                 "stream codex text",
             );
 
-            let final_response = if is_orchestrator_bg {
+            let final_response = if allow_pa_loop_bg {
                 run_pa_agent_loop(
                     &state_arc,
                     provider,
@@ -230,7 +279,7 @@ pub async fn stream_chat(
             &perm_path_bg,
             resolved_model_bg.as_deref(),
             resolved_effort_bg.as_deref(),
-            is_orchestrator,
+            allow_pa_loop,
         );
     });
 
@@ -250,7 +299,7 @@ fn stream_reader_loop(
     perm_path: &str,
     model: Option<&str>,
     reasoning_effort: Option<&str>,
-    is_orchestrator: bool,
+    allow_pa_loop: bool,
 ) {
     crate::log_info!(
         "[stream:{}] reader loop started, pid={}",
@@ -535,7 +584,7 @@ fn stream_reader_loop(
         );
     }
 
-    let final_text = if is_orchestrator {
+    let final_text = if allow_pa_loop {
         run_pa_agent_loop(
             state,
             super::provider_runner::ProviderKind::Claude,
