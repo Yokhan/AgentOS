@@ -1,3 +1,13 @@
+# Agent OS 0.2.32
+
+- Fixed chat auto-scroll during active thinking/streaming: the chat now stays where the user scrolls and only follows output while already near the bottom.
+- Fixed Stop UX so visible partial output is preserved instead of disappearing back to the last user message while cancellation is settling.
+- Expanded chat history loading from 50 to 200 JSONL entries and kept existing messages visible if a refresh fails.
+- Made thinking/live-run output more visible with always-open thinking blocks, longer reasoning previews, and a persistent live bubble while a run is active.
+- Added a compact solo route strip showing target, provider/model, mode, and access, with one-click context/review prompts instead of hidden routing.
+- Reworked Graph view into a real SVG dependency map with selectable nodes, highlighted edges, group boxes, and inspector actions that route graph context/impact back into orchestrator chat.
+- Guarded cancelled Codex runs from appending late stale responses after the user has already stopped the operation.
+
 # Agent OS 0.2.31
 
 - Fixed orchestrator/chat language drift: solo, plan mode, auto-continue, and Duo prompts now inject a shared response policy that keeps user-facing prose in the user's language, including Russian/Cyrillic conversations.

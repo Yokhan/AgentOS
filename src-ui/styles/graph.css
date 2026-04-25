@@ -1,5 +1,163 @@
-/* Graph View — Canvas with Rust-computed layout */
-.graph-view{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
-.graph-view canvas{flex:1;display:block}
-.graph-toolbar{position:absolute;top:0;left:0;right:0;padding:var(--sp-s) var(--sp-m);display:flex;align-items:center;gap:var(--sp-s);z-index:1}
-.graph-stats{position:absolute;bottom:0;left:0;padding:var(--sp-xs) var(--sp-m);font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)}
+/* Graph View - Rust-computed layout rendered as live SVG */
+.graph-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+.graph-toolbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: var(--sp-s) var(--sp-m);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-s);
+    z-index: 1;
+}
+.graph-stats {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    padding: var(--sp-xs) var(--sp-m);
+    font-size: var(--fs-s);
+    color: var(--t3);
+    font-family: var(--font-mono);
+}
+.graph-layout {
+    align-items: stretch !important;
+    gap: var(--sp-m);
+}
+.graph-main-panel {
+    flex: 1;
+    min-width: 520px;
+}
+.graph-map-wrap {
+    height: min(58vh, 620px);
+    min-height: 360px;
+    margin: var(--sp-s) 0;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    background:
+        linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--cyan) 5%, transparent),
+            transparent 34%,
+            color-mix(in srgb, var(--accent) 4%, transparent)
+        ),
+        var(--bg);
+    overflow: auto;
+}
+.graph-svg {
+    width: 100%;
+    height: 100%;
+    min-width: 760px;
+    display: block;
+}
+.graph-svg marker path {
+    fill: var(--t3);
+}
+.graph-group rect {
+    fill: color-mix(in srgb, var(--sf) 72%, transparent);
+    stroke: color-mix(in srgb, var(--border) 75%, transparent);
+    stroke-dasharray: 4 4;
+}
+.graph-group text {
+    fill: var(--t3);
+    font: 11px var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.graph-edge {
+    fill: none;
+    stroke: var(--t3);
+    stroke-width: 1;
+    opacity: 0.38;
+}
+.graph-edge.shared {
+    stroke: var(--yellow);
+    stroke-dasharray: 5 5;
+}
+.graph-edge.contains {
+    stroke: var(--cyan);
+    stroke-dasharray: 2 4;
+}
+.graph-edge.hot {
+    opacity: 0.72;
+}
+.graph-edge.dim {
+    opacity: 0.08;
+}
+.graph-node {
+    cursor: pointer;
+    transition:
+        opacity 0.12s ease,
+        filter 0.12s ease;
+}
+.graph-node rect {
+    fill: var(--sf);
+    stroke: var(--border);
+    stroke-width: 1;
+}
+.graph-node.project rect,
+.graph-node.file rect {
+    fill: color-mix(in srgb, var(--sf2) 84%, transparent);
+}
+.graph-node.segment rect {
+    fill: color-mix(in srgb, var(--cyan) 13%, var(--sf));
+    stroke: color-mix(in srgb, var(--cyan) 42%, var(--border));
+}
+.graph-node.external rect {
+    fill: color-mix(in srgb, var(--yellow) 11%, var(--sf));
+}
+.graph-node.delegation rect,
+.graph-node.strategy rect {
+    fill: color-mix(in srgb, var(--accent) 12%, var(--sf));
+    stroke: color-mix(in srgb, var(--accent) 48%, var(--border));
+}
+.graph-node text {
+    fill: var(--text);
+    font: 11px var(--font-mono);
+    pointer-events: none;
+}
+.graph-node circle {
+    fill: var(--accent);
+}
+.graph-node.selected rect {
+    stroke: var(--accent);
+    stroke-width: 2;
+    filter: drop-shadow(
+        0 0 8px color-mix(in srgb, var(--accent) 35%, transparent)
+    );
+}
+.graph-node.dim {
+    opacity: 0.24;
+}
+.graph-node.hot:hover rect {
+    stroke: var(--cyan);
+}
+.graph-node-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--sp-xs);
+    max-height: 220px;
+    overflow: auto;
+}
+.graph-node-list .action-btn {
+    text-align: left;
+    justify-content: flex-start;
+}
+.graph-node-list .action-btn[data-active="true"] {
+    border-color: var(--accent);
+    color: var(--text);
+}
+.graph-inspector-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+    margin-top: var(--sp-s);
+}
+.graph-inspector-actions .action-btn {
+    font-size: var(--fs-s);
+}

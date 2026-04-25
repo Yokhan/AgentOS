@@ -55,6 +55,7 @@ import {
   loadPerms,
   loadFeed,
   ensureDualSession,
+  sendMessage,
 } from "/api.js";
 import {
   Tile,
@@ -725,6 +726,123 @@ function SignalsPanel() {
   </div>`;
 }
 
+function graphBounds(nodes) {
+  if (!nodes.length) return { x: 0, y: 0, w: 1000, h: 520 };
+  const minX = Math.min(...nodes.map((n) => Number(n.x || 0)));
+  const minY = Math.min(...nodes.map((n) => Number(n.y || 0)));
+  const maxX = Math.max(
+    ...nodes.map((n) => Number(n.x || 0) + Number(n.w || 160)),
+  );
+  const maxY = Math.max(
+    ...nodes.map((n) => Number(n.y || 0) + Number(n.h || 28)),
+  );
+  return {
+    x: minX - 40,
+    y: minY - 40,
+    w: Math.max(760, maxX - minX + 80),
+    h: Math.max(420, maxY - minY + 80),
+  };
+}
+
+function GraphMap({ graph }) {
+  const nodes = graph?.nodes || [];
+  const edges = graph?.edges || [];
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const selected = graphSelected.value;
+  const bounds = graphBounds(nodes);
+  const selectedIds = new Set();
+  if (selected?.id) {
+    selectedIds.add(selected.id);
+    edges.forEach((edge) => {
+      if (edge.source === selected.id) selectedIds.add(edge.target);
+      if (edge.target === selected.id) selectedIds.add(edge.source);
+    });
+  }
+  const edgePath = (edge) => {
+    const source = nodeById.get(edge.source);
+    const target = nodeById.get(edge.target);
+    if (!source || !target) return "";
+    const sx = Number(source.x || 0) + Number(source.w || 160) / 2;
+    const sy = Number(source.y || 0) + Number(source.h || 28) / 2;
+    const tx = Number(target.x || 0) + Number(target.w || 160) / 2;
+    const ty = Number(target.y || 0) + Number(target.h || 28) / 2;
+    const mid = sx + (tx - sx) * 0.5;
+    return `M ${sx} ${sy} C ${mid} ${sy}, ${mid} ${ty}, ${tx} ${ty}`;
+  };
+  return html`<div class="graph-map-wrap">
+    <svg
+      class="graph-svg"
+      viewBox=${`${bounds.x} ${bounds.y} ${bounds.w} ${bounds.h}`}
+      role="img"
+      aria-label="Project dependency graph"
+    >
+      <defs>
+        <marker
+          id="graph-arrow"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="5"
+          markerHeight="5"
+          orient="auto-start-reverse"
+        >
+          <path d="M 0 0 L 10 5 L 0 10 z" />
+        </marker>
+      </defs>
+      ${(graph.groups || []).map(
+        (group) =>
+          html`<g class="graph-group">
+            <rect
+              x=${group.x - 8}
+              y=${group.y - 8}
+              width=${group.w + 16}
+              height=${group.h + 16}
+              rx="8"
+            />
+            <text x=${group.x + 8} y=${group.y + 14}>${group.name}</text>
+          </g>`,
+      )}
+      <g class="graph-edges">
+        ${edges.map((edge) => {
+          const hot =
+            !selected?.id ||
+            edge.source === selected.id ||
+            edge.target === selected.id;
+          const path = edgePath(edge);
+          return path
+            ? html`<path
+                class=${`graph-edge ${edge.kind || "edge"} ${hot ? "hot" : "dim"}`}
+                d=${path}
+                marker-end="url(#graph-arrow)"
+              />`
+            : null;
+        })}
+      </g>
+      <g class="graph-nodes">
+        ${nodes.map((node) => {
+          const w = Number(node.w || 160);
+          const h = Number(node.h || 28);
+          const active = selected?.id === node.id;
+          const hot = !selected?.id || selectedIds.has(node.id);
+          return html`<g
+            class=${`graph-node ${node.kind || "node"} ${active ? "selected" : ""} ${hot ? "hot" : "dim"}`}
+            transform=${`translate(${Number(node.x || 0)} ${Number(node.y || 0)})`}
+            onClick=${() => (graphSelected.value = node)}
+          >
+            <rect width=${w} height=${h} rx="4" />
+            <text x="10" y=${Math.min(18, h - 8)}>
+              ${node.path || node.label}
+            </text>
+            ${node.metrics?.in_cycle
+              ? html`<circle cx=${w - 12} cy=${h / 2} r="4" />`
+              : null}
+          </g>`;
+        })}
+      </g>
+    </svg>
+  </div>`;
+}
+
 function GraphInspector() {
   const graph = graphData.value;
   const node = graphSelected.value;
@@ -741,6 +859,12 @@ function GraphInspector() {
         (graph.nodes || []).find((candidate) => candidate.id === edge[side]),
       )
       .filter(Boolean);
+  const project = graphLevel.value === "overview" ? "" : graphLevel.value;
+  const askOrchestrator = (prompt) => {
+    currentProject.value = null;
+    showGraph.value = false;
+    sendMessage(prompt);
+  };
   return html`<div class="panel" style="min-width:320px;max-width:420px">
     <h3>${node.path || node.label}</h3>
     <div
@@ -759,6 +883,56 @@ function GraphInspector() {
           open project graph
         </button>`
       : null}
+    <div class="graph-inspector-actions">
+      ${graphLevel.value === "overview" && node.kind === "project"
+        ? html`<button
+              class="action-btn"
+              onClick=${() => {
+                currentProject.value = node.label;
+                showGraph.value = false;
+              }}
+            >
+              open project chat
+            </button>
+            <button
+              class="action-btn"
+              onClick=${() =>
+                askOrchestrator(
+                  `[GRAPH_CONTEXT:${node.label}]\nReview routing and dependency risks for this project before delegation.`,
+                )}
+            >
+              ask with graph
+            </button>`
+        : null}
+      ${project && node.path
+        ? html`<button
+              class="action-btn"
+              onClick=${() =>
+                askOrchestrator(
+                  `[GRAPH_IMPACT:${project}:${node.path}]\nExplain what breaks if I change this file and propose safe delegation steps.`,
+                )}
+            >
+              ask impact
+            </button>
+            <button
+              class="action-btn"
+              onClick=${() =>
+                askOrchestrator(
+                  `[GRAPH_DEPENDENTS:${project}:${node.path}]\nShow who depends on this module and what to verify.`,
+                )}
+            >
+              dependents
+            </button>`
+        : null}
+      ${project
+        ? html`<button
+            class="action-btn"
+            onClick=${() => askOrchestrator(`[GRAPH_VERIFY:${project}]`)}
+          >
+            verify graph
+          </button>`
+        : null}
+    </div>
     <div style="margin-top:var(--sp-m)">
       <div
         style="font-family:var(--font-mono);font-size:var(--fs-s);margin-bottom:var(--sp-xs)"
@@ -834,8 +1008,8 @@ function GraphView() {
         </div>`
       : !graph
         ? html`<div class="panel">Loading graph…</div>`
-        : html`<div class="panels" style="align-items:flex-start">
-            <div class="panel" style="flex:1;min-width:420px">
+        : html`<div class="panels graph-layout">
+            <div class="panel graph-main-panel">
               <h3>
                 ${graphLevel.value === "overview"
                   ? "overview"
@@ -848,17 +1022,13 @@ function GraphView() {
                 ${graph.stats?.total_edges || 0} edges ·
                 ${graph.stats?.cycle_count || 0} cycles
               </div>
-              <div
-                style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:var(--sp-xs)"
-              >
+              <${GraphMap} graph=${graph} />
+              <div class="graph-node-list">
                 ${nodes.map(
                   (node) =>
                     html`<button
                       class="action-btn"
-                      style="text-align:left;justify-content:flex-start;border-color:${graphSelected
-                        .value?.id === node.id
-                        ? "var(--accent)"
-                        : "var(--border)"}"
+                      data-active=${graphSelected.value?.id === node.id}
                       onClick=${() => (graphSelected.value = node)}
                     >
                       ${node.path || node.label}

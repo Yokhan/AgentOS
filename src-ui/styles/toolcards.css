@@ -140,7 +140,7 @@
     padding: var(--sp-xs) var(--sp-m);
     border-left: 2px solid var(--yellow);
     margin-left: var(--sp-xs);
-    max-height: 200px;
+    max-height: 360px;
     overflow: auto;
     white-space: pre-wrap;
     line-height: 1.5;

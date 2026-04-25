@@ -462,7 +462,6 @@ async function loadChat(p) {
   } catch (e) {
     if (myId === _chatLoadId) {
       console.warn("loadChat:", e);
-      sideMessages.value = [];
     }
   }
 }
@@ -1090,6 +1089,7 @@ async function sendMessage(msg) {
   thinkStart.value = Date.now();
   try {
     let full = "";
+    let finalOutcome = "done";
     const tools = [];
     if (__IS_TAURI) {
       const normalizedSelection = normalizedSoloProviderSelection();
@@ -1156,6 +1156,16 @@ async function sendMessage(msg) {
             project: proj || null,
             offset,
           });
+          if (poll.cancelled && !poll.running) {
+            finalOutcome = "cancelled";
+            updateActiveRun({
+              status: "cancelled",
+              outcome: "cancelled",
+              phase: "cancelled",
+              detail: "stopped by user",
+            });
+            done = true;
+          }
           reconcilePolledActivity(projectKey, poll);
           if (poll.events) {
             if (poll.events.length) {
@@ -1173,6 +1183,9 @@ async function sendMessage(msg) {
                 evt.type === "run_heartbeat" ||
                 evt.type === "run_done"
               ) {
+                if (evt.type === "run_done") {
+                  finalOutcome = evt.outcome || finalOutcome;
+                }
                 handleRunLifecycleEvent(evt, {
                   project: projectKey,
                   provider: normalizedSelection.provider,
@@ -1333,7 +1346,21 @@ async function sendMessage(msg) {
               // Done
               if (evt.type === "done") {
                 done = true;
+                finalOutcome = evt.outcome || finalOutcome;
                 if (evt.text && !full) full = evt.text;
+                if (evt.outcome && activeRun.value) {
+                  updateActiveRun({
+                    status:
+                      evt.outcome === "done"
+                        ? "done"
+                        : evt.outcome === "cancelled"
+                          ? "cancelled"
+                          : "failed",
+                    outcome: evt.outcome,
+                    phase: "done",
+                    detail: evt.outcome,
+                  });
+                }
                 if (
                   activeRun.value &&
                   !["done", "failed", "cancelled"].includes(
@@ -1357,6 +1384,7 @@ async function sendMessage(msg) {
         }
       }
       if (!done && pollCount >= MAX_POLLS) {
+        finalOutcome = "failed";
         showToast(
           "Response timed out (30 min). Try again or click Stop.",
           "error",
@@ -1372,7 +1400,6 @@ async function sendMessage(msg) {
       await streamStart.catch(() => {});
       // Unblock chat input immediately after poll loop exits
       isStreaming.value = false;
-      streamText.value = "";
       curActivity.value = "";
     } else {
       // Browser mode: fetch SSE stream from serve.py
@@ -1434,10 +1461,28 @@ async function sendMessage(msg) {
     }
     curActivity.value = "";
     lastStats.value = null;
-    streamText.value = "";
-    streamChain.value = [];
+    const liveText = streamText.value || full || "";
+    const liveChain = [...streamChain.value];
     // Reload chat from JSONL (single source of truth) — prevents duplicates
     await loadChat(currentProject.value || "_orchestrator");
+    const probe = liveText.trim().slice(0, 160);
+    const hasLive = !!probe || liveChain.length > 0;
+    const persisted =
+      !hasLive ||
+      sideMessages.value.some(
+        (m) =>
+          m.role === "assistant" &&
+          typeof m.msg === "string" &&
+          probe &&
+          (m.msg.trim() === liveText.trim() || m.msg.includes(probe)),
+      );
+    if (persisted || finalOutcome === "done") {
+      streamText.value = "";
+      streamChain.value = [];
+    } else {
+      streamText.value = liveText;
+      streamChain.value = liveChain;
+    }
     loadFeed();
   } catch (e) {
     isStreaming.value = false;

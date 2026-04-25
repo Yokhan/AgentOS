@@ -238,6 +238,29 @@ pub async fn stream_chat(
                 resolved_model.as_deref(),
                 resolved_effort.as_deref(),
             );
+            if is_cancelled(&state_arc, &chat_key_bg) {
+                append_stream_event(
+                    &stream_buf_bg,
+                    json!({
+                        "type": "run_done",
+                        "run_id": run_id_bg.as_str(),
+                        "status": "cancelled",
+                        "phase": "cancelled",
+                        "outcome": "cancelled",
+                        "detail": "stopped by user",
+                        "text_len": 0,
+                        "ts": state_arc.now_iso()
+                    }),
+                    "stream codex cancelled after provider",
+                );
+                crate::commands::jsonl::append_jsonl_logged(
+                    &stream_buf_bg,
+                    &json!({"type":"done","text":"","tools":[],"outcome":"cancelled"}),
+                    "stream codex cancelled done",
+                );
+                clear_activity(&state_arc, &chat_key_bg);
+                return;
+            }
             let ts = state_arc.now_iso();
             let asst_entry = json!({"ts": ts, "role": "assistant", "msg": response});
             crate::commands::jsonl::append_jsonl_logged(

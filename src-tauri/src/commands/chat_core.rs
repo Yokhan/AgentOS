@@ -16,7 +16,11 @@ pub fn resolve_chat_context(
     } else {
         pa_dir
     };
-    let chat_key = if project.is_empty() { "_orchestrator".to_string() } else { project.to_string() };
+    let chat_key = if project.is_empty() {
+        "_orchestrator".to_string()
+    } else {
+        project.to_string()
+    };
     let chat_file = state.chats_dir.join(format!("{}.jsonl", chat_key));
     Ok((cwd, chat_key, chat_file))
 }
@@ -64,7 +68,12 @@ pub fn get_chats_core(state: &AppState) -> Value {
                         let msg = entry.get("msg").and_then(|v| v.as_str()).unwrap_or("");
                         let ts = entry.get("ts").and_then(|v| v.as_str()).unwrap_or("");
                         let r = entry.get("role").and_then(|v| v.as_str()).unwrap_or("");
-                        (msg.chars().take(60).collect::<String>(), ts.to_string(), count, r.to_string())
+                        (
+                            msg.chars().take(60).collect::<String>(),
+                            ts.to_string(),
+                            count,
+                            r.to_string(),
+                        )
                     } else {
                         (String::new(), String::new(), count, String::new())
                     }
@@ -89,7 +98,11 @@ pub fn get_chats_core(state: &AppState) -> Value {
 
 /// Get chat history for a project (shared by Tauri command and API handler).
 pub fn get_chat_history_core(state: &AppState, project: &str) -> Value {
-    if project.contains("..") || project.contains('/') || project.contains('\\') || project.contains(':') {
+    if project.contains("..")
+        || project.contains('/')
+        || project.contains('\\')
+        || project.contains(':')
+    {
         return json!({"error": "Invalid project name"});
     }
     let path = state.chats_dir.join(format!("{}.jsonl", project));
@@ -97,7 +110,7 @@ pub fn get_chat_history_core(state: &AppState, project: &str) -> Value {
 
     if let Ok(content) = std::fs::read_to_string(&path) {
         let lines: Vec<&str> = content.lines().collect();
-        let recent = &lines[lines.len().saturating_sub(50)..];
+        let recent = &lines[lines.len().saturating_sub(200)..];
         for line in recent {
             if let Ok(msg) = serde_json::from_str::<Value>(line) {
                 messages.push(msg);

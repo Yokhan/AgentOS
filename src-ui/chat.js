@@ -633,6 +633,7 @@ function ChatSidebar() {
   const msgsRef = useRef();
   const fileRef = useRef();
   const prevCount = useRef(0);
+  const stickToBottom = useRef(true);
   const [chatWidth, setChatWidth] = useState(() => {
     const saved = Number(localStorage.getItem("agentos.chatWidth") || 0);
     return saved > 0 ? saved : null;
@@ -893,20 +894,35 @@ function ChatSidebar() {
       );
     }
   };
+  const isNearBottom = (el, threshold = 120) =>
+    el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+  const maybeScrollToBottom = (force = false) => {
+    const el = msgsRef.current;
+    if (!el) return;
+    if (force || stickToBottom.current) {
+      requestAnimationFrame(() => {
+        const current = msgsRef.current;
+        if (!current) return;
+        current.scrollTop = current.scrollHeight;
+        stickToBottom.current = true;
+        showScrollBtn.value = false;
+      });
+    } else {
+      showScrollBtn.value = true;
+    }
+  };
   useEffect(() => {
     const cnt = sideMessages.value.length;
-    const s = isStreaming.value;
-    if (msgsRef.current && (cnt !== prevCount.current || s)) {
-      msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
+    if (cnt !== prevCount.current) {
       prevCount.current = cnt;
     }
+    maybeScrollToBottom(false);
   });
   useEffect(() => {
     loadDr();
+    stickToBottom.current = true;
     setTimeout(() => {
-      if (msgsRef.current) {
-        msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
-      }
+      maybeScrollToBottom(true);
     }, 100);
   }, [currentProject.value]);
   useEffect(() => {
@@ -973,13 +989,15 @@ function ChatSidebar() {
   const onScroll = () => {
     if (msgsRef.current) {
       const el = msgsRef.current;
-      showScrollBtn.value =
-        el.scrollHeight - el.scrollTop - el.clientHeight > 100;
+      const near = isNearBottom(el);
+      stickToBottom.current = near;
+      showScrollBtn.value = !near;
     }
   };
   const scrollToBottom = () => {
     if (msgsRef.current) {
       msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
+      stickToBottom.current = true;
       showScrollBtn.value = false;
     }
   };
@@ -1525,6 +1543,8 @@ function ChatSidebar() {
     ${showScrollBtn.value
       ? html`<button
           onClick=${scrollToBottom}
+          class="scroll-catchup"
+          title="Jump to latest output"
           style="position:absolute;bottom:80px;right:20px;width:32px;height:32px;border-radius:50%;background:var(--sf);border:1px solid var(--border);color:var(--t2);cursor:pointer;font-size:var(--fs-m);display:flex;align-items:center;justify-content:center;z-index:10"
         >
           ↓
@@ -1554,6 +1574,53 @@ function ChatSidebar() {
             }}
             >discard</span
           >
+        </div>`
+      : null}
+    ${!duoWorkspaceInCanvas
+      ? html`<div class="solo-compose-route">
+          <span>
+            Route
+            <strong>${currentProject.value || "orchestrator"}</strong>
+            <b>-></b>
+            <strong
+              >${soloProvider}${selectedModelValue
+                ? " / " + selectedModelValue
+                : ""}</strong
+            >
+            <b>-></b>
+            <strong
+              >${chatRunMode.value === "plan"
+                ? "plan / read"
+                : "act / " + (chatAccessLevel.value || "write")}</strong
+            >
+          </span>
+          <button
+            onClick=${() => {
+              chatRunMode.value = chatRunMode.value === "plan" ? "act" : "plan";
+            }}
+          >
+            ${chatRunMode.value === "plan" ? "switch to act" : "plan mode"}
+          </button>
+          <button
+            onClick=${() =>
+              insertPrompt(
+                currentProject.value
+                  ? `[GRAPH_CONTEXT:${currentProject.value}]\nReview architecture and dependency risks before changing this project.`
+                  : "[DASHBOARD_FULL]\n[HEALTH_CHECK:all]\nSummarize blockers and choose the next safe execution target.",
+              )}
+          >
+            add context
+          </button>
+          <button
+            onClick=${() =>
+              insertPrompt(
+                currentProject.value
+                  ? "Review current project state, then propose exact next steps. Do not execute until the plan is clear."
+                  : "Review all project states and propose a rollout plan. Use AgentOS commands only when execution is needed.",
+              )}
+          >
+            review
+          </button>
         </div>`
       : null}
     ${duoWorkspaceInCanvas
@@ -1756,10 +1823,7 @@ function ChatSidebar() {
                 __invoke("stop_chat", {
                   project: currentProject.value || null,
                 });
-              isStreaming.value = false;
-              streamText.value = "";
-              streamChain.value = [];
-              curActivity.value = "";
+              curActivity.value = "stopping; preserving visible output...";
               if (activeRun.value) {
                 activeRun.value = {
                   ...activeRun.value,
@@ -1865,20 +1929,19 @@ ${t.tool === "Bash" || t.tool === "bash"
   </div>`;
 }
 function ThinkBlock({ b }) {
-  return html`<details class="think-block" open=${b.streaming}>
+  const text = b.text || "";
+  const visible =
+    text.length > 2000
+      ? text.substring(0, 2000) + "\n...[thinking continues]"
+      : text;
+  return html`<details class="think-block" open>
     <summary>
       <span class="think-icon">◆</span
       ><span class="think-label">thinking</span>${b.streaming
         ? html`<span style="color:var(--t3)">...</span>`
         : null}
     </summary>
-    <div class="think-body">
-      ${b.text
-        ? b.text.length > 500
-          ? b.text.substring(0, 500) + "..."
-          : b.text
-        : "..."}
-    </div>
+    <div class="think-body">${visible || "waiting for model reasoning..."}</div>
   </details>`;
 }
 function ProgressBar({ activity, elapsed }) {
@@ -2553,14 +2616,29 @@ function ChatMsg({ m }) {
 }
 
 function StreamBubble() {
-  if (!isStreaming.value && !streamText.value) return null;
+  const run = activeRun.value;
+  const runningRun =
+    run &&
+    run.project === (currentProject.value || "_orchestrator") &&
+    !["done", "failed", "cancelled"].includes(run.status || "");
+  if (
+    !isStreaming.value &&
+    !streamText.value &&
+    !streamChain.value.length &&
+    !curActivity.value &&
+    !runningRun
+  ) {
+    return null;
+  }
   const ch = streamChain.value;
   const groupedCh = groupChainBlocks(ch);
   const hasPaTrace = groupedCh.some((b) => b.type === "pa_trace");
   const el = thinkStart.value
     ? Math.round((Date.now() - thinkStart.value) / 1000)
     : 0;
-  const act = curActivity.value;
+  const act =
+    curActivity.value ||
+    (runningRun ? `${run.phase || "run"}: ${run.detail || "working"}` : "");
   // Show progress bar + chain blocks
   return html`<div class="m a stream-chain">
     <${ProgressBar} activity=${act} elapsed=${el} />
