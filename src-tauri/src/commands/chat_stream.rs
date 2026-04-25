@@ -129,6 +129,15 @@ pub async fn stream_chat(
                         }
                         continue;
                     }
+                    let command_label = super::pa_commands::describe_pa_command(&parsed.cmd);
+                    append_pa_feedback(
+                        &state_arc,
+                        &chat_file_bg,
+                        &stream_buf_bg,
+                        "pa_status",
+                        &format!("Running {}", command_label),
+                        "stream codex pa start",
+                    );
                     if let Some(text) =
                         super::pa_commands::execute_pa_command(&state_arc, &parsed.cmd)
                     {
@@ -139,6 +148,15 @@ pub async fn stream_chat(
                             "pa_result",
                             &text,
                             "stream codex pa result",
+                        );
+                    } else {
+                        append_pa_feedback(
+                            &state_arc,
+                            &chat_file_bg,
+                            &stream_buf_bg,
+                            "pa_status",
+                            &format!("Completed {} (no output)", command_label),
+                            "stream codex pa complete",
                         );
                     }
                 }
@@ -544,6 +562,15 @@ fn stream_reader_loop(
                 }
                 continue;
             }
+            let command_label = super::pa_commands::describe_pa_command(&parsed.cmd);
+            append_pa_feedback(
+                state,
+                chat_file,
+                stream_buf,
+                "pa_status",
+                &format!("Running {}", command_label),
+                "stream pa start",
+            );
             // Execute command via shared function and emit result to stream
             if let Some(text) = super::pa_commands::execute_pa_command(state, &parsed.cmd) {
                 append_pa_feedback(
@@ -553,6 +580,15 @@ fn stream_reader_loop(
                     "pa_result",
                     &text,
                     "stream pa result",
+                );
+            } else {
+                append_pa_feedback(
+                    state,
+                    chat_file,
+                    stream_buf,
+                    "pa_status",
+                    &format!("Completed {} (no output)", command_label),
+                    "stream pa complete",
                 );
             }
         }

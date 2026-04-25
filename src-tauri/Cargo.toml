@@ -1,6 +1,6 @@
 [package]
 name = "agent-os"
-version = "0.2.20"
+version = "0.2.21"
 description = "Agent OS - Desktop command center for AI agents"
 edition = "2021"
 

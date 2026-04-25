@@ -1,3 +1,8 @@
+# Agent OS 0.2.21
+
+- Added explicit `pa status` chat entries before and after each PA command, so long diagnostics show exactly which command is running instead of looking like a frozen assistant message.
+- Added readable command labels for PA execution feedback, including delegation, git/template, dashboard, health, memory, cron, and graph commands.
+
 # Agent OS 0.2.20
 
 - Made chat the visible execution journal for PA commands: command results and warnings now stream live and persist as system messages in chat history.

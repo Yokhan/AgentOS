@@ -62,6 +62,155 @@ pub struct ParsedCommand {
     pub error: Option<String>,
 }
 
+pub fn describe_pa_command(cmd: &PaCommand) -> String {
+    match cmd {
+        PaCommand::Delegate { project, .. } => format!("[DELEGATE:{}]", project),
+        PaCommand::Deploy { project } => format!("[DEPLOY:{}]", project),
+        PaCommand::HealthCheck { target } => format!("[HEALTH_CHECK:{}]", target),
+        PaCommand::Plan { title, .. } => format!("[PLAN:{}]", title),
+        PaCommand::Queue { .. } => "[QUEUE]".to_string(),
+        PaCommand::Notify { .. } => "[NOTIFY]".to_string(),
+        PaCommand::Remember { .. } => "[REMEMBER]".to_string(),
+        PaCommand::Strategy { goal, .. } => format!("[STRATEGY:{}]", goal),
+        PaCommand::DelegExt(cmd) => match cmd {
+            super::pa_commands_deleg::DelegPaCommand::Batch { .. } => {
+                "[DELEGATE_BATCH]".to_string()
+            }
+            super::pa_commands_deleg::DelegPaCommand::Chain { project, .. } => {
+                format!("[DELEGATE_CHAIN:{}]", project)
+            }
+            super::pa_commands_deleg::DelegPaCommand::Retry { id, .. } => {
+                format!("[DELEGATE_RETRY:{}]", id)
+            }
+            super::pa_commands_deleg::DelegPaCommand::Cancel { id } => {
+                format!("[DELEGATE_CANCEL:{}]", id)
+            }
+            super::pa_commands_deleg::DelegPaCommand::Status { filter } => {
+                format!("[DELEGATE_STATUS:{}]", filter)
+            }
+            super::pa_commands_deleg::DelegPaCommand::Cleanup { hours } => {
+                format!("[DELEGATE_CLEANUP:{}]", hours)
+            }
+            super::pa_commands_deleg::DelegPaCommand::Priority { id, .. } => {
+                format!("[DELEGATE_PRIORITY:{}]", id)
+            }
+            super::pa_commands_deleg::DelegPaCommand::Timeout { id, .. } => {
+                format!("[DELEGATE_TIMEOUT:{}]", id)
+            }
+            super::pa_commands_deleg::DelegPaCommand::TemplateSave { name, .. } => {
+                format!("[DELEGATE_TEMPLATE:save:{}]", name)
+            }
+            super::pa_commands_deleg::DelegPaCommand::TemplateUse { name, .. } => {
+                format!("[DELEGATE_TEMPLATE:use:{}]", name)
+            }
+            super::pa_commands_deleg::DelegPaCommand::Log { filter } => {
+                format!("[DELEGATE_LOG:{}]", filter)
+            }
+            super::pa_commands_deleg::DelegPaCommand::Diff { filter } => {
+                format!("[DELEGATE_DIFF:{}]", filter)
+            }
+        },
+        PaCommand::OpsExt(cmd) => match cmd {
+            super::pa_commands_ops::OpsPaCommand::DeployStatic { project, .. } => {
+                format!("[DEPLOY_STATIC:{}]", project)
+            }
+            super::pa_commands_ops::OpsPaCommand::DeployVerify { url, .. } => {
+                format!("[DEPLOY_VERIFY:{}]", url)
+            }
+            super::pa_commands_ops::OpsPaCommand::DeployRollback { target } => {
+                format!("[DEPLOY_ROLLBACK:{}]", target)
+            }
+            super::pa_commands_ops::OpsPaCommand::ServerExec { host, .. } => {
+                format!("[SERVER_EXEC:{}]", host)
+            }
+            super::pa_commands_ops::OpsPaCommand::ServerStatus { host } => {
+                format!("[SERVER_STATUS:{}]", host)
+            }
+            super::pa_commands_ops::OpsPaCommand::NginxValidate { host } => {
+                format!("[NGINX_VALIDATE:{}]", host)
+            }
+            super::pa_commands_ops::OpsPaCommand::SslMonitor => "[SSL_MONITOR]".to_string(),
+            super::pa_commands_ops::OpsPaCommand::DnsVerify { domain } => {
+                format!("[DNS_VERIFY:{}]", domain)
+            }
+            super::pa_commands_ops::OpsPaCommand::GitBulkPush { filter } => {
+                format!("[GIT_BULK_PUSH:{}]", filter)
+            }
+            super::pa_commands_ops::OpsPaCommand::GitBulkPull { filter } => {
+                format!("[GIT_BULK_PULL:{}]", filter)
+            }
+            super::pa_commands_ops::OpsPaCommand::GitStatusAll => "[GIT_STATUS_ALL]".to_string(),
+            super::pa_commands_ops::OpsPaCommand::GitStaleBranches { days } => {
+                format!("[GIT_STALE_BRANCHES:{}]", days)
+            }
+            super::pa_commands_ops::OpsPaCommand::GitSearch { mode, query } => {
+                format!("[GIT_SEARCH:{}:{}]", mode, query)
+            }
+            super::pa_commands_ops::OpsPaCommand::TemplateAudit => "[TEMPLATE_AUDIT]".to_string(),
+            super::pa_commands_ops::OpsPaCommand::MemoryList { filter } => {
+                format!("[MEMORY_LIST:{}]", filter)
+            }
+            super::pa_commands_ops::OpsPaCommand::MemorySearch { query } => {
+                format!("[MEMORY_SEARCH:{}]", query)
+            }
+            super::pa_commands_ops::OpsPaCommand::MemoryDelete { filter } => {
+                format!("[MEMORY_DELETE:{}]", filter)
+            }
+            super::pa_commands_ops::OpsPaCommand::CronCreate { name, .. } => {
+                format!("[CRON_CREATE:{}]", name)
+            }
+            super::pa_commands_ops::OpsPaCommand::CronList => "[CRON_LIST]".to_string(),
+            super::pa_commands_ops::OpsPaCommand::CronEdit { name, .. } => {
+                format!("[CRON_EDIT:{}]", name)
+            }
+            super::pa_commands_ops::OpsPaCommand::CronDelete { name } => {
+                format!("[CRON_DELETE:{}]", name)
+            }
+            super::pa_commands_ops::OpsPaCommand::DependencyAudit { filter } => {
+                format!("[DEPENDENCY_AUDIT:{}]", filter)
+            }
+            super::pa_commands_ops::OpsPaCommand::StrategyProgress { filter } => {
+                format!("[STRATEGY_PROGRESS:{}]", filter)
+            }
+            super::pa_commands_ops::OpsPaCommand::StrategyMilestone { strategy, .. } => {
+                format!("[STRATEGY_MILESTONE:{}]", strategy)
+            }
+            super::pa_commands_ops::OpsPaCommand::DailyReport => "[DAILY_REPORT]".to_string(),
+            super::pa_commands_ops::OpsPaCommand::DashboardFull => "[DASHBOARD_FULL]".to_string(),
+            super::pa_commands_ops::OpsPaCommand::ActivityDigest { period } => {
+                format!("[ACTIVITY_DIGEST:{}]", period)
+            }
+            super::pa_commands_ops::OpsPaCommand::AlertCreate { name, .. } => {
+                format!("[ALERT_CREATE:{}]", name)
+            }
+            super::pa_commands_ops::OpsPaCommand::PartnerUpdate { .. } => {
+                "[PARTNER_UPDATE]".to_string()
+            }
+            super::pa_commands_ops::OpsPaCommand::IncomeRecord { category, .. } => {
+                format!("[INCOME_RECORD:{}]", category)
+            }
+            super::pa_commands_ops::OpsPaCommand::FinancialDashboard => {
+                "[FINANCIAL_DASHBOARD]".to_string()
+            }
+            super::pa_commands_ops::OpsPaCommand::GraphContext { project } => {
+                format!("[GRAPH_CONTEXT:{}]", project)
+            }
+            super::pa_commands_ops::OpsPaCommand::GraphDependents { project, file } => {
+                format!("[GRAPH_DEPENDENTS:{}:{}]", project, file)
+            }
+            super::pa_commands_ops::OpsPaCommand::GraphImpact { project, file } => {
+                format!("[GRAPH_IMPACT:{}:{}]", project, file)
+            }
+            super::pa_commands_ops::OpsPaCommand::GraphVerify { project } => {
+                format!("[GRAPH_VERIFY:{}]", project)
+            }
+            super::pa_commands_ops::OpsPaCommand::GraphRules { project } => {
+                format!("[GRAPH_RULES:{}]", project)
+            }
+        },
+    }
+}
+
 /// Parse and validate all PA commands from response text.
 /// Returns commands in order of appearance with validation status.
 pub fn parse_pa_commands(response: &str, state: &AppState) -> Vec<ParsedCommand> {

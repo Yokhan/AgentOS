@@ -1803,13 +1803,22 @@ function ChatMsg({ m }) {
             >
               ••• ${b.label}
             </div>`;
-          if (b.type === "pa_result" || b.type === "warning")
+          if (
+            b.type === "pa_result" ||
+            b.type === "warning" ||
+            b.type === "pa_status"
+          )
             return html`<div
               key=${"pa" + i}
               class="tc-output ${b.type === "warning" ? "tc-out-err" : ""}"
               style="margin:var(--sp-xs) 0;font-family:var(--font-mono);font-size:var(--fs-s);white-space:pre-wrap"
             >
-              ${b.type === "warning" ? "warning" : "pa result"}: ${b.text || ""}
+              ${b.type === "warning"
+                ? "warning"
+                : b.type === "pa_status"
+                  ? "pa status"
+                  : "pa result"}:
+              ${b.text || ""}
             </div>`;
           if (b.type === "result")
             return html`<div
@@ -1891,13 +1900,22 @@ function StreamBubble() {
         >
           ••• ${b.label}
         </div>`;
-      if (b.type === "pa_result" || b.type === "warning")
+      if (
+        b.type === "pa_result" ||
+        b.type === "warning" ||
+        b.type === "pa_status"
+      )
         return html`<div
           key=${"spa" + i}
           class="tc-output ${b.type === "warning" ? "tc-out-err" : ""}"
           style="margin:var(--sp-xs) 0;font-family:var(--font-mono);font-size:var(--fs-s);white-space:pre-wrap"
         >
-          ${b.type === "warning" ? "warning" : "pa result"}: ${b.text || ""}
+          ${b.type === "warning"
+            ? "warning"
+            : b.type === "pa_status"
+              ? "pa status"
+              : "pa result"}:
+          ${b.text || ""}
         </div>`;
       return null;
     })}

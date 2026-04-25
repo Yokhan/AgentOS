@@ -1062,7 +1062,11 @@ async function sendMessage(msg) {
                 streamChain.value = [...chain];
               }
               // PA command execution feedback
-              if (evt.type === "pa_result" || evt.type === "warning") {
+              if (
+                evt.type === "pa_result" ||
+                evt.type === "warning" ||
+                evt.type === "pa_status"
+              ) {
                 chain.push({
                   type: evt.type,
                   text: evt.text || "",
