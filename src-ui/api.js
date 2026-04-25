@@ -1368,7 +1368,7 @@ async function ensureDualSession(project = "") {
   return dualSessionData.value?.session || null;
 }
 
-async function runDualParticipant(participantId, message) {
+async function runDualParticipant(participantId, message, analysisOnly = true) {
   if (!__IS_TAURI) return;
   const msg = (message || "").trim();
   if (!msg) {
@@ -1389,7 +1389,7 @@ async function runDualParticipant(participantId, message) {
       message: msg,
       model: null,
       reasoningEffort: null,
-      analysisOnly: true,
+      analysisOnly,
     });
     if (res?.status === "complete") {
       await loadDualSession(sessionId);

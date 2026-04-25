@@ -1,3 +1,10 @@
+# Agent OS 0.2.18
+
+- Fixed Duo Execute message routing: the composer now sends execution prompts to the selected room lead/orchestrator instead of falling back to solo chat.
+- `ask both` now stays analysis-only for two-agent review, while `lead` switches to execution mode and runs the selected participant with PA command execution enabled.
+- Clarified the composer route and placeholder text so the UI shows whether input will review with both agents or execute with the lead.
+- Strengthened execution-lead prompting: PA commands must be emitted outside fenced code blocks, and common diagnostics/delegation commands are listed explicitly.
+
 # Agent OS 0.2.17
 
 - Fixed Codex write execution: Codex CLI now receives an explicit sandbox derived from the same AgentOS permission profile as Claude (`read-only`, `workspace-write`, or `danger-full-access`).

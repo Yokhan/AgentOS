@@ -72,6 +72,7 @@ import {
   rejectDel,
   processInbox,
   ensureDualSession,
+  runDualParticipant,
   runDualRound,
   runDualRoomAction,
   generateStrategy,
@@ -646,24 +647,23 @@ function ChatSidebar() {
       assistants: assistantMessages,
     };
   })();
-  const focusDuoAgent = (participantId) => {
+  const focusDuoAgent = async (participantId) => {
     const participant =
       participants.find((p) => p.id === participantId) || null;
+    if (participant?.write_enabled) {
+      if (participant.id !== activeOrchestratorId) {
+        await useDuoOrchestrator(participant.id);
+      } else {
+        setDuoComposerAction("send");
+        setDuoComposerTarget("");
+        activeRoomTab.value = "execute";
+      }
+      focusComposerSoon();
+      return;
+    }
     if (participant && !participant.write_enabled) {
       showToast(
         `${participant.label} is review-only in this room. Grant write in Advanced runtime controls if you want execution.`,
-        "info",
-      );
-    } else if (
-      participant &&
-      activeOrchestratorId &&
-      participant.id !== activeOrchestratorId
-    ) {
-      const owner =
-        participants.find((p) => p.id === activeOrchestratorId)?.label ||
-        "another participant";
-      showToast(
-        `${participant.label} can write here, but orchestration currently belongs to ${owner}. Switch orchestrator in Advanced runtime controls if you want PA commands from ${participant.label}.`,
         "info",
       );
     }
@@ -906,7 +906,18 @@ function ChatSidebar() {
     try {
       await ensureDualSession(currentProject.value || "");
       if (duoComposerAction === "send") {
-        sendMessage(msg);
+        const lead = activeOrchestrator || visibleLeadCandidates[0] || null;
+        if (!lead) {
+          showToast("Pick an execution lead first", "error");
+          return;
+        }
+        if (!activeOrchestrator || activeOrchestrator.id !== lead.id) {
+          await useDuoOrchestrator(lead.id);
+        }
+        activeRoomTab.value = "execute";
+        await runDualParticipant(lead.id, msg, false);
+      } else if (duoComposerAction === "ask_both") {
+        await runDualRound(msg, true);
       } else if (duoComposerAction === "mention") {
         if (!duoComposerTarget) {
           showToast("Pick a room target", "error");
@@ -1340,13 +1351,13 @@ function ChatSidebar() {
           >
         </div>`
       : null}
-    ${duoCollaborateMode
+    ${duoWorkspaceInCanvas
       ? html`<div class="duo-compose-route">
           <span>
             Input goes to
             <strong>
               ${duoComposerAction === "send"
-                ? activeOrchestrator?.label || "main chat"
+                ? `${activeOrchestrator?.label || "selected lead"} (execute)`
                 : duoComposerAction === "challenge"
                   ? "challenge target"
                   : duoComposerAction === "mention"
@@ -1359,7 +1370,7 @@ function ChatSidebar() {
                           ? "strategy"
                           : duoComposerAction === "child_session"
                             ? "project room"
-                            : "both agents"}
+                            : "both agents (review)"}
             </strong>
           </span>
           <details class="duo-small-controls compact">
@@ -1367,7 +1378,7 @@ function ChatSidebar() {
             <div class="duo-control-grid">
               ${[
                 ["ask_both", "ask both"],
-                ["send", "orchestrator"],
+                ["send", "lead"],
                 ["challenge", "challenge"],
               ].map(
                 ([id, label]) =>
@@ -1376,6 +1387,8 @@ function ChatSidebar() {
                     onClick=${() => {
                       setDuoComposerAction(id);
                       if (id !== "challenge") setDuoComposerTarget("");
+                      if (id === "send") setDuoView("execute");
+                      if (id === "ask_both") setDuoView("collaborate");
                       setDuoAdvancedOpen(false);
                     }}
                   >
@@ -1384,7 +1397,10 @@ function ChatSidebar() {
               )}
               <button
                 class=${duoAdvancedOpen ? "selected-warn" : ""}
-                onClick=${() => setDuoAdvancedOpen(!duoAdvancedOpen)}
+                onClick=${() => {
+                  setDuoView("collaborate");
+                  setDuoAdvancedOpen(!duoAdvancedOpen);
+                }}
               >
                 more routes
               </button>
@@ -1471,10 +1487,10 @@ function ChatSidebar() {
         ref=${inputRef}
         placeholder=${isStreaming.value
           ? "waiting for response..."
-          : duoCollaborateMode
+          : duoWorkspaceInCanvas
             ? (() => {
                 if (duoComposerAction === "send") {
-                  return "continue with the main chat...";
+                  return `execute with ${activeOrchestrator?.label || "selected lead"}...`;
                 }
                 if (duoComposerAction === "mention") {
                   return (
@@ -1502,7 +1518,7 @@ function ChatSidebar() {
                 if (duoComposerAction === "child_session") {
                   return "write 'project: title' or a project-room title...";
                 }
-                return "ask both agents...";
+                return "ask both agents for review...";
               })()
             : "talk to " + sideTitle.value + "..."}
         rows="1"

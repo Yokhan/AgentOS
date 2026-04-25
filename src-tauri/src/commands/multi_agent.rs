@@ -1204,8 +1204,15 @@ fn build_agent_prompt(
 
     if participant_can_execute_pa_commands(state, session, participant, analysis_only) {
         prompt.push_str("\nExecution mode is live for this participant. Plain analysis does not trigger orchestration.\n");
-        prompt.push_str("If you want AgentOS to act, emit structured PA commands exactly.\n");
+        prompt
+            .push_str("The user selected you as the execution lead/orchestrator for this room.\n");
+        prompt.push_str("If the user approved execution or asks to proceed, do not only propose a plan. Act through structured PA commands.\n");
+        prompt.push_str("Executable PA command tags must be on their own lines outside fenced code blocks. Tags inside fenced code blocks are examples only and will be ignored.\n");
         prompt.push_str("Common commands:\n");
+        prompt.push_str("- [DASHBOARD_FULL]\n");
+        prompt.push_str("- [DELEGATE_STATUS:failed]\n");
+        prompt.push_str("- [GIT_STATUS_ALL]\n");
+        prompt.push_str("- [TEMPLATE_AUDIT]\n");
         prompt.push_str("- [DELEGATE:Project]task[/DELEGATE]\n");
         prompt.push_str("- [DELEGATE_BATCH:p1,p2]task[/DELEGATE_BATCH]\n");
         prompt.push_str("- [DELEGATE_CHAIN:Project]step1\\nstep2[/DELEGATE_CHAIN]\n");
@@ -3934,6 +3941,10 @@ mod tests {
         let prompt = build_agent_prompt(&state, &session, &participant, "Start execution", false);
 
         assert!(prompt.contains("Execution mode is live for this participant."));
+        assert!(prompt.contains("selected you as the execution lead/orchestrator"));
+        assert!(prompt.contains("outside fenced code blocks"));
+        assert!(prompt.contains("[DASHBOARD_FULL]"));
+        assert!(prompt.contains("[DELEGATE_STATUS:failed]"));
         assert!(prompt.contains("[DELEGATE:Project]task[/DELEGATE]"));
         assert!(participant_has_round_write_access(&participant, false));
     }
