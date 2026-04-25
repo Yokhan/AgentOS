@@ -1,3 +1,12 @@
+# Agent OS 0.2.30
+
+- Added a live run lifecycle for chat streaming: `run_started`, `run_progress`, and `run_done` events now describe provider, model, mode, access, phase, detail, and outcome.
+- Added a live run HUD in chat so active work shows provider/model, `act/plan`, `read/write/full`, current phase, recent backend events, elapsed time, and terminal outcome instead of looking frozen.
+- Made `poll_stream` return live activity/running/cancelled state so the frontend can reconcile status during long tool calls without waiting for the 15-second dashboard refresh.
+- Added adaptive frontend refresh while work is active: activity updates every second, with project/feed/signal refreshes every few seconds during runs or active delegations.
+- Improved Stop semantics in the UI and backend stream: cancelling emits a visible `cancelled` outcome and immediately updates the active run state.
+- Improved delegation operability: status now prints full delegation IDs, status filters support pending/running, and cancel/retry/priority/timeout accept a unique delegation ID prefix.
+
 # Agent OS 0.2.29
 
 - Simplified solo chat controls to a KISS surface: one `act/plan` toggle, one `read/write/full` access selector, provider, model, and effort in the main chat header.

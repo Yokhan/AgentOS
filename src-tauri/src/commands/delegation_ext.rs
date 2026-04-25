@@ -77,11 +77,12 @@ fn exec_chain(state: &AppState, project: &str, steps: &[String]) -> Option<Strin
 }
 
 fn exec_retry(state: &AppState, id: &str, context: &str) -> Option<String> {
+    let resolved_id = resolve_delegation_id(state, id).ok()?;
     let (project, original_task, error_info) = {
         let delegations = state.delegations.lock().ok()?;
-        let del = delegations.get(id)?;
+        let del = delegations.get(&resolved_id)?;
         if !del.status.is_terminal() {
-            return Some(format!("Cannot retry: delegation {} is {}", id, del.status));
+            return Some(format!("Cannot retry: delegation {} is {}", resolved_id, del.status));
         }
         let err = del.response.as_deref().unwrap_or("no response");
         (del.project.clone(), del.task.clone(), err.chars().take(300).collect::<String>())
@@ -96,7 +97,7 @@ fn exec_retry(state: &AppState, id: &str, context: &str) -> Option<String> {
     let new_id = super::delegation::queue_delegation_internal(state, &project, &retry_task);
     // Copy priority from original delegation
     let orig_priority = state.delegations.lock().ok()
-        .and_then(|d| d.get(id).map(|del| del.priority));
+        .and_then(|d| d.get(&resolved_id).map(|del| del.priority));
     if let Some(pri) = orig_priority {
         if let Ok(mut delegations) = state.delegations.lock() {
             if let Some(del) = delegations.get_mut(&new_id) {
@@ -110,21 +111,22 @@ fn exec_retry(state: &AppState, id: &str, context: &str) -> Option<String> {
 }
 
 fn exec_cancel(state: &AppState, id: &str) -> Option<String> {
+    let resolved_id = resolve_delegation_id(state, id).ok()?;
     let mut status_before = String::new();
     if let Ok(mut delegations) = state.delegations.lock() {
-        let del = delegations.get_mut(id)?;
+        let del = delegations.get_mut(&resolved_id)?;
         status_before = del.status.to_string();
         if del.status == crate::commands::status::DelegationStatus::Running ||
            del.status == crate::commands::status::DelegationStatus::Escalated {
             // Try to kill the running process
-            let chat_key = format!("deleg-{}", id);
+            let chat_key = format!("deleg-{}", resolved_id);
             super::process_manager::kill_existing(state, &chat_key);
         }
         del.status = crate::commands::status::DelegationStatus::Cancelled;
     }
     state.save_delegations();
-    crate::log_info!("[deleg_ext] cancelled {} (was {})", id, status_before);
-    Some(format!("**Cancelled:** {} (was {})", id, status_before))
+    crate::log_info!("[deleg_ext] cancelled {} (was {})", resolved_id, status_before);
+    Some(format!("**Cancelled:** {} (was {})", resolved_id, status_before))
 }
 
 fn exec_status(state: &AppState, filter: &str) -> Option<String> {
@@ -135,13 +137,16 @@ fn exec_status(state: &AppState, filter: &str) -> Option<String> {
         let matches = filter.is_empty()
             || filter.eq_ignore_ascii_case(&d.project)
             || (filter == "?failed" && d.status == crate::commands::status::DelegationStatus::Failed)
+            || (filter == "?pending" && d.status == crate::commands::status::DelegationStatus::Pending)
+            || (filter == "?running" && d.status == crate::commands::status::DelegationStatus::Running)
             || (filter == "?stale" && d.status == crate::commands::status::DelegationStatus::Pending)
             || d.batch_id.as_deref() == Some(filter)
-            || id == filter;
+            || id == filter
+            || (!filter.is_empty() && id.starts_with(filter));
         if !matches { continue; }
         let task_short: String = d.task.chars().take(50).collect();
         let pri = d.priority.map(|p| format!(" [{}]", p)).unwrap_or_default();
-        lines.push(format!("  {} {} {}{}: {}", d.status, d.project, id.chars().take(12).collect::<String>(), pri, task_short));
+        lines.push(format!("  {} {} {}{}: {}", d.status, d.project, id, pri, task_short));
     }
 
     if lines.is_empty() { return Some("No matching delegations.".to_string()); }
@@ -153,8 +158,9 @@ fn exec_cleanup(state: &AppState, hours: u64) -> Option<String> {
 }
 
 fn exec_priority(state: &AppState, id: &str, priority: DelegationPriority) -> Option<String> {
+    let resolved_id = resolve_delegation_id(state, id).ok()?;
     if let Ok(mut delegations) = state.delegations.lock() {
-        let del = delegations.get_mut(id)?;
+        let del = delegations.get_mut(&resolved_id)?;
         del.priority = Some(priority);
     }
     state.save_delegations();
@@ -162,8 +168,9 @@ fn exec_priority(state: &AppState, id: &str, priority: DelegationPriority) -> Op
 }
 
 fn exec_timeout(state: &AppState, id: &str, seconds: u64) -> Option<String> {
+    let resolved_id = resolve_delegation_id(state, id).ok()?;
     if let Ok(mut delegations) = state.delegations.lock() {
-        let del = delegations.get_mut(id)?;
+        let del = delegations.get_mut(&resolved_id)?;
         del.timeout_secs = Some(seconds);
     }
     state.save_delegations();
@@ -221,4 +228,114 @@ fn exec_log(state: &AppState, filter: &str) -> Option<String> {
 
 fn exec_diff(state: &AppState, filter: &str) -> Option<String> {
     super::delegation_analytics::aggregate_diffs(state, filter)
+}
+
+fn resolve_delegation_id(state: &AppState, id_or_prefix: &str) -> Result<String, String> {
+    let query = id_or_prefix.trim();
+    if query.is_empty() {
+        return Err("empty delegation id".to_string());
+    }
+
+    let delegations = state
+        .delegations
+        .lock()
+        .map_err(|_| "delegation lock poisoned".to_string())?;
+
+    if delegations.contains_key(query) {
+        return Ok(query.to_string());
+    }
+
+    let matches: Vec<String> = delegations
+        .keys()
+        .filter(|id| id.starts_with(query))
+        .cloned()
+        .collect();
+
+    match matches.len() {
+        1 => Ok(matches[0].clone()),
+        0 => Err(format!("delegation not found: {}", query)),
+        _ => Err(format!("ambiguous delegation id prefix '{}': {} matches", query, matches.len())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::pa_commands_deleg::DelegPaCommand;
+    use crate::commands::status::DelegationStatus;
+    use crate::state::{AppState, Delegation};
+
+    fn test_state(name: &str) -> AppState {
+        let root = std::env::temp_dir().join(format!(
+            "agentos-delegation-ext-{name}-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(root.join("tasks"));
+        AppState::new(root)
+    }
+
+    fn insert_pending(state: &AppState, id: &str) {
+        let delegation = Delegation {
+            id: id.to_string(),
+            project: "AgentOS".to_string(),
+            task: "test task".to_string(),
+            ts: "2026-04-25T00:00:00Z".to_string(),
+            status: DelegationStatus::Pending,
+            response: None,
+            retries: 0,
+            plan_id: None,
+            plan_step: None,
+            escalation_info: None,
+            strategy_id: None,
+            strategy_step_id: None,
+            room_session_id: None,
+            project_session_id: None,
+            work_item_id: None,
+            executor_provider: None,
+            reviewer_provider: None,
+            git_diff: None,
+            usage: None,
+            scheduled_at: None,
+            batch_id: None,
+            priority: None,
+            timeout_secs: None,
+            gate_result: None,
+            review_verdict: None,
+        };
+        state.delegations.lock().unwrap().insert(id.to_string(), delegation);
+    }
+
+    #[test]
+    fn status_prints_full_id_and_cancel_accepts_unique_prefix() {
+        let state = test_state("prefix-cancel");
+        let full_id = "1775765745165879500-34220";
+        insert_pending(&state, full_id);
+
+        let status = execute_deleg_command(
+            &state,
+            &DelegPaCommand::Status {
+                filter: "?pending".to_string(),
+            },
+        )
+        .unwrap();
+        assert!(status.contains(full_id));
+
+        let cancel = execute_deleg_command(
+            &state,
+            &DelegPaCommand::Cancel {
+                id: "177576574516".to_string(),
+            },
+        )
+        .unwrap();
+        assert!(cancel.contains("Cancelled"));
+
+        let delegations = state.delegations.lock().unwrap();
+        assert_eq!(
+            delegations.get(full_id).unwrap().status,
+            DelegationStatus::Cancelled
+        );
+    }
 }

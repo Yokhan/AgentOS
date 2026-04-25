@@ -16,6 +16,7 @@ import {
   streamText,
   isStreaming,
   streamChain,
+  activeRun,
   thinkStart,
   lastUserMsg,
   selectedClaudeModel,
@@ -46,6 +47,7 @@ import {
   projectPlan,
   feedItems,
   toasts,
+  clock,
   activities,
   showToast,
   chatCollabMode,
@@ -552,6 +554,7 @@ function DelegationPanel() {
 }
 
 function RunningBanner() {
+  clock.value;
   const proj = currentProject.value || "_orchestrator";
   const act = activities.value[proj];
   if (!act) return null;
@@ -561,6 +564,67 @@ function RunningBanner() {
   >
     <span style="animation:pulse .8s infinite">⚡</span> ${act.action}:
     ${act.detail} (${elapsed}s)
+  </div>`;
+}
+
+function LiveRunHud() {
+  clock.value;
+  const run = activeRun.value;
+  if (
+    !run ||
+    run.project !== (currentProject.value || "_orchestrator") ||
+    (!isStreaming.value &&
+      !["done", "failed", "cancelled"].includes(run.status))
+  ) {
+    return null;
+  }
+  const elapsed = run.startedAt
+    ? Math.max(0, Math.round((Date.now() - run.startedAt) / 1000))
+    : 0;
+  const terminal = ["done", "failed", "cancelled"].includes(run.status);
+  const recentTerminal =
+    terminal && run.updatedAt && Date.now() - run.updatedAt < 12000;
+  if (terminal && !recentTerminal && !isStreaming.value) return null;
+  const events = (run.events || []).slice(-6);
+  const statusLabel =
+    run.status === "done"
+      ? "done"
+      : run.status === "failed"
+        ? "failed"
+        : run.status === "cancelled"
+          ? "cancelled"
+          : run.status || "running";
+  return html`<div
+    class="live-run ${terminal ? "terminal" : "running"} ${run.status || ""}"
+  >
+    <div class="live-run-head">
+      <div class="live-run-pulse"></div>
+      <div class="live-run-main">
+        <div class="live-run-title">
+          <span>${run.provider || "agent"}</span>
+          ${run.model ? html`<em>${run.model}</em>` : null}
+          <b>${statusLabel}</b>
+        </div>
+        <div class="live-run-detail">
+          ${run.phase || "run"}: ${run.detail || "working"}
+        </div>
+      </div>
+      <div class="live-run-badges">
+        <span>${run.mode || "act"}</span>
+        <span>${run.access || "write"}</span>
+        <span>${elapsed}s</span>
+      </div>
+    </div>
+    ${events.length
+      ? html`<div class="live-run-events">
+          ${events.map(
+            (evt) =>
+              html`<span class=${evt.type === "run_done" ? "final" : ""}>
+                ${evt.phase || evt.type}: ${evt.detail || evt.outcome || ""}
+              </span>`,
+          )}
+        </div>`
+      : null}
   </div>`;
 }
 
@@ -1253,6 +1317,7 @@ function ChatSidebar() {
     </div>
     ${isDrag.value ? html`<div class="drop-zone">Drop files here</div>` : null}
     <${RunningBanner} />
+    <${LiveRunHud} />
     ${duoEnabled
       ? html`<div class="duo-brief">
           <div class="scope-strip">
@@ -1695,6 +1760,16 @@ function ChatSidebar() {
               streamText.value = "";
               streamChain.value = [];
               curActivity.value = "";
+              if (activeRun.value) {
+                activeRun.value = {
+                  ...activeRun.value,
+                  status: "cancelled",
+                  outcome: "cancelled",
+                  phase: "cancelled",
+                  detail: "stopped by user",
+                  updatedAt: Date.now(),
+                };
+              }
               showToast("Stopped", "info", 2000);
             }}
           >

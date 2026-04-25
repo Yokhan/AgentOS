@@ -9,6 +9,7 @@ import {
   streamText,
   isStreaming,
   streamChain,
+  activeRun,
   thinkStart,
   lastUserMsg,
   selectedClaudeModel,
@@ -171,6 +172,92 @@ function normalizedSoloProviderSelection() {
         : selectedClaudeEffort.value,
     ),
   };
+}
+
+function updateActiveRun(patch) {
+  const current = activeRun.value || {};
+  activeRun.value = {
+    ...current,
+    ...patch,
+    updatedAt: Date.now(),
+  };
+}
+
+function appendActiveRunEvent(evt) {
+  const current = activeRun.value || {};
+  const events = [
+    ...(current.events || []),
+    { ...evt, receivedAt: Date.now() },
+  ].slice(-40);
+  activeRun.value = {
+    ...current,
+    events,
+    updatedAt: Date.now(),
+  };
+}
+
+function handleRunLifecycleEvent(evt, fallback = {}) {
+  const type = evt?.type || "";
+  if (type === "run_started") {
+    activeRun.value = {
+      id: evt.run_id || fallback.id || String(Date.now()),
+      project: evt.project || fallback.project || "_orchestrator",
+      provider: evt.provider || fallback.provider || "agent",
+      model: evt.model || fallback.model || "",
+      effort: evt.effort || fallback.effort || "",
+      mode: evt.mode || fallback.mode || "act",
+      access: evt.access || fallback.access || "write",
+      status: evt.status || "running",
+      phase: evt.phase || "starting",
+      detail: evt.detail || "starting",
+      outcome: "",
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+      events: [{ ...evt, receivedAt: Date.now() }],
+    };
+    return;
+  }
+  if (!activeRun.value) return;
+  appendActiveRunEvent(evt);
+  if (type === "run_progress" || type === "run_heartbeat") {
+    updateActiveRun({
+      status: evt.status || activeRun.value.status || "running",
+      phase: evt.phase || activeRun.value.phase || "running",
+      detail: evt.detail || activeRun.value.detail || "",
+    });
+    return;
+  }
+  if (type === "run_done") {
+    const outcome = evt.outcome || "done";
+    updateActiveRun({
+      status:
+        outcome === "done"
+          ? "done"
+          : outcome === "cancelled"
+            ? "cancelled"
+            : "failed",
+      outcome,
+      phase: evt.phase || "done",
+      detail: evt.detail || outcome,
+      durationMs: evt.duration_ms || null,
+    });
+  }
+}
+
+function reconcilePolledActivity(projectKey, poll) {
+  if (!poll || !__IS_TAURI) return;
+  if (poll.activity) {
+    activities.value = {
+      ...activities.value,
+      [projectKey]: poll.activity,
+    };
+    return;
+  }
+  if (!poll.running && activities.value[projectKey]) {
+    const next = { ...activities.value };
+    delete next[projectKey];
+    activities.value = next;
+  }
 }
 // beep() imported from utils.js
 
@@ -1006,6 +1093,26 @@ async function sendMessage(msg) {
     const tools = [];
     if (__IS_TAURI) {
       const normalizedSelection = normalizedSoloProviderSelection();
+      const projectKey = proj || "_orchestrator";
+      activeRun.value = {
+        id: "local-" + Date.now(),
+        project: projectKey,
+        provider: normalizedSelection.provider || "auto",
+        model: normalizedSelection.model || "",
+        effort: normalizedSelection.effort || "",
+        mode: normalizedSelection.runMode || "act",
+        access:
+          normalizedSelection.runMode === "plan"
+            ? "read"
+            : normalizedSelection.accessLevel || "write",
+        status: "starting",
+        phase: "queued",
+        detail: "starting agent",
+        outcome: "",
+        startedAt: Date.now(),
+        updatedAt: Date.now(),
+        events: [],
+      };
       let offset = 0;
       let done = false;
       let pollCount = 0;
@@ -1030,6 +1137,12 @@ async function sendMessage(msg) {
         .catch((e) => {
           console.error("stream_chat error:", e);
           showToast("Chat error: " + e, "error");
+          updateActiveRun({
+            status: "failed",
+            outcome: "failed",
+            phase: "startup",
+            detail: String(e),
+          });
           isStreaming.value = false;
           done = true;
         });
@@ -1043,6 +1156,7 @@ async function sendMessage(msg) {
             project: proj || null,
             offset,
           });
+          reconcilePolledActivity(projectKey, poll);
           if (poll.events) {
             if (poll.events.length) {
               lastEventAt = Date.now();
@@ -1053,6 +1167,21 @@ async function sendMessage(msg) {
               curActivity.value = `waiting for agent/tool output... ${elapsed}s`;
             }
             for (const evt of poll.events) {
+              if (
+                evt.type === "run_started" ||
+                evt.type === "run_progress" ||
+                evt.type === "run_heartbeat" ||
+                evt.type === "run_done"
+              ) {
+                handleRunLifecycleEvent(evt, {
+                  project: projectKey,
+                  provider: normalizedSelection.provider,
+                  model: normalizedSelection.model,
+                  effort: normalizedSelection.effort,
+                  mode: normalizedSelection.runMode,
+                  access: normalizedSelection.accessLevel,
+                });
+              }
               // Text (complete block from assistant event)
               if (evt.type === "text") {
                 full = evt.text;
@@ -1097,6 +1226,13 @@ async function sendMessage(msg) {
               }
               // Tool use (started or complete)
               if (evt.type === "tool_use") {
+                if (evt.status === "started") {
+                  updateActiveRun({
+                    status: "running",
+                    phase: "tool",
+                    detail: evt.tool || "tool",
+                  });
+                }
                 const tb = {
                   type: "tool",
                   tool: evt.tool,
@@ -1153,6 +1289,11 @@ async function sendMessage(msg) {
                 evt.type === "warning" ||
                 evt.type === "pa_status"
               ) {
+                updateActiveRun({
+                  status: evt.type === "warning" ? "warning" : "running",
+                  phase: evt.type === "pa_status" ? "agentos" : "command",
+                  detail: evt.command || evt.text || "AgentOS command",
+                });
                 chain.push({
                   type: evt.type,
                   text: evt.text || "",
@@ -1193,6 +1334,19 @@ async function sendMessage(msg) {
               if (evt.type === "done") {
                 done = true;
                 if (evt.text && !full) full = evt.text;
+                if (
+                  activeRun.value &&
+                  !["done", "failed", "cancelled"].includes(
+                    activeRun.value.status,
+                  )
+                ) {
+                  updateActiveRun({
+                    status: "done",
+                    outcome: "done",
+                    phase: "done",
+                    detail: "complete",
+                  });
+                }
               }
             }
             offset = poll.offset;
@@ -1208,6 +1362,12 @@ async function sendMessage(msg) {
           "error",
           8000,
         );
+        updateActiveRun({
+          status: "failed",
+          outcome: "timeout",
+          phase: "timeout",
+          detail: "Response timed out after 30 minutes",
+        });
       }
       await streamStart.catch(() => {});
       // Unblock chat input immediately after poll loop exits
@@ -1281,6 +1441,12 @@ async function sendMessage(msg) {
     loadFeed();
   } catch (e) {
     isStreaming.value = false;
+    updateActiveRun({
+      status: "failed",
+      outcome: "failed",
+      phase: "frontend",
+      detail: String(e),
+    });
     sideMessages.value = [
       ...sideMessages.value,
       {

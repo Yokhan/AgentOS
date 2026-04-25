@@ -16,6 +16,9 @@ import {
   showKbHelp,
   theme,
   isLoading,
+  isStreaming,
+  activities,
+  delegations,
   sideMessages,
   projectPlan,
   permData,
@@ -205,3 +208,22 @@ setInterval(() => {
     loadDualSession(activeDualSession.value);
   }
 }, 3000);
+
+let _lastLiveProjectRefresh = 0;
+setInterval(() => {
+  const hasActivity = Object.keys(activities.value || {}).length > 0;
+  const hasDelegation = Object.values(delegations.value || {}).some((d) =>
+    ["pending", "scheduled", "running", "escalated", "deciding"].includes(
+      d?.status,
+    ),
+  );
+  if (!isStreaming.value && !hasActivity && !hasDelegation) return;
+  loadActivity().catch(() => {});
+  const now = Date.now();
+  if (now - _lastLiveProjectRefresh > 3000) {
+    _lastLiveProjectRefresh = now;
+    loadAgents().catch(() => {});
+    loadFeed().catch(() => {});
+    loadSignals().catch(() => {});
+  }
+}, 1000);

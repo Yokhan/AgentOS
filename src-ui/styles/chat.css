@@ -36,6 +36,40 @@
     opacity: 0.55;
     cursor: not-allowed;
 }
+.running-banner {
+    padding: var(--sp-s) var(--sp-m);
+    background: color-mix(in srgb, var(--green) 8%, var(--sf));
+    border-bottom: 1px solid var(--border);
+    font-size: var(--fs-s);
+    color: var(--green);
+    font-family: var(--font-mono);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-s);
+}
+.running-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 0.8s infinite;
+}
+.running-action {
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.running-detail {
+    color: var(--t2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.running-time {
+    margin-left: auto;
+    color: var(--t3);
+}
 .ch-msgs {
     flex: 1;
     overflow-y: auto;

@@ -195,6 +195,128 @@
     white-space: nowrap;
 }
 
+/* Live run HUD - one visible source of truth for current agent execution */
+.live-run {
+    margin: 0;
+    border-bottom: 1px solid var(--border);
+    background:
+        linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--cyan) 10%, transparent),
+            transparent 55%
+        ),
+        var(--sf);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.live-run-head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-s);
+    padding: var(--sp-s) var(--sp-m);
+}
+.live-run-pulse {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 10px var(--cyan);
+    flex-shrink: 0;
+    animation: live-run-pulse 0.9s ease-in-out infinite;
+}
+.live-run.terminal .live-run-pulse {
+    animation: none;
+    background: var(--green);
+    box-shadow: none;
+}
+.live-run.failed .live-run-pulse,
+.live-run.cancelled .live-run-pulse {
+    background: var(--accent);
+}
+.live-run-main {
+    min-width: 0;
+    flex: 1;
+}
+.live-run-title {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-xs);
+    min-width: 0;
+}
+.live-run-title span {
+    color: var(--text);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.live-run-title em {
+    color: var(--t3);
+    font-style: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.live-run-title b {
+    color: var(--cyan);
+    font-weight: 600;
+    margin-left: auto;
+}
+.live-run.done .live-run-title b {
+    color: var(--green);
+}
+.live-run.failed .live-run-title b,
+.live-run.cancelled .live-run-title b {
+    color: var(--accent);
+}
+.live-run-detail {
+    margin-top: 2px;
+    color: var(--t2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.live-run-badges {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.live-run-badges span {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--t3);
+    padding: 1px 5px;
+    text-transform: uppercase;
+}
+.live-run-events {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 0 var(--sp-m) var(--sp-s) calc(var(--sp-m) + 18px);
+}
+.live-run-events span {
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    color: var(--t3);
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    padding: 2px 6px;
+    white-space: nowrap;
+}
+.live-run-events span.final {
+    color: var(--green);
+    border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+}
+@keyframes live-run-pulse {
+    0%,
+    100% {
+        opacity: 0.45;
+        transform: scale(0.85);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.15);
+    }
+}
+
 /* Execution run card - compact command timeline inside one assistant turn */
 .run-card {
     margin: var(--sp-xs) 0;

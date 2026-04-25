@@ -9,6 +9,7 @@ const sideTitle = signal("orchestrator");
 const streamText = signal("");
 const isStreaming = signal(false);
 const streamChain = signal([]);
+const activeRun = signal(null);
 const thinkStart = signal(0);
 const lastUserMsg = signal("");
 const legacyModel = localStorage.getItem("agentos_model") || "";
@@ -169,6 +170,7 @@ export {
   streamText,
   isStreaming,
   streamChain,
+  activeRun,
   thinkStart,
   lastUserMsg,
   selectedClaudeModel,

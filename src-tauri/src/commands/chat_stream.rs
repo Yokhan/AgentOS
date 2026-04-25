@@ -10,6 +10,32 @@ use std::path::Path;
 use std::sync::Arc;
 use tauri::State;
 
+fn unix_millis() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
+
+fn response_outcome(text: &str, cancelled: bool, exit_code: Option<i32>) -> &'static str {
+    if cancelled {
+        return "cancelled";
+    }
+    if let Some(code) = exit_code {
+        if code != 0 {
+            return "failed";
+        }
+    }
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return "no_output";
+    }
+    if trimmed.starts_with("Provider error:") || trimmed.starts_with("ERROR:") {
+        return "failed";
+    }
+    "done"
+}
+
 fn append_stream_event(stream_buf: &Path, event: Value, label: &str) {
     crate::commands::jsonl::append_jsonl_logged(stream_buf, &event, label);
 }
@@ -146,6 +172,36 @@ pub async fn stream_chat(
             model.as_deref(),
             reasoning_effort.as_deref(),
         );
+    let run_id = format!("{}-{}", chat_key, unix_millis());
+    let run_mode_label = if plan_mode { "plan" } else { "act" };
+    let access_label = if plan_mode {
+        "read".to_string()
+    } else {
+        permission_profile
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .unwrap_or("project")
+            .to_string()
+    };
+    append_stream_event(
+        &stream_buf,
+        json!({
+            "type": "run_started",
+            "run_id": run_id.as_str(),
+            "project": chat_key.as_str(),
+            "provider": provider.as_str(),
+            "model": resolved_model.as_deref().unwrap_or("auto"),
+            "effort": resolved_effort.as_deref().unwrap_or(""),
+            "mode": run_mode_label,
+            "access": access_label.as_str(),
+            "status": "running",
+            "phase": "queued",
+            "detail": "starting provider",
+            "ts": state.now_iso()
+        }),
+        "stream run started",
+    );
 
     let is_orchestrator = project.is_empty();
     let allow_pa_loop = is_orchestrator && !plan_mode;
@@ -159,7 +215,20 @@ pub async fn stream_chat(
         let chat_file_bg = chat_file.clone();
         let stream_buf_bg = stream_buf.clone();
         let allow_pa_loop_bg = allow_pa_loop;
+        let run_id_bg = run_id.clone();
         std::thread::spawn(move || {
+            append_stream_event(
+                &stream_buf_bg,
+                json!({
+                    "type": "run_progress",
+                    "run_id": run_id_bg.as_str(),
+                    "status": "running",
+                    "phase": "provider",
+                    "detail": "waiting for codex",
+                    "ts": state_arc.now_iso()
+                }),
+                "stream codex provider running",
+            );
             let response = super::provider_runner::run_provider_with_opts(
                 &state_arc,
                 provider,
@@ -200,9 +269,28 @@ pub async fn stream_chat(
             } else {
                 response.clone()
             };
+            let outcome = response_outcome(
+                &final_response,
+                is_cancelled(&state_arc, &chat_key_bg),
+                None,
+            );
+            append_stream_event(
+                &stream_buf_bg,
+                json!({
+                    "type": "run_done",
+                    "run_id": run_id_bg.as_str(),
+                    "status": if outcome == "done" { "done" } else if outcome == "cancelled" { "cancelled" } else { "failed" },
+                    "phase": "done",
+                    "outcome": outcome,
+                    "detail": outcome,
+                    "text_len": final_response.len(),
+                    "ts": state_arc.now_iso()
+                }),
+                "stream codex run done",
+            );
             crate::commands::jsonl::append_jsonl_logged(
                 &stream_buf_bg,
-                &json!({"type":"done","text": final_response,"tools":[]}),
+                &json!({"type":"done","text": final_response,"tools":[],"outcome":outcome}),
                 "stream codex done",
             );
             clear_activity(&state_arc, &chat_key_bg);
@@ -279,6 +367,7 @@ pub async fn stream_chat(
             &perm_path_bg,
             resolved_model_bg.as_deref(),
             resolved_effort_bg.as_deref(),
+            &run_id,
             allow_pa_loop,
         );
     });
@@ -299,6 +388,7 @@ fn stream_reader_loop(
     perm_path: &str,
     model: Option<&str>,
     reasoning_effort: Option<&str>,
+    run_id: &str,
     allow_pa_loop: bool,
 ) {
     crate::log_info!(
@@ -331,6 +421,17 @@ fn stream_reader_loop(
             let _ = writeln!(f, "{}", serde_json::to_string(v).unwrap_or_default());
             let _ = f.flush();
         };
+        write_evt(
+            &mut buf_file,
+            &json!({
+                "type": "run_progress",
+                "run_id": run_id,
+                "status": "running",
+                "phase": "provider",
+                "detail": "claude stream opened",
+                "ts": state.now_iso()
+            }),
+        );
 
         for line in reader.lines() {
             let Ok(raw) = line else { break };
@@ -375,6 +476,17 @@ fn stream_reader_loop(
                                     write_evt(
                                         &mut buf_file,
                                         &json!({"type": "tool_use", "tool": cur_tool_name, "input": {}, "status": "started"}),
+                                    );
+                                    write_evt(
+                                        &mut buf_file,
+                                        &json!({
+                                            "type": "run_progress",
+                                            "run_id": run_id,
+                                            "status": "running",
+                                            "phase": "tool",
+                                            "detail": cur_tool_name,
+                                            "ts": state.now_iso()
+                                        }),
                                     );
                                 } else {
                                     is_thinking = false;
@@ -425,6 +537,17 @@ fn stream_reader_loop(
                                 write_evt(
                                     &mut buf_file,
                                     &json!({"type": "tool_use", "tool": cur_tool_name, "input": input, "status": "complete"}),
+                                );
+                                write_evt(
+                                    &mut buf_file,
+                                    &json!({
+                                        "type": "run_progress",
+                                        "run_id": run_id,
+                                        "status": "running",
+                                        "phase": "tool_complete",
+                                        "detail": cur_tool_name,
+                                        "ts": state.now_iso()
+                                    }),
                                 );
                                 saved_chain.push(json!({"type":"tool","tool":cur_tool_name,"input":input,"status":"complete"}));
                                 crate::log_info!(
@@ -529,6 +652,17 @@ fn stream_reader_loop(
                     }
                     write_evt(
                         &mut buf_file,
+                        &json!({
+                            "type": "run_progress",
+                            "run_id": run_id,
+                            "status": "running",
+                            "phase": "result",
+                            "detail": "model result received",
+                            "ts": state.now_iso()
+                        }),
+                    );
+                    write_evt(
+                        &mut buf_file,
                         &json!({"type": "result", "cost": evt.get("total_cost_usd"), "duration_ms": evt.get("duration_ms"), "tokens": evt.pointer("/usage/output_tokens")}),
                     );
                 }
@@ -544,6 +678,7 @@ fn stream_reader_loop(
     untrack_pid(state, chat_key);
     let _ = std::fs::remove_file(tmp);
     clear_activity(state, chat_key);
+    let exit_code = exit_status.as_ref().ok().and_then(|s| s.code());
 
     let stderr = String::from_utf8_lossy(&stderr_bytes);
     if !stderr.trim().is_empty() {
@@ -560,7 +695,7 @@ fn stream_reader_loop(
         event_count,
         tool_blocks.len(),
         full_text.len(),
-        exit_status.ok().map(|s| s.code())
+        exit_code
     );
 
     // Save full response
@@ -601,11 +736,27 @@ fn stream_reader_loop(
     } else {
         full_text.clone()
     };
+    let outcome = response_outcome(&final_text, is_cancelled(state, chat_key), exit_code);
+    append_stream_event(
+        stream_buf,
+        json!({
+            "type": "run_done",
+            "run_id": run_id,
+            "status": if outcome == "done" { "done" } else if outcome == "cancelled" { "cancelled" } else { "failed" },
+            "phase": "done",
+            "outcome": outcome,
+            "detail": outcome,
+            "text_len": final_text.len(),
+            "exit_code": exit_code,
+            "ts": state.now_iso()
+        }),
+        "stream run done",
+    );
 
     // Always write "done" marker so frontend stops polling
     crate::commands::jsonl::append_jsonl_logged(
         stream_buf,
-        &json!({"type":"done","text":final_text.trim(),"tools":tool_blocks}),
+        &json!({"type":"done","text":final_text.trim(),"tools":tool_blocks,"outcome":outcome}),
         "stream done marker",
     );
 }
