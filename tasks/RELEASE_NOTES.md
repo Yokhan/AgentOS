@@ -1,3 +1,11 @@
+# Agent OS 0.2.27
+
+- Fixed desktop stream polling for project chats: the frontend now polls the correct per-project stream buffer instead of always reading `_orchestrator`.
+- Extended chat streaming waits from 5 to 30 minutes and added a visible waiting heartbeat while agents or tools are still running.
+- Added an AgentOS command auto-continue loop: command results are fed back into the selected agent for up to 3 continuation turns instead of requiring the user to type "continue".
+- Applied the same auto-continue behavior to Duo execution leads, so execution does not stop after the first diagnostic/delegation command batch.
+- Added live heartbeat refresh for Duo participant, round, and room actions during long operations.
+
 # Agent OS 0.2.26
 
 - Reworked the chat sidebar into a clearer working surface: context bar, active route, model/provider visibility, delegation counts, quick diagnostics, and a chat -> compare -> plan -> execute flow rail.

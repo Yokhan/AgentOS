@@ -1257,6 +1257,64 @@ fn build_agent_prompt(
     prompt
 }
 
+const ROOM_AUTO_CONTINUE_TURNS: usize = 3;
+
+fn execute_room_pa_commands(state: &AppState, response: &str) -> (Vec<String>, Vec<String>) {
+    let commands = super::pa_commands::parse_pa_commands(response, state);
+    let warnings = super::pa_commands::detect_malformed_commands(response);
+    let mut feedback = Vec::new();
+    let mut fragments = Vec::new();
+
+    for parsed in &commands {
+        if !parsed.valid {
+            if let Some(err) = &parsed.error {
+                feedback.push(format!("warning -> {}", err));
+                fragments.push(format!("**Warning:** {}", err));
+            }
+            continue;
+        }
+        let command_label = super::pa_commands::describe_pa_command(&parsed.cmd);
+        match super::pa_commands::execute_pa_command(state, &parsed.cmd) {
+            Some(text) => {
+                let preview = super::claude_runner::safe_truncate(&text, 900);
+                feedback.push(format!("{} -> {}", command_label, preview));
+                fragments.push(format!("{}:\n{}", command_label, text));
+            }
+            None => {
+                let done = format!("Completed {} (no output)", command_label);
+                feedback.push(done.clone());
+                fragments.push(done);
+            }
+        }
+    }
+
+    for warning in warnings {
+        feedback.push(format!("warning -> {}", warning));
+        fragments.push(format!("**Note:** {}", warning));
+    }
+
+    (feedback, fragments)
+}
+
+fn build_room_auto_continue_message(turn: usize, feedback: &[String]) -> String {
+    format!(
+        "[AUTO-CONTINUE AFTER AGENTOS COMMANDS]\n\
+         AgentOS executed the PA commands from your previous response.\n\
+         Results:\n{}\n\n\
+         Continue the room task autonomously. If more action is needed, emit the next PA command tags on their own lines. \
+         If complete or blocked, report final status and concrete blocker. Do not ask the user to type continue.\n\
+         Auto-continue turn: {}/{}.",
+        feedback
+            .iter()
+            .enumerate()
+            .map(|(idx, item)| format!("{}. {}", idx + 1, item))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        turn,
+        ROOM_AUTO_CONTINUE_TURNS
+    )
+}
+
 fn normalize_file_intent(raw: &str) -> Option<String> {
     let normalized = raw
         .trim()
@@ -1974,24 +2032,46 @@ fn run_session_agent_core(
     super::process_manager::clear_activity(state, &chat_key);
 
     let mut final_response = response.clone();
+    let mut loop_response = response;
     if participant_can_execute_pa_commands(state, session, participant, analysis_only) {
-        let commands = super::pa_commands::parse_pa_commands(&response, state);
-        let warnings = super::pa_commands::detect_malformed_commands(&response);
-
-        for parsed in &commands {
-            if !parsed.valid {
-                if let Some(err) = &parsed.error {
-                    final_response += &format!("\n\n**Warning:** {}", err);
-                }
-                continue;
+        for turn in 1..=ROOM_AUTO_CONTINUE_TURNS {
+            let (feedback, fragments) = execute_room_pa_commands(state, &loop_response);
+            if feedback.is_empty() {
+                break;
             }
-            if let Some(text) = super::pa_commands::execute_pa_command(state, &parsed.cmd) {
-                final_response += &format!("\n\n---\n{}", text);
-            }
-        }
 
-        for warning in warnings {
-            final_response += &format!("\n\n---\n**Note:** {}", warning);
+            if !fragments.is_empty() {
+                final_response += "\n\n---\n";
+                final_response += &fragments.join("\n\n---\n");
+            }
+
+            let continuation_message = build_room_auto_continue_message(turn, &feedback);
+            let continuation_prompt =
+                build_agent_prompt(state, session, participant, &continuation_message, false);
+            super::process_manager::set_activity(
+                state,
+                &chat_key,
+                "multi-agent",
+                &format!("{} auto-continue {}", participant.label, turn),
+            );
+            if write_access {
+                state.acquire_dir_lock(&lock_key);
+            }
+            loop_response = super::provider_runner::run_provider_with_opts(
+                state,
+                participant.provider,
+                &cwd,
+                &continuation_prompt,
+                Some(&perm_path),
+                resolved_model.as_deref(),
+                resolved_effort.as_deref(),
+            );
+            if write_access {
+                state.release_dir_lock(&lock_key);
+            }
+            super::process_manager::clear_activity(state, &chat_key);
+            final_response += "\n\n---\n";
+            final_response += &loop_response;
         }
     }
 

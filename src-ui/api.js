@@ -1002,30 +1002,50 @@ async function sendMessage(msg) {
     const tools = [];
     if (__IS_TAURI) {
       const normalizedSelection = normalizedSoloProviderSelection();
-      // Tauri mode: invoke stream_chat + poll file-based buffer
-      __invoke("stream_chat", {
+      let offset = 0;
+      let done = false;
+      let pollCount = 0;
+      let lastEventAt = Date.now();
+      const MAX_POLLS = 7200; // 30 min max; long agent/tool runs should not require user nudges
+      // Tauri mode: start stream_chat, then poll the per-chat file-based buffer.
+      const streamStart = __invoke("stream_chat", {
         project: proj,
         message: msg,
         provider: normalizedSelection.provider || null,
         model: normalizedSelection.model || null,
         reasoningEffort: normalizedSelection.effort || null,
-      }).catch((e) => {
-        console.error("stream_chat error:", e);
-        showToast("Chat error: " + e, "error");
-        isStreaming.value = false;
-      });
-      let offset = 0;
-      let done = false;
-      let pollCount = 0;
-      const MAX_POLLS = 1200; // 5 min max
+      })
+        .then((res) => {
+          if (res?.status === "error") {
+            throw new Error(res?.error || "stream_chat failed");
+          }
+          return res;
+        })
+        .catch((e) => {
+          console.error("stream_chat error:", e);
+          showToast("Chat error: " + e, "error");
+          isStreaming.value = false;
+          done = true;
+        });
       // Collect ordered chain of blocks for rendering
       const chain = [];
       while (!done && pollCount < MAX_POLLS) {
         pollCount++;
         await new Promise((r) => setTimeout(r, 250));
         try {
-          const poll = await __invoke("poll_stream", { offset });
+          const poll = await __invoke("poll_stream", {
+            project: proj || null,
+            offset,
+          });
           if (poll.events) {
+            if (poll.events.length) {
+              lastEventAt = Date.now();
+            } else if (Date.now() - lastEventAt > 8000) {
+              const elapsed = Math.round(
+                (Date.now() - thinkStart.value) / 1000,
+              );
+              curActivity.value = `waiting for agent/tool output... ${elapsed}s`;
+            }
             for (const evt of poll.events) {
               // Text (complete block from assistant event)
               if (evt.type === "text") {
@@ -1178,11 +1198,12 @@ async function sendMessage(msg) {
       }
       if (!done && pollCount >= MAX_POLLS) {
         showToast(
-          "Response timed out (5 min). Try again or click Stop.",
+          "Response timed out (30 min). Try again or click Stop.",
           "error",
           8000,
         );
       }
+      await streamStart.catch(() => {});
       // Unblock chat input immediately after poll loop exits
       isStreaming.value = false;
       streamText.value = "";
@@ -1455,6 +1476,10 @@ async function runDualParticipant(participantId, message, analysisOnly = true) {
   }
   if (!sessionId) return;
   dualBusy.value = participantId;
+  const heartbeat = setInterval(() => {
+    loadDualSession(sessionId).catch(() => {});
+    loadActivity().catch(() => {});
+  }, 2500);
   try {
     const res = await __invoke("run_session_agent", {
       sessionId,
@@ -1473,6 +1498,7 @@ async function runDualParticipant(participantId, message, analysisOnly = true) {
   } catch (e) {
     showToast("Participant error: " + e, "error");
   } finally {
+    clearInterval(heartbeat);
     dualBusy.value = "";
   }
 }
@@ -1491,6 +1517,10 @@ async function runDualRound(message, analysisOnly = true) {
   }
   if (!sessionId) return;
   dualBusy.value = "round";
+  const heartbeat = setInterval(() => {
+    loadDualSession(sessionId).catch(() => {});
+    loadActivity().catch(() => {});
+  }, 2500);
   try {
     const res = await __invoke("run_session_round", {
       sessionId,
@@ -1511,6 +1541,7 @@ async function runDualRound(message, analysisOnly = true) {
   } catch (e) {
     showToast("Round error: " + e, "error");
   } finally {
+    clearInterval(heartbeat);
     dualBusy.value = "";
   }
 }
@@ -1526,6 +1557,10 @@ async function runDualRoomAction(action, message, targetParticipantId) {
   if (!sessionId) return;
   const busyKey = action + ":" + (targetParticipantId || "room");
   dualBusy.value = busyKey;
+  const heartbeat = setInterval(() => {
+    loadDualSession(sessionId).catch(() => {});
+    loadActivity().catch(() => {});
+  }, 2500);
   try {
     const res = await __invoke("run_session_room_action", {
       sessionId,
@@ -1542,6 +1577,7 @@ async function runDualRoomAction(action, message, targetParticipantId) {
   } catch (e) {
     showToast("Room action error: " + e, "error");
   } finally {
+    clearInterval(heartbeat);
     dualBusy.value = "";
   }
 }

@@ -131,75 +131,26 @@ pub async fn stream_chat(
                 "stream codex text",
             );
 
-            if is_orchestrator_bg {
-                let commands = super::pa_commands::parse_pa_commands(&response, &state_arc);
-                let warnings = super::pa_commands::detect_malformed_commands(&response);
-                for parsed in &commands {
-                    if !parsed.valid {
-                        if let Some(err) = &parsed.error {
-                            let command_label =
-                                super::pa_commands::describe_pa_command(&parsed.cmd);
-                            append_pa_feedback(
-                                &state_arc,
-                                &chat_file_bg,
-                                &stream_buf_bg,
-                                "warning",
-                                err,
-                                Some(command_label.as_str()),
-                                "stream codex warning",
-                            );
-                        }
-                        continue;
-                    }
-                    let command_label = super::pa_commands::describe_pa_command(&parsed.cmd);
-                    append_pa_feedback(
-                        &state_arc,
-                        &chat_file_bg,
-                        &stream_buf_bg,
-                        "pa_status",
-                        &format!("Running {}", command_label),
-                        Some(command_label.as_str()),
-                        "stream codex pa start",
-                    );
-                    if let Some(text) =
-                        super::pa_commands::execute_pa_command(&state_arc, &parsed.cmd)
-                    {
-                        append_pa_feedback(
-                            &state_arc,
-                            &chat_file_bg,
-                            &stream_buf_bg,
-                            "pa_result",
-                            &text,
-                            Some(command_label.as_str()),
-                            "stream codex pa result",
-                        );
-                    } else {
-                        append_pa_feedback(
-                            &state_arc,
-                            &chat_file_bg,
-                            &stream_buf_bg,
-                            "pa_status",
-                            &format!("Completed {} (no output)", command_label),
-                            Some(command_label.as_str()),
-                            "stream codex pa complete",
-                        );
-                    }
-                }
-                for warning in warnings {
-                    append_pa_feedback(
-                        &state_arc,
-                        &chat_file_bg,
-                        &stream_buf_bg,
-                        "warning",
-                        &warning,
-                        None,
-                        "stream codex malformed cmd",
-                    );
-                }
-            }
+            let final_response = if is_orchestrator_bg {
+                run_pa_agent_loop(
+                    &state_arc,
+                    provider,
+                    &cwd_bg,
+                    &perm_path_bg,
+                    &chat_key_bg,
+                    &chat_file_bg,
+                    &stream_buf_bg,
+                    &response,
+                    resolved_model.as_deref(),
+                    resolved_effort.as_deref(),
+                    "stream codex",
+                )
+            } else {
+                response.clone()
+            };
             crate::commands::jsonl::append_jsonl_logged(
                 &stream_buf_bg,
-                &json!({"type":"done","text": response,"tools":[]}),
+                &json!({"type":"done","text": final_response,"tools":[]}),
                 "stream codex done",
             );
             clear_activity(&state_arc, &chat_key_bg);
@@ -257,6 +208,10 @@ pub async fn stream_chat(
     let stream_buf_bg = stream_buf.clone();
     let chat_file_bg = chat_file.clone();
     let tmp_bg = tmp.clone();
+    let cwd_bg = cwd.clone();
+    let perm_path_bg = perm_path.clone();
+    let resolved_model_bg = resolved_model.clone();
+    let resolved_effort_bg = resolved_effort.clone();
 
     // Spawn background thread for blocking I/O — returns immediately
     std::thread::spawn(move || {
@@ -268,6 +223,10 @@ pub async fn stream_chat(
             &stream_buf_bg,
             &chat_file_bg,
             &tmp_bg,
+            &cwd_bg,
+            &perm_path_bg,
+            resolved_model_bg.as_deref(),
+            resolved_effort_bg.as_deref(),
             is_orchestrator,
         );
     });
@@ -284,6 +243,10 @@ fn stream_reader_loop(
     stream_buf: &std::path::Path,
     chat_file: &std::path::Path,
     tmp: &std::path::Path,
+    cwd: &std::path::Path,
+    perm_path: &str,
+    model: Option<&str>,
+    reasoning_effort: Option<&str>,
     is_orchestrator: bool,
 ) {
     crate::log_info!(
@@ -569,80 +532,216 @@ fn stream_reader_loop(
         );
     }
 
-    // Process ALL PA commands (orchestrator only) via shared executor
-    if is_orchestrator {
-        let commands = super::pa_commands::parse_pa_commands(&full_text, state);
-        let warnings = super::pa_commands::detect_malformed_commands(&full_text);
+    let final_text = if is_orchestrator {
+        run_pa_agent_loop(
+            state,
+            super::provider_runner::ProviderKind::Claude,
+            cwd,
+            perm_path,
+            chat_key,
+            chat_file,
+            stream_buf,
+            &full_text,
+            model,
+            reasoning_effort,
+            "stream",
+        )
+    } else {
+        full_text.clone()
+    };
 
-        for parsed in &commands {
-            if !parsed.valid {
-                if let Some(err) = &parsed.error {
-                    let command_label = super::pa_commands::describe_pa_command(&parsed.cmd);
-                    append_pa_feedback(
-                        state,
-                        chat_file,
-                        stream_buf,
-                        "warning",
-                        err,
-                        Some(command_label.as_str()),
-                        "stream warning",
-                    );
-                }
-                continue;
+    // Always write "done" marker so frontend stops polling
+    crate::commands::jsonl::append_jsonl_logged(
+        stream_buf,
+        &json!({"type":"done","text":final_text.trim(),"tools":tool_blocks}),
+        "stream done marker",
+    );
+}
+
+const MAX_AUTO_CONTINUE_TURNS: usize = 3;
+
+fn feedback_preview(text: &str) -> String {
+    let clean = text.replace('\r', "").trim().to_string();
+    let preview: String = clean.chars().take(900).collect();
+    if clean.chars().count() > 900 {
+        format!("{}...", preview)
+    } else {
+        preview
+    }
+}
+
+fn execute_pa_commands_for_agent_loop(
+    state: &AppState,
+    chat_file: &Path,
+    stream_buf: &Path,
+    response: &str,
+    label_prefix: &str,
+) -> Vec<String> {
+    let commands = super::pa_commands::parse_pa_commands(response, state);
+    let warnings = super::pa_commands::detect_malformed_commands(response);
+    let mut feedback = Vec::new();
+
+    for parsed in &commands {
+        if !parsed.valid {
+            if let Some(err) = &parsed.error {
+                let command_label = super::pa_commands::describe_pa_command(&parsed.cmd);
+                append_pa_feedback(
+                    state,
+                    chat_file,
+                    stream_buf,
+                    "warning",
+                    err,
+                    Some(command_label.as_str()),
+                    &format!("{} warning", label_prefix),
+                );
+                feedback.push(format!("{} -> warning: {}", command_label, err));
             }
-            let command_label = super::pa_commands::describe_pa_command(&parsed.cmd);
+            continue;
+        }
+
+        let command_label = super::pa_commands::describe_pa_command(&parsed.cmd);
+        append_pa_feedback(
+            state,
+            chat_file,
+            stream_buf,
+            "pa_status",
+            &format!("Running {}", command_label),
+            Some(command_label.as_str()),
+            &format!("{} pa start", label_prefix),
+        );
+
+        if let Some(text) = super::pa_commands::execute_pa_command(state, &parsed.cmd) {
+            append_pa_feedback(
+                state,
+                chat_file,
+                stream_buf,
+                "pa_result",
+                &text,
+                Some(command_label.as_str()),
+                &format!("{} pa result", label_prefix),
+            );
+            feedback.push(format!("{} -> {}", command_label, feedback_preview(&text)));
+        } else {
+            let done = format!("Completed {} (no output)", command_label);
             append_pa_feedback(
                 state,
                 chat_file,
                 stream_buf,
                 "pa_status",
-                &format!("Running {}", command_label),
+                &done,
                 Some(command_label.as_str()),
-                "stream pa start",
+                &format!("{} pa complete", label_prefix),
             );
-            // Execute command via shared function and emit result to stream
-            if let Some(text) = super::pa_commands::execute_pa_command(state, &parsed.cmd) {
-                append_pa_feedback(
-                    state,
-                    chat_file,
-                    stream_buf,
-                    "pa_result",
-                    &text,
-                    Some(command_label.as_str()),
-                    "stream pa result",
-                );
-            } else {
-                append_pa_feedback(
-                    state,
-                    chat_file,
-                    stream_buf,
-                    "pa_status",
-                    &format!("Completed {} (no output)", command_label),
-                    Some(command_label.as_str()),
-                    "stream pa complete",
-                );
-            }
-        }
-
-        for w in warnings {
-            append_pa_feedback(
-                state,
-                chat_file,
-                stream_buf,
-                "warning",
-                &w,
-                None,
-                "stream malformed cmd",
-            );
+            feedback.push(done);
         }
     }
 
-    // Always write "done" marker so frontend stops polling
-    crate::commands::jsonl::append_jsonl_logged(
-        stream_buf,
-        &json!({"type":"done","text":full_text.trim(),"tools":tool_blocks}),
-        "stream done marker",
-    );
+    for warning in warnings {
+        append_pa_feedback(
+            state,
+            chat_file,
+            stream_buf,
+            "warning",
+            &warning,
+            None,
+            &format!("{} malformed cmd", label_prefix),
+        );
+        feedback.push(format!("warning -> {}", warning));
+    }
+
+    feedback
+}
+
+fn build_auto_continue_prompt(turn: usize, feedback: &[String]) -> String {
+    format!(
+        "[AUTO-CONTINUE AFTER AGENTOS COMMANDS]\n\
+         AgentOS executed the PA commands from your previous response.\n\
+         Results:\n{}\n\n\
+         Continue autonomously from these results. If more action is needed, emit the next PA command tags on their own lines. \
+         If the task is complete or blocked, report the final status and concrete blocker. Do not ask the user to type continue.\n\
+         Auto-continue turn: {}/{}.",
+        feedback
+            .iter()
+            .enumerate()
+            .map(|(idx, item)| format!("{}. {}", idx + 1, item))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        turn,
+        MAX_AUTO_CONTINUE_TURNS
+    )
+}
+
+fn run_pa_agent_loop(
+    state: &AppState,
+    provider: super::provider_runner::ProviderKind,
+    cwd: &Path,
+    perm_path: &str,
+    chat_key: &str,
+    chat_file: &Path,
+    stream_buf: &Path,
+    first_response: &str,
+    model: Option<&str>,
+    reasoning_effort: Option<&str>,
+    label_prefix: &str,
+) -> String {
+    let mut response = first_response.to_string();
+    let mut final_response = response.clone();
+
+    for turn in 1..=MAX_AUTO_CONTINUE_TURNS {
+        let feedback = execute_pa_commands_for_agent_loop(
+            state,
+            chat_file,
+            stream_buf,
+            &response,
+            label_prefix,
+        );
+        if feedback.is_empty() {
+            break;
+        }
+
+        append_pa_feedback(
+            state,
+            chat_file,
+            stream_buf,
+            "pa_status",
+            &format!(
+                "Auto-continuing after {} PA result{}",
+                feedback.len(),
+                if feedback.len() == 1 { "" } else { "s" }
+            ),
+            None,
+            &format!("{} auto continue", label_prefix),
+        );
+
+        let user_message = build_auto_continue_prompt(turn, &feedback);
+        let prompt = super::chat_parse::build_full_pa_prompt(state, &user_message);
+        response = super::provider_runner::run_provider_with_opts(
+            state,
+            provider,
+            cwd,
+            &prompt,
+            Some(perm_path),
+            model,
+            reasoning_effort,
+        );
+        final_response = response.clone();
+
+        let ts = state.now_iso();
+        let asst_entry = json!({"ts": ts, "role": "assistant", "msg": response});
+        crate::commands::jsonl::append_jsonl_logged(
+            chat_file,
+            &asst_entry,
+            &format!("{} auto response", label_prefix),
+        );
+        super::claude_runner::log_chat_event(state.root.as_path(), chat_key, &response);
+        append_stream_event(
+            stream_buf,
+            json!({"type":"text","text": response}),
+            &format!("{} auto text", label_prefix),
+        );
+    }
+
+    final_response
 }
 
 // poll_stream, stop_chat, is_chat_running → moved to chat_stream_poll.rs
