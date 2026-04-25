@@ -718,14 +718,11 @@ function ChatSidebar() {
       showToast(`No ${provider} participant in this Duo room`, "error");
       return;
     }
-    if (!candidate.write_enabled) {
-      showToast(
-        `${candidate.label} is review-only. Grant write in execute controls before using it as the orchestrator.`,
-        "error",
-      );
-      return;
-    }
     await useDuoOrchestrator(candidate.id);
+    showToast(
+      `${candidate.label} is now orchestrator with write access`,
+      "success",
+    );
     setDuoComposerAction("send");
     setDuoComposerTarget("");
     setDuoView("execute");
@@ -1201,7 +1198,10 @@ function ChatSidebar() {
                     disabled=${!!dualBusy.value}
                     onClick=${() => useDuoOrchestrator(participant.id)}
                   >
-                    lead: ${participant.label}
+                    lead:
+                    ${participant.label}${participant.write_enabled
+                      ? ""
+                      : " + write"}
                   </button>`,
               )}
               ${[
@@ -1276,7 +1276,10 @@ function ChatSidebar() {
                     disabled=${!!dualBusy.value}
                     onClick=${() => useDuoOrchestrator(participant.id)}
                   >
-                    lead: ${participant.label}
+                    lead:
+                    ${participant.label}${participant.write_enabled
+                      ? ""
+                      : " + write"}
                   </button>`,
               )}
               ${latestDuoRound.assistants.map((msg) => {

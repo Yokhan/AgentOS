@@ -58,7 +58,7 @@ pub async fn send_chat(
             provider,
             &cwd,
             &prompt,
-            None,
+            Some(&perm_path),
             resolved_model.as_deref(),
             resolved_effort.as_deref(),
         )

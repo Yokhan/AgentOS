@@ -382,6 +382,40 @@ fn codex_effort_config_arg(model: Option<&str>, effort: &str) -> Option<String> 
     Some(format!("model_reasoning_effort=\"{}\"", normalized))
 }
 
+fn codex_sandbox_for_permission_path(perm_path: Option<&str>) -> &'static str {
+    let Some(path) = perm_path.filter(|p| !p.trim().is_empty()) else {
+        return "read-only";
+    };
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return "read-only";
+    };
+    let Ok(value) = serde_json::from_str::<Value>(&raw) else {
+        return "read-only";
+    };
+    let allow = value
+        .get("permissions")
+        .and_then(|permissions| permissions.get("allow"))
+        .and_then(|allow| allow.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let allowed: Vec<String> = allow
+        .iter()
+        .filter_map(|item| item.as_str().map(|s| s.to_ascii_lowercase()))
+        .collect();
+    let can_write = allowed
+        .iter()
+        .any(|item| item == "write" || item == "edit" || item == "notebookedit");
+    if !can_write {
+        return "read-only";
+    }
+    let full_bash = allowed.iter().any(|item| item == "bash");
+    if full_bash {
+        "danger-full-access"
+    } else {
+        "workspace-write"
+    }
+}
+
 fn codex_wants_runtime_control(model: Option<&str>, reasoning_effort: Option<&str>) -> bool {
     model.filter(|m| !m.trim().is_empty()).is_some()
         || reasoning_effort.filter(|e| !e.trim().is_empty()).is_some()
@@ -887,6 +921,7 @@ fn run_codex_official_cli(
     state: &AppState,
     cwd: &Path,
     prompt: &str,
+    perm_path: Option<&str>,
     model: Option<&str>,
     reasoning_effort: Option<&str>,
 ) -> String {
@@ -919,6 +954,7 @@ fn run_codex_official_cli(
     let mut cmd = super::claude_runner::silent_cmd(&binary);
     cmd.args(["exec", "--skip-git-repo-check", "-o"])
         .arg(&output_file)
+        .args(["--sandbox", codex_sandbox_for_permission_path(perm_path)])
         .arg("-");
 
     if let Some(model) = model.filter(|m| !m.is_empty()) {
@@ -1036,7 +1072,7 @@ pub fn run_provider_with_opts(
         ProviderKind::Codex => match effective_codex_transport(state, model, reasoning_effort) {
             CodexTransport::Cli => {
                 if codex_template(state).is_empty() {
-                    run_codex_official_cli(state, cwd, prompt, model, reasoning_effort)
+                    run_codex_official_cli(state, cwd, prompt, perm_path, model, reasoning_effort)
                 } else {
                     run_codex_with_template(state, cwd, prompt, model, reasoning_effort)
                 }
@@ -1279,6 +1315,43 @@ user
         assert!(compact.contains("requires a newer version of Codex"));
         assert!(!compact.contains("[IDENTITY]"));
         assert!(!compact.contains("/queue"));
+    }
+
+    #[test]
+    fn codex_sandbox_follows_permission_profile() {
+        let root = temp_path("codex-sandbox");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let restrictive = root.join("restrictive.json");
+        let balanced = root.join("balanced.json");
+        let permissive = root.join("permissive.json");
+        std::fs::write(&restrictive, r#"{"permissions":{"allow":["Read","Grep"]}}"#).unwrap();
+        std::fs::write(
+            &balanced,
+            r#"{"permissions":{"allow":["Read","Edit","Write","Bash(git status*)"]}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            &permissive,
+            r#"{"permissions":{"allow":["Read","Edit","Write","Bash"]}}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            codex_sandbox_for_permission_path(Some(restrictive.to_string_lossy().as_ref())),
+            "read-only"
+        );
+        assert_eq!(
+            codex_sandbox_for_permission_path(Some(balanced.to_string_lossy().as_ref())),
+            "workspace-write"
+        );
+        assert_eq!(
+            codex_sandbox_for_permission_path(Some(permissive.to_string_lossy().as_ref())),
+            "danger-full-access"
+        );
+        assert_eq!(codex_sandbox_for_permission_path(None), "read-only");
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

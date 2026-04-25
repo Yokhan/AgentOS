@@ -1,3 +1,10 @@
+# Agent OS 0.2.17
+
+- Fixed Codex write execution: Codex CLI now receives an explicit sandbox derived from the same AgentOS permission profile as Claude (`read-only`, `workspace-write`, or `danger-full-access`).
+- Solo Codex chat and Duo Codex execution now pass the selected permission profile into the provider runner instead of dropping it.
+- `Codex leads execution` now promotes Codex to orchestrator and grants write access in one action; lead buttons show when they will grant write.
+- Added regression coverage for Codex sandbox mapping from restrictive/balanced/permissive profiles.
+
 # Agent OS 0.2.16
 
 - Made Codex runtime selection explicit: Settings now shows configured transport, effective route, CLI status, ACP status, and one-click `use CLI` / `use ACP` switches.

@@ -56,6 +56,7 @@ pub async fn stream_chat(
         let state_arc = Arc::clone(&state);
         let prompt_bg = prompt.clone();
         let cwd_bg = cwd.clone();
+        let perm_path_bg = perm_path.clone();
         let chat_key_bg = chat_key.clone();
         let chat_file_bg = chat_file.clone();
         let stream_buf_bg = stream_buf.clone();
@@ -65,7 +66,7 @@ pub async fn stream_chat(
                 provider,
                 &cwd_bg,
                 &prompt_bg,
-                None,
+                Some(&perm_path_bg),
                 resolved_model.as_deref(),
                 resolved_effort.as_deref(),
             );
