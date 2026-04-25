@@ -12,10 +12,22 @@ fn append_stream_event(stream_buf: &Path, event: Value, label: &str) {
     crate::commands::jsonl::append_jsonl_logged(stream_buf, &event, label);
 }
 
-fn append_chat_system(state: &AppState, chat_file: &Path, text: &str, label: &str) {
+fn append_chat_system(
+    state: &AppState,
+    chat_file: &Path,
+    event_type: &str,
+    text: &str,
+    label: &str,
+) {
     crate::commands::jsonl::append_jsonl_logged(
         chat_file,
-        &json!({"ts": state.now_iso(), "role": "system", "msg": text}),
+        &json!({
+            "ts": state.now_iso(),
+            "role": "system",
+            "kind": "pa_feedback",
+            "pa_type": event_type,
+            "msg": text
+        }),
         label,
     );
 }
@@ -29,7 +41,7 @@ fn append_pa_feedback(
     label: &str,
 ) {
     append_stream_event(stream_buf, json!({"type": event_type, "text": text}), label);
-    append_chat_system(state, chat_file, text, label);
+    append_chat_system(state, chat_file, event_type, text, label);
 }
 
 #[tauri::command]

@@ -1,3 +1,9 @@
+# Agent OS 0.2.22
+
+- Grouped PA command feedback into the assistant chat turn instead of scattering execution output as separate `SYSTEM` messages.
+- Rendered PA execution as collapsible command trace cards with command status, warnings, and long outputs collapsed.
+- Hid raw standalone PA command lines such as `[TEMPLATE_AUDIT]` from assistant prose when the executed trace is available.
+
 # Agent OS 0.2.21
 
 - Added explicit `pa status` chat entries before and after each PA command, so long diagnostics show exactly which command is running instead of looking like a frozen assistant message.

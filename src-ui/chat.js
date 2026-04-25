@@ -1676,6 +1676,189 @@ function ProgressBar({ activity, elapsed }) {
     ${elapsed > 2 ? html`<span class="prog-time">${elapsed}s</span>` : null}
   </div>`;
 }
+
+const PA_COMMAND_LINE = /^\s*\[[A-Z][A-Z0-9_]*(?::[^\]]*)?\]\s*$/;
+
+function isPaFeedbackBlock(block) {
+  return (
+    block &&
+    (block.type === "pa_result" ||
+      block.type === "warning" ||
+      block.type === "pa_status")
+  );
+}
+
+function groupChainBlocks(chain) {
+  const out = [];
+  let paBlocks = [];
+  const flushPa = () => {
+    if (!paBlocks.length) return;
+    out.push({ type: "pa_trace", blocks: paBlocks });
+    paBlocks = [];
+  };
+  for (const block of chain || []) {
+    if (isPaFeedbackBlock(block)) {
+      paBlocks.push(block);
+    } else {
+      flushPa();
+      out.push(block);
+    }
+  }
+  flushPa();
+  return out;
+}
+
+function stripPaCommandLines(text, shouldStrip) {
+  if (!shouldStrip || !text) return text || "";
+  const lines = String(text)
+    .split(/\r?\n/)
+    .filter((line) => !PA_COMMAND_LINE.test(line));
+  return lines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function extractPaCommand(text) {
+  const match = String(text || "").match(/\[[A-Z][A-Z0-9_]*(?::[^\]]*)?\]/);
+  return match ? match[0] : "";
+}
+
+function previewLine(text, limit = 96) {
+  const oneLine = String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return oneLine.length > limit ? oneLine.slice(0, limit) + "..." : oneLine;
+}
+
+function buildPaTraceRows(blocks) {
+  const rows = [];
+  for (const block of blocks || []) {
+    const text = block.text || "";
+    if (block.type === "pa_status") {
+      const command = extractPaCommand(text);
+      const lower = text.toLowerCase();
+      rows.push({
+        type: "status",
+        status: lower.startsWith("running")
+          ? "running"
+          : lower.startsWith("completed")
+            ? "done"
+            : "info",
+        command,
+        label: previewLine(
+          text.replace(command, "").replace(/^running\s*/i, ""),
+        ),
+        output: "",
+      });
+      continue;
+    }
+    if (block.type === "pa_result") {
+      const last = [...rows]
+        .reverse()
+        .find((row) => row.type === "status" && !row.output);
+      if (last) {
+        last.status = "done";
+        last.output = text;
+      } else {
+        rows.push({
+          type: "result",
+          status: "done",
+          command: extractPaCommand(text),
+          label: "result",
+          output: text,
+        });
+      }
+      continue;
+    }
+    rows.push({
+      type: "warning",
+      status: "warning",
+      command: extractPaCommand(text),
+      label: "warning",
+      output: text,
+    });
+  }
+  return rows;
+}
+
+function PaTraceOutput({ text, warning }) {
+  if (!text) return null;
+  const long = text.length > 900 || text.split(/\r?\n/).length > 14;
+  const body = html`<pre class="pa-trace-output ${warning ? "is-warning" : ""}">
+${text}</pre
+  >`;
+  if (!long) return body;
+  return html`<details class="pa-trace-more">
+    <summary>${previewLine(text, 130)} <span>show full output</span></summary>
+    ${body}
+  </details>`;
+}
+
+function PaTrace({ blocks }) {
+  const rows = buildPaTraceRows(blocks);
+  if (!rows.length) return null;
+  const commandCount =
+    rows.filter((row) => row.command).length ||
+    blocks.filter((block) => block.type === "pa_status").length ||
+    rows.length;
+  const warningCount = rows.filter((row) => row.status === "warning").length;
+  const running = rows.find((row) => row.status === "running");
+  const title = running
+    ? `Running ${running.command || "PA command"}`
+    : `Ran ${commandCount} PA command${commandCount === 1 ? "" : "s"}`;
+  return html`<details class="pa-trace" open=${!!running || !!warningCount}>
+    <summary class="pa-trace-summary">
+      <span class="pa-trace-kicker">${running ? "running" : "tools"}</span>
+      <span class="pa-trace-title">${title}</span>
+      ${warningCount
+        ? html`<span class="pa-trace-warn">${warningCount} warning</span>`
+        : null}
+    </summary>
+    <div class="pa-trace-body">
+      ${rows.map((row, i) => {
+        const cls =
+          row.status === "warning"
+            ? "is-warning"
+            : row.status === "running"
+              ? "is-running"
+              : row.status === "done"
+                ? "is-done"
+                : "";
+        return html`<div class="pa-trace-row ${cls}" key=${"pa-row" + i}>
+          <div class="pa-trace-row-head">
+            <span class="pa-trace-state">${row.status}</span>
+            <span class="pa-trace-command">${row.command || "PA command"}</span>
+            ${row.label
+              ? html`<span class="pa-trace-label">${row.label}</span>`
+              : null}
+          </div>
+          <${PaTraceOutput}
+            text=${row.output}
+            warning=${row.status === "warning"}
+          />
+        </div>`;
+      })}
+    </div>
+  </details>`;
+}
+
+function TextBlock({ text, stripCommands, prefix }) {
+  const t = stripPaCommandLines(text, stripCommands);
+  if (!t) return null;
+  if (t.length > 800)
+    return html`<details key=${prefix}>
+      <summary style="cursor:pointer;color:var(--t2);font-size:var(--fs-s)">
+        ${t.substring(0, 200).replace(/\n/g, " ")}...
+        <span style="color:var(--accent)">show more</span>
+      </summary>
+      <div dangerouslySetInnerHTML=${{ __html: md(t) }}></div>
+    </details>`;
+  return html`<div
+    key=${prefix}
+    dangerouslySetInnerHTML=${{ __html: md(t) }}
+  ></div>`;
+}
 function DuoLiveStatus({ session }) {
   if (!session) return null;
   const participants = session.participants || [];
@@ -1729,8 +1912,10 @@ function ChatMsg({ m }) {
   ];
   const clean = (m.msg || "").replace(/<delegation[^>]*\/>/g, "");
   const chain = m.chain || [];
+  const groupedChain = groupChainBlocks(chain);
+  const hasPaTrace = groupedChain.some((b) => b.type === "pa_trace");
   // If we have a chain, render blocks in order. Otherwise fall back to flat text+tools
-  const hasChain = chain.length > 0 && m.role === "assistant";
+  const hasChain = groupedChain.length > 0 && m.role === "assistant";
   const duoAgentLabel = (m.meta || "").replace(/^[\s·]+/, "").trim();
   const srcLabel =
     m.role === "user"
@@ -1766,23 +1951,14 @@ function ChatMsg({ m }) {
   >
     <div class="msg-src ${srcCls}">${srcLabel}</div>
     ${hasChain
-      ? chain.map((b, i) => {
+      ? groupedChain.map((b, i) => {
           if (b.type === "text") {
-            const t = b.text || "";
-            if (t.length > 800)
-              return html`<details key=${"t" + i}>
-                <summary
-                  style="cursor:pointer;color:var(--t2);font-size:var(--fs-s)"
-                >
-                  ${t.substring(0, 200).replace(/\n/g, " ")}...
-                  <span style="color:var(--accent)">show more</span>
-                </summary>
-                <div dangerouslySetInnerHTML=${{ __html: md(t) }}></div>
-              </details>`;
-            return html`<div
+            return html`<${TextBlock}
               key=${"t" + i}
-              dangerouslySetInnerHTML=${{ __html: md(t) }}
-            ></div>`;
+              text=${b.text || ""}
+              stripCommands=${hasPaTrace}
+              prefix=${"t" + i}
+            />`;
           }
           if (b.type === "tool")
             return html`<${ToolCard} key=${"tc" + i} t=${b} />`;
@@ -1796,6 +1972,8 @@ function ChatMsg({ m }) {
             </div>`;
           if (b.type === "thinking")
             return html`<${ThinkBlock} key=${"th" + i} b=${b} />`;
+          if (b.type === "pa_trace")
+            return html`<${PaTrace} key=${"pat" + i} blocks=${b.blocks} />`;
           if (b.type === "system")
             return html`<div
               key=${"s" + i}
@@ -1868,6 +2046,8 @@ function ChatMsg({ m }) {
 function StreamBubble() {
   if (!isStreaming.value && !streamText.value) return null;
   const ch = streamChain.value;
+  const groupedCh = groupChainBlocks(ch);
+  const hasPaTrace = groupedCh.some((b) => b.type === "pa_trace");
   const el = thinkStart.value
     ? Math.round((Date.now() - thinkStart.value) / 1000)
     : 0;
@@ -1875,12 +2055,14 @@ function StreamBubble() {
   // Show progress bar + chain blocks
   return html`<div class="m a stream-chain">
     <${ProgressBar} activity=${act} elapsed=${el} />
-    ${ch.map((b, i) => {
+    ${groupedCh.map((b, i) => {
       if (b.type === "text")
-        return html`<div
+        return html`<${TextBlock}
           key=${"st" + i}
-          dangerouslySetInnerHTML=${{ __html: md(b.text || "") }}
-        ></div>`;
+          text=${b.text || ""}
+          stripCommands=${hasPaTrace}
+          prefix=${"st" + i}
+        />`;
       if (b.type === "tool")
         return html`<${ToolCard} key=${"stc" + i} t=${b} />`;
       if (b.type === "tool_result")
@@ -1893,6 +2075,8 @@ function StreamBubble() {
         </div>`;
       if (b.type === "thinking")
         return html`<${ThinkBlock} key=${"sth" + i} b=${b} />`;
+      if (b.type === "pa_trace")
+        return html`<${PaTrace} key=${"spat" + i} blocks=${b.blocks} />`;
       if (b.type === "system")
         return html`<div
           key=${"ss" + i}

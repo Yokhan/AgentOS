@@ -274,7 +274,7 @@ async function loadChat(p) {
     const r = await fetch("/api/chat/" + encodeURIComponent(p));
     if (myId !== _chatLoadId) return; // stale — another loadChat started
     const d = await r.json();
-    const msgs = (d.messages || []).map((m) => {
+    const rawMsgs = (d.messages || []).map((m) => {
       if (m.tools && m.tools.length && !m.chain) {
         const chain = [];
         for (const t of m.tools) {
@@ -290,6 +290,25 @@ async function loadChat(p) {
       }
       return m;
     });
+    const msgs = [];
+    for (const m of rawMsgs) {
+      if (m.kind === "pa_feedback") {
+        const prev = msgs[msgs.length - 1];
+        if (prev && prev.role === "assistant") {
+          prev.chain = prev.chain?.length
+            ? [...prev.chain]
+            : prev.msg
+              ? [{ type: "text", text: prev.msg }]
+              : [];
+          prev.chain.push({
+            type: m.pa_type || "pa_result",
+            text: m.msg || "",
+          });
+          continue;
+        }
+      }
+      msgs.push(m);
+    }
     sideMessages.value = msgs;
     const newDel = { ...delegations.value };
     for (const m of msgs) {
