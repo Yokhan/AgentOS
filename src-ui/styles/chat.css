@@ -316,6 +316,60 @@
     color: var(--text);
     border-color: var(--text);
 }
+.route-progress-panel {
+    border: 1px solid color-mix(in srgb, var(--cyan) 24%, var(--border));
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    padding: 7px 8px;
+    display: grid;
+    gap: var(--sp-xs);
+}
+.route-progress-panel.active {
+    border-color: color-mix(in srgb, var(--green) 42%, var(--border));
+}
+.route-progress-panel.needs-user {
+    border-color: color-mix(in srgb, var(--yellow) 55%, var(--border));
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--yellow) 10%, transparent),
+        color-mix(in srgb, var(--bg) 78%, transparent)
+    );
+}
+.route-progress-head,
+.route-progress-chips {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+}
+.route-progress-head {
+    justify-content: space-between;
+}
+.route-progress-head b {
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+.route-progress-head span,
+.route-progress-chips span {
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.route-progress-chips span {
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    background: var(--sf);
+}
+.route-progress-chips .phase-running,
+.route-progress-chips .phase-verifying,
+.route-progress-chips .phase-reviewing {
+    color: var(--green);
+}
+.route-progress-chips .phase-needs_user,
+.route-progress-chips .phase-blocked {
+    color: var(--yellow);
+}
 .orch-work-strip,
 .orch-actions {
     display: flex;
@@ -384,7 +438,9 @@
     grid-template-areas:
         "state title action"
         "state next action"
-        "state meta action";
+        "state steps action"
+        "state meta action"
+        "state verdict action";
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 2px var(--sp-xs);
     text-align: left;
@@ -397,13 +453,15 @@
 }
 .route-lane .lane-state {
     grid-area: state;
-    align-self: stretch;
-    writing-mode: vertical-rl;
+    align-self: start;
     text-transform: uppercase;
     letter-spacing: 1px;
     font-family: var(--font-mono);
     font-size: var(--fs-xs);
     color: var(--t3);
+    border: 1px solid var(--border);
+    padding: 2px 5px;
+    white-space: nowrap;
 }
 .route-lane b {
     grid-area: title;
@@ -419,10 +477,38 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.route-lane .lane-steps {
+    grid-area: steps;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+.route-lane .lane-steps i {
+    width: 16px;
+    height: 3px;
+    background: color-mix(in srgb, var(--border) 70%, transparent);
+}
+.route-lane .lane-steps i.step-done {
+    background: var(--green);
+}
+.route-lane .lane-steps i.step-current {
+    background: var(--cyan);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--cyan) 50%, transparent);
+}
+.route-lane .lane-steps i.step-blocked {
+    background: var(--yellow);
+}
 .route-lane small {
     grid-area: meta;
     font-family: var(--font-mono);
     color: var(--t3);
+}
+.route-lane .lane-verdict {
+    grid-area: verdict;
+    color: var(--t2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .route-lane .lane-action {
     grid-area: action;
@@ -464,8 +550,20 @@
 .route-lane.blocked {
     border-color: color-mix(in srgb, var(--yellow) 55%, var(--border));
 }
-.route-lane.blocked .lane-state {
+.route-lane.blocked .lane-state,
+.route-lane.needs-user .lane-state {
     color: var(--yellow);
+}
+.route-lane.needs-user {
+    border-color: color-mix(in srgb, var(--yellow) 65%, var(--border));
+}
+.route-lane.verifying,
+.route-lane.reviewing {
+    border-color: color-mix(in srgb, var(--cyan) 45%, var(--border));
+}
+.route-lane.verifying .lane-state,
+.route-lane.reviewing .lane-state {
+    color: var(--cyan);
 }
 .orch-actions button {
     border: 1px solid var(--border);

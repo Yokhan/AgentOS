@@ -884,6 +884,36 @@ function TranscriptStatusBar({
   </div>`;
 }
 
+function routePhaseLabel(phase) {
+  const labels = {
+    ready: "готово к запуску",
+    queued: "в очереди",
+    running: "агент работает",
+    verifying: "проверка",
+    reviewing: "ревью",
+    needs_user: "нужен ты",
+    blocked: "блокер",
+    done: "готово",
+    idle: "спит",
+  };
+  return labels[phase] || phase || "спит";
+}
+
+function routeActionLabel(route) {
+  if (route.can_queue_next) return "запустить";
+  if (route.action === "resolve_user_blocker") return "разобрать";
+  if (route.action === "resolve_blocker") return "снять блокер";
+  if (route.action === "review_result") return "проверить";
+  if (route.action === "monitor") return "следить";
+  return "уточнить";
+}
+
+function shortRuntimeId(id) {
+  if (!id) return "";
+  const raw = String(id);
+  return raw.length > 12 ? raw.slice(0, 8) : raw;
+}
+
 function OrchestrationMapCard({
   map,
   onAttachGraph,
@@ -899,6 +929,8 @@ function OrchestrationMapCard({
   const scope = map.scope || {};
   const graph = map.graph_context || {};
   const leverage = map.managerial_leverage || null;
+  const routeProgress = map.route_progress || {};
+  const progressCounts = routeProgress.counts || {};
   const delegCounts = map.delegations?.counts || {};
   const plans = map.plans || [];
   const projectSessions = map.project_sessions || [];
@@ -915,11 +947,21 @@ function OrchestrationMapCard({
   );
   const stageIndex = Number(big.stage_index || 6);
   const stageTotal = Number(big.stage_total || 6);
+  const progressPhases = [
+    "ready",
+    "queued",
+    "running",
+    "verifying",
+    "reviewing",
+    "needs_user",
+    "blocked",
+    "done",
+  ];
   return html`<div class="orch-map-card">
     <div class="orch-map-head">
       <div>
         <div class="orch-eyebrow">
-          big plan stage ${stageIndex}/${stageTotal}
+          этап большого плана ${stageIndex}/${stageTotal}
         </div>
         <div class="orch-title">${big.label || "Orchestration map"}</div>
       </div>
@@ -938,39 +980,36 @@ function OrchestrationMapCard({
     </div>
     <div class="orch-grid">
       <div>
-        <b>scope</b>
+        <b>контекст</b>
         <span
           >${scope.kind || "global"} /
           ${scope.title || map.project || "_orchestrator"}</span
         >
       </div>
       <div>
-        <b>project agents</b>
+        <b>проектные агенты</b>
         <span
           >${projectSessions.length}
           session${projectSessions.length === 1 ? "" : "s"}</span
         >
       </div>
       <div>
-        <b>work items</b>
-        <span>${openWork.length} open / ${workItems.length} shown</span>
+        <b>задачи</b>
+        <span>${openWork.length} открыто / ${workItems.length} видно</span>
       </div>
       <div>
-        <b>delegations</b>
+        <b>делегации</b>
         <span>
           ${delegCounts.pending || 0} pending, ${delegCounts.running || 0}
           running, ${delegCounts.failed || 0} failed
         </span>
       </div>
       <div>
-        <b>leases</b>
-        <span
-          >${map.leases?.active || 0} active write
-          lease${map.leases?.active === 1 ? "" : "s"}</span
-        >
+        <b>захваты файлов</b>
+        <span>${map.leases?.active || 0} active write lease</span>
       </div>
       <div class=${graph.available ? "ok" : "warn"}>
-        <b>code context</b>
+        <b>контекст кода</b>
         <span>
           ${graph.available
             ? `${graph.nodes || 0} nodes, ${graph.edges || 0} deps, ${graph.context_chars || 0} ctx chars`
@@ -978,6 +1017,29 @@ function OrchestrationMapCard({
         </span>
       </div>
     </div>
+    ${routeProgress.total
+      ? html`<div
+          class="route-progress-panel ${routeProgress.needs_user
+            ? "needs-user"
+            : routeProgress.active
+              ? "active"
+              : ""}"
+        >
+          <div class="route-progress-head">
+            <b>живой прогресс маршрутов</b>
+            <span>${routeProgress.headline || "нет активного движения"}</span>
+          </div>
+          <div class="route-progress-chips">
+            ${progressPhases.map((phase) =>
+              progressCounts[phase]
+                ? html`<span class="phase-${phase}">
+                    ${routePhaseLabel(phase)}: ${progressCounts[phase]}
+                  </span>`
+                : null,
+            )}
+          </div>
+        </div>`
+      : null}
     ${leverage
       ? html`<div
           class="management-card grade-${String(
@@ -1000,6 +1062,10 @@ function OrchestrationMapCard({
               проектов / ${leverage.parallelism?.queueable_routes || 0} ready
             </span>
             <span>
+              live: ${leverage.parallelism?.live_active_routes || 0} active /
+              ${leverage.control?.needs_user_routes || 0} needs user
+            </span>
+            <span>
               качество: ${leverage.quality?.reviewer_coverage_percent || 0}%
               reviewers / ${leverage.quality?.cross_provider_routes || 0} cross
             </span>
@@ -1016,11 +1082,11 @@ function OrchestrationMapCard({
       : null}
     ${nextPlan
       ? html`<div class="orch-next">
-          <b>next plan step</b>
+          <b>следующий шаг плана</b>
           <span>
             ${nextStep
               ? `${nextStep.project || map.project || "project"}: ${nextStep.task || "next step"}`
-              : `${nextPlan.title}: no open step`}
+              : `${nextPlan.title}: нет открытого шага`}
           </span>
         </div>`
       : null}
@@ -1040,14 +1106,14 @@ function OrchestrationMapCard({
     ${routes.length
       ? html`<div class="route-lanes-panel">
           <div class="route-lanes-head">
-            <b>project-agent routes</b>
-            <span>${routes.length} lane${routes.length === 1 ? "" : "s"}</span>
+            <b>маршруты проектных агентов</b>
+            <span>${routes.length} route</span>
             ${routes.length > 4
               ? html`<button
                   type="button"
                   onClick=${() => setShowAllRoutes(!showAllRoutes)}
                 >
-                  ${showAllRoutes ? "compact" : `show all +${hiddenRoutes}`}
+                  ${showAllRoutes ? "сжать" : `показать все +${hiddenRoutes}`}
                 </button>`
               : null}
           </div>
@@ -1055,26 +1121,30 @@ function OrchestrationMapCard({
             ${visibleRoutes.map((route) => {
               const next = route.next_work_item || {};
               const counts = route.counts || {};
+              const progress = route.progress || {};
+              const phase = progress.phase || route.route_state || "idle";
+              const activeDelegation = shortRuntimeId(
+                progress.active_delegation_id,
+              );
+              const verdict = progress.review_verdict_status || "";
               const meta = [
-                `${counts.work_items || 0} tasks`,
+                `${counts.work_items || 0} задач`,
+                activeDelegation ? `deleg ${activeDelegation}` : "",
                 `${counts.active_leases || 0} leases`,
+                verdict ? `review ${verdict}` : "",
+                progress.needs_user ? "ждет решения" : "",
                 route.has_blockers ? `${counts.blocked || 0} blockers` : "",
               ]
                 .filter(Boolean)
                 .join(" | ");
-              const actionLabel = route.can_queue_next
-                ? "queue next"
-                : route.action === "resolve_blocker"
-                  ? "resolve"
-                  : route.action === "monitor"
-                    ? "monitor"
-                    : "prompt";
+              const actionLabel = routeActionLabel(route);
               return html`<button
                 type="button"
                 class=${[
                   "route-lane",
-                  route.route_state || "idle",
+                  phase,
                   route.has_blockers ? "has-blockers" : "",
+                  progress.needs_user ? "needs-user" : "",
                   route.can_queue_next ? "can-queue" : "prompt-only",
                   route.synthetic ? "synthetic" : "",
                 ]
@@ -1083,13 +1153,27 @@ function OrchestrationMapCard({
                 onClick=${() => onRouteAgent(route)}
                 title=${next.task || route.title || "Project-agent lane"}
               >
-                <span class="lane-state">${route.route_state || "idle"}</span>
+                <span class="lane-state">${routePhaseLabel(phase)}</span>
                 <b
                   >${route.project || "project"} /
                   ${route.executor_provider || "agent"}</b
                 >
-                <em>${next.title || route.title || "No queued task"}</em>
+                <em>${next.title || route.title || "нет задачи в очереди"}</em>
+                <span class="lane-steps">
+                  ${(progress.steps || []).map(
+                    (step) =>
+                      html`<i
+                        class="step-${step.status || "pending"}"
+                        title=${routePhaseLabel(step.id)}
+                      ></i>`,
+                  )}
+                </span>
                 <small>${meta}</small>
+                ${progress.review_verdict_summary
+                  ? html`<small class="lane-verdict">
+                      ${progress.review_verdict_summary}
+                    </small>`
+                  : null}
                 <span class="lane-action">${actionLabel}</span>
               </button>`;
             })}
@@ -1098,15 +1182,13 @@ function OrchestrationMapCard({
       : null}
     <div class="orch-actions">
       <button onClick=${onAttachGraph} disabled=${!map.project}>
-        attach code context
+        контекст кода
       </button>
-      <button onClick=${onOpenGraph} disabled=${!map.project}>
-        open graph
-      </button>
+      <button onClick=${onOpenGraph} disabled=${!map.project}>граф</button>
       <button onClick=${onVerifyGraph} disabled=${!map.project}>
-        verify graph
+        проверить граф
       </button>
-      <button onClick=${onOpenPlans}>plans</button>
+      <button onClick=${onOpenPlans}>планы</button>
     </div>
   </div>`;
 }
@@ -2159,10 +2241,12 @@ function ChatSidebar() {
       onManagementPrompt=${(leverage) =>
         insertPrompt(
           leverage?.management_prompt ||
-            "[MANAGEMENT_REVIEW]\nОцени управляемость текущей работы: параллельность, качество через reviewer/cross-check, контрольную нагрузку и связь со стратегией. Дай следующий управленческий шаг без микроменеджмента.",
+            "[MANAGEMENT_REVIEW]\nОцени управляемость текущей работы: параллельность, качество через reviewer/cross-check, контрольную нагрузку, live route progress и связь со стратегией. Дай следующий управленческий шаг без микроменеджмента.",
         )}
       onRouteAgent=${async (route) => {
         const next = route.next_work_item || {};
+        const progress = route.progress || {};
+        const phase = progress.phase || route.route_state || "idle";
         if (route.can_queue_next && next.id) {
           try {
             await queueWorkItemExecution(next.id);
@@ -2185,18 +2269,31 @@ function ChatSidebar() {
         insertPrompt(
           [
             `[PROJECT_AGENT_ROUTE:${route.project || currentProject.value || "_orchestrator"}]`,
-            `Executor: ${route.executor_provider || "auto"}`,
+            `Фаза: ${routePhaseLabel(phase)} (${phase})`,
+            `Исполнитель: ${route.executor_provider || "auto"}`,
             route.reviewer_provider
-              ? `Reviewer: ${route.reviewer_provider}`
+              ? `Ревьюер: ${route.reviewer_provider}`
+              : "",
+            progress.active_delegation_id
+              ? `Делегация: ${progress.active_delegation_id}`
               : "",
             next.id
               ? `Work item: ${next.id} - ${next.title || next.task}`
               : `Lane: ${route.title || "project-agent lane"}`,
             route.has_blockers
-              ? `Blockers: ${(route.blocker_delegation_ids || []).join(", ") || "present"}`
+              ? `Блокеры: ${(route.blocker_delegation_ids || []).join(", ") || "present"}`
               : "",
-            route.action ? `Suggested action: ${route.action}` : "",
-            "Continue the safest next step. Use graph context if code changes are likely, explain blockers before edits, and route subdelegations only when needed.",
+            progress.review_verdict_status
+              ? `Reviewer verdict: ${progress.review_verdict_status} ${progress.review_verdict_summary || ""}`
+              : "",
+            route.action ? `Рекомендуемое действие: ${route.action}` : "",
+            phase === "needs_user"
+              ? "Разбери, что именно требует моего решения, предложи минимальный unblock-step и не запускай новую волну без подтверждения."
+              : phase === "running" ||
+                  phase === "verifying" ||
+                  phase === "reviewing"
+                ? "Проверь live-состояние маршрута, кратко объясни прогресс, риски и следующий безопасный шаг."
+                : "Продолжи самый безопасный следующий шаг. Используй graph context, если вероятны изменения кода, и делегируй подзадачи только при необходимости.",
           ]
             .filter(Boolean)
             .join("\n"),

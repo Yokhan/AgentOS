@@ -8,7 +8,8 @@ use crate::commands::status::{DelegationStatus, PlanStatus};
 use crate::commands::strategy_models::{load_strategies, Assignee};
 use crate::state::{
     AppState, Delegation, FileLeaseStatus, MultiAgentSession, ProjectSession, ProjectSessionStatus,
-    SessionStatus, WorkItem, WorkItemAssignee, WorkItemStatus, WorkItemWriteIntent,
+    ReviewVerdictStatus, SessionStatus, WorkItem, WorkItemAssignee, WorkItemStatus,
+    WorkItemWriteIntent,
 };
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -181,6 +182,28 @@ fn work_item_status_label(status: &WorkItemStatus) -> &'static str {
     }
 }
 
+fn review_verdict_status_label(status: &ReviewVerdictStatus) -> &'static str {
+    match status {
+        ReviewVerdictStatus::Approve => "approve",
+        ReviewVerdictStatus::Warn => "warn",
+        ReviewVerdictStatus::Fail => "fail",
+    }
+}
+
+fn route_phase_label(phase: &str) -> &'static str {
+    match phase {
+        "ready" => "ready to queue",
+        "queued" => "waiting in delegation queue",
+        "running" => "agent is working",
+        "verifying" => "verification is running",
+        "reviewing" => "reviewer is checking",
+        "needs_user" => "needs user decision",
+        "blocked" => "blocked",
+        "done" => "completed",
+        _ => "idle",
+    }
+}
+
 fn project_session_status_label(status: &ProjectSessionStatus) -> &'static str {
     match status {
         ProjectSessionStatus::Active => "active",
@@ -231,9 +254,19 @@ struct RouteLane {
     running: usize,
     reviewing: usize,
     draft: usize,
+    completed: usize,
     blocked: usize,
     active_leases: usize,
+    pending_delegations: usize,
+    active_delegations: usize,
+    verifying_delegations: usize,
+    done_delegations: usize,
+    needs_user_delegations: usize,
     blocker_delegation_ids: Vec<String>,
+    active_delegation_id: Option<String>,
+    active_work_item_id: Option<String>,
+    review_verdict_status: Option<String>,
+    review_verdict_summary: Option<String>,
     synthetic: bool,
     next_work_item: Option<WorkItem>,
     updated_at: String,
@@ -255,9 +288,19 @@ impl RouteLane {
             running: 0,
             reviewing: 0,
             draft: 0,
+            completed: 0,
             blocked: 0,
             active_leases: 0,
+            pending_delegations: 0,
+            active_delegations: 0,
+            verifying_delegations: 0,
+            done_delegations: 0,
+            needs_user_delegations: 0,
             blocker_delegation_ids: Vec::new(),
+            active_delegation_id: None,
+            active_work_item_id: None,
+            review_verdict_status: None,
+            review_verdict_summary: None,
             synthetic: false,
             next_work_item: None,
             updated_at: session.updated_at.clone(),
@@ -289,25 +332,39 @@ impl RouteLane {
             running: 0,
             reviewing: 0,
             draft: 0,
+            completed: 0,
             blocked: 0,
             active_leases: 0,
+            pending_delegations: 0,
+            active_delegations: 0,
+            verifying_delegations: 0,
+            done_delegations: 0,
+            needs_user_delegations: 0,
             blocker_delegation_ids: Vec::new(),
+            active_delegation_id: None,
+            active_work_item_id: None,
+            review_verdict_status: None,
+            review_verdict_summary: None,
             synthetic: false,
             next_work_item: None,
             updated_at: item.updated_at.clone(),
         }
     }
 
-    fn from_blocked_delegation(delegation: &Delegation) -> Self {
+    fn from_delegation(delegation: &Delegation) -> Self {
         let mut work_item_ids = HashSet::new();
         if let Some(work_item_id) = delegation.work_item_id.as_ref() {
             work_item_ids.insert(work_item_id.clone());
         }
         Self {
-            id: format!("delegation-blocker:{}", delegation.id),
+            id: format!("delegation-route:{}", delegation.id),
             project: delegation.project.clone(),
             project_session_id: delegation.project_session_id.clone(),
-            title: "Blocked delegation".to_string(),
+            title: if is_blocking_delegation_status(delegation.status) {
+                "Blocked delegation".to_string()
+            } else {
+                "Delegation route".to_string()
+            },
             status: delegation.status.to_string(),
             executor_provider: delegation
                 .executor_provider
@@ -320,9 +377,25 @@ impl RouteLane {
             running: 0,
             reviewing: 0,
             draft: 0,
-            blocked: 1,
+            completed: 0,
+            blocked: 0,
             active_leases: 0,
-            blocker_delegation_ids: vec![delegation.id.clone()],
+            pending_delegations: 0,
+            active_delegations: 0,
+            verifying_delegations: 0,
+            done_delegations: 0,
+            needs_user_delegations: 0,
+            blocker_delegation_ids: Vec::new(),
+            active_delegation_id: None,
+            active_work_item_id: delegation.work_item_id.clone(),
+            review_verdict_status: delegation
+                .review_verdict
+                .as_ref()
+                .map(|v| review_verdict_status_label(&v.status).to_string()),
+            review_verdict_summary: delegation
+                .review_verdict
+                .as_ref()
+                .map(|v| v.summary.clone()),
             synthetic: true,
             next_work_item: None,
             updated_at: delegation.ts.clone(),
@@ -338,7 +411,18 @@ impl RouteLane {
             WorkItemStatus::Reviewing => self.reviewing += 1,
             WorkItemStatus::Draft => self.draft += 1,
             WorkItemStatus::Failed | WorkItemStatus::Cancelled => self.blocked += 1,
-            WorkItemStatus::Completed => {}
+            WorkItemStatus::Completed => self.completed += 1,
+        }
+        if active_work_item_status(&item.status) || item.review_verdict.is_some() {
+            self.active_work_item_id = Some(item.id.clone());
+        }
+        if let Some(delegation_id) = item.delegation_id.as_ref() {
+            self.active_delegation_id = Some(delegation_id.clone());
+        }
+        if let Some(verdict) = item.review_verdict.as_ref() {
+            self.review_verdict_status =
+                Some(review_verdict_status_label(&verdict.status).to_string());
+            self.review_verdict_summary = Some(verdict.summary.clone());
         }
         let replace_next = self
             .next_work_item
@@ -353,9 +437,9 @@ impl RouteLane {
         }
     }
 
-    fn add_blocker(&mut self, delegation: &Delegation) {
-        self.blocked += 1;
+    fn mark_delegation_blocker(&mut self, delegation: &Delegation) {
         if !self.blocker_delegation_ids.contains(&delegation.id) {
+            self.blocked += 1;
             self.blocker_delegation_ids.push(delegation.id.clone());
         }
         if let Some(work_item_id) = delegation.work_item_id.as_ref() {
@@ -374,16 +458,107 @@ impl RouteLane {
         }
     }
 
-    fn route_state(&self) -> &'static str {
-        if self.running > 0 || self.reviewing > 0 || self.active_leases > 0 {
-            "running"
+    fn add_delegation(&mut self, delegation: &Delegation) {
+        match delegation.status {
+            DelegationStatus::Pending | DelegationStatus::Scheduled => {
+                self.pending_delegations += 1;
+                self.active_delegation_id = Some(delegation.id.clone());
+            }
+            DelegationStatus::Running
+            | DelegationStatus::Escalated
+            | DelegationStatus::Deciding => {
+                self.active_delegations += 1;
+                self.active_delegation_id = Some(delegation.id.clone());
+            }
+            DelegationStatus::Verifying => {
+                self.verifying_delegations += 1;
+                self.active_delegation_id = Some(delegation.id.clone());
+            }
+            DelegationStatus::Done => {
+                self.done_delegations += 1;
+            }
+            DelegationStatus::Failed
+            | DelegationStatus::Rejected
+            | DelegationStatus::Cancelled
+            | DelegationStatus::NeedsPermission => {
+                self.needs_user_delegations += 1;
+                self.active_delegation_id = Some(delegation.id.clone());
+                self.mark_delegation_blocker(delegation);
+            }
+        }
+        if let Some(work_item_id) = delegation.work_item_id.as_ref() {
+            self.active_work_item_id = Some(work_item_id.clone());
+            self.work_item_ids.insert(work_item_id.clone());
+        }
+        if let Some(verdict) = delegation.review_verdict.as_ref() {
+            self.review_verdict_status =
+                Some(review_verdict_status_label(&verdict.status).to_string());
+            self.review_verdict_summary = Some(verdict.summary.clone());
+        }
+        if delegation.ts > self.updated_at {
+            self.updated_at = delegation.ts.clone();
+        }
+    }
+
+    fn progress_phase(&self) -> &'static str {
+        if self.needs_user_delegations > 0 {
+            "needs_user"
         } else if self.blocked > 0 {
             "blocked"
-        } else if self.ready > 0 || self.queued > 0 || self.draft > 0 {
+        } else if self.verifying_delegations > 0 {
+            "verifying"
+        } else if self.reviewing > 0 {
+            "reviewing"
+        } else if self.running > 0 || self.active_delegations > 0 || self.active_leases > 0 {
+            "running"
+        } else if self.queued > 0 || self.pending_delegations > 0 {
+            "queued"
+        } else if self.ready > 0 || self.draft > 0 {
             "ready"
+        } else if self.completed > 0 || self.done_delegations > 0 {
+            "done"
         } else {
             "idle"
         }
+    }
+
+    fn route_state(&self) -> &'static str {
+        self.progress_phase()
+    }
+
+    fn lifecycle_steps(&self, phase: &str) -> Vec<Value> {
+        let phases = [
+            "ready",
+            "queued",
+            "running",
+            "verifying",
+            "reviewing",
+            "done",
+        ];
+        let current_index = phases.iter().position(|item| *item == phase);
+        phases
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let status = if phase == "needs_user" || phase == "blocked" {
+                    if index <= 2 {
+                        "blocked"
+                    } else {
+                        "pending"
+                    }
+                } else if Some(index) == current_index {
+                    "current"
+                } else if current_index
+                    .map(|current| index < current)
+                    .unwrap_or(false)
+                {
+                    "done"
+                } else {
+                    "pending"
+                };
+                json!({ "id": item, "status": status })
+            })
+            .collect()
     }
 
     fn into_value(self) -> Value {
@@ -395,14 +570,27 @@ impl RouteLane {
             .unwrap_or(false);
         let action = if can_queue_next {
             "queue_next"
-        } else if self.running > 0 || self.reviewing > 0 || self.active_leases > 0 {
+        } else if matches!(
+            route_state,
+            "running" | "verifying" | "reviewing" | "queued"
+        ) {
             "monitor"
-        } else if self.blocked > 0 {
+        } else if route_state == "needs_user" {
+            "resolve_user_blocker"
+        } else if route_state == "blocked" {
             "resolve_blocker"
+        } else if route_state == "done" {
+            "review_result"
         } else {
             "prompt"
         };
-        let next_work_item = self.next_work_item.map(|item| {
+        let lifecycle_steps = self.lifecycle_steps(route_state);
+        let blocker_delegation_ids = self.blocker_delegation_ids.clone();
+        let active_delegation_id = self.active_delegation_id.clone();
+        let active_work_item_id = self.active_work_item_id.clone();
+        let review_verdict_status = self.review_verdict_status.clone();
+        let review_verdict_summary = self.review_verdict_summary.clone();
+        let next_work_item = self.next_work_item.clone().map(|item| {
             json!({
                 "id": item.id,
                 "title": item.title,
@@ -412,6 +600,19 @@ impl RouteLane {
                 "declared_paths": item.declared_paths,
                 "delegation_id": item.delegation_id
             })
+        });
+        let progress = json!({
+            "phase": route_state,
+            "label": route_phase_label(route_state),
+            "needs_user": route_state == "needs_user",
+            "active_delegation_id": active_delegation_id,
+            "active_work_item_id": active_work_item_id,
+            "review_verdict_status": review_verdict_status,
+            "review_verdict_summary": review_verdict_summary,
+            "lease_count": self.active_leases,
+            "blocker_delegation_ids": blocker_delegation_ids,
+            "steps": lifecycle_steps,
+            "suggested_action": action
         });
         json!({
             "id": self.id,
@@ -425,8 +626,9 @@ impl RouteLane {
             "executor_provider": self.executor_provider,
             "reviewer_provider": self.reviewer_provider,
             "has_blockers": self.blocked > 0,
-            "blocker_delegation_ids": self.blocker_delegation_ids,
+            "blocker_delegation_ids": progress["blocker_delegation_ids"].clone(),
             "synthetic": self.synthetic,
+            "progress": progress,
             "counts": {
                 "work_items": self.work_item_ids.len(),
                 "ready": self.ready,
@@ -434,8 +636,14 @@ impl RouteLane {
                 "running": self.running,
                 "reviewing": self.reviewing,
                 "draft": self.draft,
+                "completed": self.completed,
                 "blocked": self.blocked,
-                "active_leases": self.active_leases
+                "active_leases": self.active_leases,
+                "pending_delegations": self.pending_delegations,
+                "active_delegations": self.active_delegations,
+                "verifying_delegations": self.verifying_delegations,
+                "done_delegations": self.done_delegations,
+                "needs_user_delegations": self.needs_user_delegations
             },
             "next_work_item": next_work_item,
             "updated_at": self.updated_at
@@ -488,7 +696,6 @@ fn collect_project_agent_routes(
             && room_session_id
                 .map(|id| item.parent_room_session_id == id)
                 .unwrap_or(true)
-            && active_work_item_status(&item.status)
     }) {
         let key = item
             .project_session_id
@@ -501,6 +708,9 @@ fn collect_project_agent_routes(
                     item.executor_provider.as_str()
                 )
             });
+        if !active_work_item_status(&item.status) && !lanes.contains_key(&key) {
+            continue;
+        }
         lanes
             .entry(key)
             .or_insert_with(|| RouteLane::from_work_item(item))
@@ -512,9 +722,9 @@ fn collect_project_agent_routes(
             .values()
             .filter(|d| resolved_project.is_empty() || d.project == resolved_project)
         {
-            if !is_blocking_delegation_status(d.status) {
-                continue;
-            }
+            let provider_key = d
+                .executor_provider
+                .map(|provider| format!("project:{}:{}", d.project, provider.as_str()));
             let keys = [
                 d.project_session_id
                     .as_ref()
@@ -528,22 +738,22 @@ fn collect_project_agent_routes(
                         }
                     })
                 }),
+                provider_key,
                 Some(format!("project:{}:claude", d.project)),
                 Some(format!("project:{}:codex", d.project)),
             ];
             let mut attached = false;
             for key in keys.into_iter().flatten() {
                 if let Some(lane) = lanes.get_mut(&key) {
-                    lane.add_blocker(d);
+                    lane.add_delegation(d);
                     attached = true;
                     break;
                 }
             }
             if !attached {
-                lanes.insert(
-                    format!("delegation-blocker:{}", d.id),
-                    RouteLane::from_blocked_delegation(d),
-                );
+                let mut lane = RouteLane::from_delegation(d);
+                lane.add_delegation(d);
+                lanes.insert(format!("delegation-route:{}", d.id), lane);
             }
         }
     }
@@ -565,16 +775,86 @@ fn collect_project_agent_routes(
     let mut routes: Vec<RouteLane> = lanes.into_values().collect();
     routes.sort_by(|a, b| {
         let state_rank = |state: &str| match state {
-            "blocked" => 0,
-            "running" => 1,
-            "ready" => 2,
-            _ => 3,
+            "needs_user" => 0,
+            "blocked" => 1,
+            "running" | "verifying" | "reviewing" => 2,
+            "queued" => 3,
+            "ready" => 4,
+            _ => 5,
         };
         state_rank(a.route_state())
             .cmp(&state_rank(b.route_state()))
             .then_with(|| b.updated_at.cmp(&a.updated_at))
     });
     routes.into_iter().map(RouteLane::into_value).collect()
+}
+
+fn collect_route_progress_aggregate(routes: &[Value]) -> Value {
+    let phases = [
+        "ready",
+        "queued",
+        "running",
+        "verifying",
+        "reviewing",
+        "needs_user",
+        "blocked",
+        "done",
+        "idle",
+    ];
+    let mut counts: HashMap<&str, usize> = phases.iter().map(|phase| (*phase, 0usize)).collect();
+    for route in routes {
+        let phase = route
+            .get("progress")
+            .and_then(|progress| progress.get("phase"))
+            .and_then(Value::as_str)
+            .or_else(|| route.get("route_state").and_then(Value::as_str))
+            .unwrap_or("idle");
+        let entry = counts.entry(phase).or_insert(0);
+        *entry += 1;
+    }
+    let active = counts.get("running").copied().unwrap_or(0)
+        + counts.get("verifying").copied().unwrap_or(0)
+        + counts.get("reviewing").copied().unwrap_or(0);
+    let queueable = routes
+        .iter()
+        .filter(|route| route.get("can_queue_next").and_then(Value::as_bool) == Some(true))
+        .count();
+    let needs_user = counts.get("needs_user").copied().unwrap_or(0);
+    let blocked = counts.get("blocked").copied().unwrap_or(0);
+    let done = counts.get("done").copied().unwrap_or(0);
+    let headline = if needs_user > 0 {
+        format!("{} route ждут твоего решения", needs_user)
+    } else if active > 0 {
+        format!("{} route активны сейчас", active)
+    } else if queueable > 0 {
+        format!("{} route готовы к запуску", queueable)
+    } else if blocked > 0 {
+        format!("{} route заблокированы", blocked)
+    } else if done > 0 {
+        format!("{} route завершены", done)
+    } else {
+        "Нет live-прогресса маршрутов".to_string()
+    };
+    json!({
+        "total": routes.len(),
+        "active": active,
+        "queueable": queueable,
+        "needs_user": needs_user,
+        "blocked": blocked,
+        "done": done,
+        "headline": headline,
+        "counts": {
+            "ready": counts.get("ready").copied().unwrap_or(0),
+            "queued": counts.get("queued").copied().unwrap_or(0),
+            "running": counts.get("running").copied().unwrap_or(0),
+            "verifying": counts.get("verifying").copied().unwrap_or(0),
+            "reviewing": counts.get("reviewing").copied().unwrap_or(0),
+            "needs_user": needs_user,
+            "blocked": blocked,
+            "done": done,
+            "idle": counts.get("idle").copied().unwrap_or(0)
+        }
+    })
 }
 
 fn percent(part: usize, total: usize) -> usize {
@@ -599,6 +879,7 @@ fn collect_managerial_leverage(
     resolved_project: &str,
     room_session_id: Option<&str>,
     routes: &[Value],
+    route_progress: &Value,
     graph_context: &Value,
     plans: &[SavedPlan],
 ) -> Value {
@@ -733,6 +1014,14 @@ fn collect_managerial_leverage(
             matches!((executor, reviewer), (Some(a), Some(b)) if a != b)
         })
         .count();
+    let route_needs_user = route_progress
+        .get("needs_user")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as usize;
+    let live_active_routes = route_progress
+        .get("active")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as usize;
 
     let relevant_plans: Vec<&SavedPlan> = plans
         .iter()
@@ -839,8 +1128,9 @@ fn collect_managerial_leverage(
         + blocked_delegations
         + manual_work_items
         + manual_strategy_steps
-        + blocked_routes;
-    let control_load = if user_attention >= 6 || blocked_delegations >= 3 {
+        + blocked_routes
+        + route_needs_user;
+    let control_load = if user_attention >= 6 || blocked_delegations >= 3 || route_needs_user >= 2 {
         "high"
     } else if user_attention >= 2 || blocked_delegations > 0 {
         "medium"
@@ -851,6 +1141,7 @@ fn collect_managerial_leverage(
     let parallel_score = (projects_in_motion.len() * 20
         + running_work * 15
         + reviewing_work * 10
+        + live_active_routes * 12
         + queueable_routes * 10
         + active_routes * 5)
         .min(100);
@@ -866,7 +1157,9 @@ fn collect_managerial_leverage(
         + (control_score * 15))
         / 100;
 
-    let primary_bottleneck = if blocked_delegations > 0 {
+    let primary_bottleneck = if route_needs_user > 0 {
+        "needs_user_routes"
+    } else if blocked_delegations > 0 {
         "blocked_delegations"
     } else if pending_delegations > 0 {
         "pending_approval"
@@ -881,6 +1174,9 @@ fn collect_managerial_leverage(
     };
 
     let recommendation = match primary_bottleneck {
+        "needs_user_routes" => {
+            "Есть route lanes, которые ждут твоего решения: сначала разбери permission/fail блокеры, потом запускай новую волну."
+        }
         "blocked_delegations" => {
             "Разбери blockers перед новой волной: есть упавшие или permission-blocked делегации."
         }
@@ -929,6 +1225,7 @@ fn collect_managerial_leverage(
             "projects_in_motion": projects_in_motion.len(),
             "active_project_sessions": project_sessions.len(),
             "active_routes": active_routes,
+            "live_active_routes": live_active_routes,
             "queueable_routes": queueable_routes,
             "running_work_items": running_work,
             "reviewing_work_items": reviewing_work,
@@ -953,6 +1250,7 @@ fn collect_managerial_leverage(
             "manual_work_items": manual_work_items,
             "manual_strategy_steps": manual_strategy_steps,
             "blocked_routes": blocked_routes,
+            "needs_user_routes": route_needs_user,
             "primary_bottleneck": primary_bottleneck
         },
         "alignment": {
@@ -1238,11 +1536,13 @@ pub fn resolve_orchestration_map(
 
     let project_agent_routes =
         collect_project_agent_routes(state, &resolved_project, room_session_id.as_deref());
+    let route_progress = collect_route_progress_aggregate(&project_agent_routes);
     let managerial_leverage = collect_managerial_leverage(
         state,
         &resolved_project,
         room_session_id.as_deref(),
         &project_agent_routes,
+        &route_progress,
         &graph_context,
         &plans,
     );
@@ -1250,13 +1550,13 @@ pub fn resolve_orchestration_map(
     json!({
         "status": "ok",
         "big_plan": {
-            "stage": "managerial_leverage",
-            "stage_index": 8,
-            "stage_total": 8,
-            "label": "Managerial leverage + cross-check visibility",
+            "stage": "live_route_progress",
+            "stage_index": 9,
+            "stage_total": 9,
+            "label": "Live route progress + operational control",
             "done": ["foundation", "route_card", "live_transcript", "orchestration_map", "execution_timeline", "event_contract", "project_agent_routing", "route_lane_stabilization"],
-            "current": ["managerial_leverage", "parallel_capacity", "quality_cross_check", "strategy_alignment"],
-            "next": ["live_route_progress", "provider_expansion", "project_rollout"]
+            "current": ["live_route_progress", "needs_user_visibility", "review_lifecycle", "operational_control"],
+            "next": ["provider_expansion", "project_rollout", "agent_board"]
         },
         "scope": scope,
         "project": resolved_project,
@@ -1264,6 +1564,7 @@ pub fn resolve_orchestration_map(
         "project_sessions": project_sessions,
         "work_items": work_items,
         "project_agent_routes": project_agent_routes,
+        "route_progress": route_progress,
         "managerial_leverage": managerial_leverage,
         "delegations": {
             "counts": delegation_counts,
@@ -1440,8 +1741,9 @@ mod tests {
         save_strategies, Assignee, Plan as StrategyPlan, Step, Strategy, Tactic, TacticStatus,
     };
     use crate::state::{
-        AppState, Delegation, MultiAgentSession, ProjectSession, ProjectSessionStatus, SessionMode,
-        SessionStatus, WorkItem, WorkItemAssignee, WorkItemStatus, WorkItemWriteIntent,
+        AppState, Delegation, MultiAgentSession, ProjectSession, ProjectSessionStatus,
+        ReviewVerdict, ReviewVerdictStatus, SessionMode, SessionStatus, WorkItem, WorkItemAssignee,
+        WorkItemStatus, WorkItemWriteIntent,
     };
     use std::path::PathBuf;
 
@@ -1549,8 +1851,8 @@ mod tests {
 
         let result = resolve_orchestration_map(&state, Some("AgentOS".to_string()), None);
         assert_eq!(result["status"], "ok");
-        assert_eq!(result["big_plan"]["stage"], "managerial_leverage");
-        assert_eq!(result["big_plan"]["stage_index"], 8);
+        assert_eq!(result["big_plan"]["stage"], "live_route_progress");
+        assert_eq!(result["big_plan"]["stage_index"], 9);
         assert_eq!(result["scope"]["kind"], "project");
 
         let _ = std::fs::remove_dir_all(root);
@@ -1611,6 +1913,11 @@ mod tests {
         assert_eq!(result["project_agent_routes"][0]["route_state"], "ready");
         assert_eq!(result["project_agent_routes"][0]["action"], "queue_next");
         assert_eq!(result["project_agent_routes"][0]["can_queue_next"], true);
+        assert_eq!(
+            result["project_agent_routes"][0]["progress"]["phase"],
+            "ready"
+        );
+        assert_eq!(result["route_progress"]["queueable"], 1);
         assert_eq!(
             result["project_agent_routes"][0]["next_work_item"]["id"],
             "wi-1"
@@ -1761,11 +2068,13 @@ mod tests {
         );
         assert_eq!(result["status"], "ok");
         let route = &result["project_agent_routes"][0];
-        assert_eq!(route["route_state"], "blocked");
-        assert_eq!(route["action"], "resolve_blocker");
+        assert_eq!(route["route_state"], "needs_user");
+        assert_eq!(route["action"], "resolve_user_blocker");
         assert_eq!(route["synthetic"], true);
         assert_eq!(route["has_blockers"], true);
+        assert_eq!(route["progress"]["needs_user"], true);
         assert_eq!(route["blocker_delegation_ids"][0], "del-1");
+        assert_eq!(result["route_progress"]["needs_user"], 1);
 
         let _ = std::fs::remove_dir_all(root);
     }
@@ -1815,10 +2124,102 @@ mod tests {
         );
         assert_eq!(result["status"], "ok");
         let route = &result["project_agent_routes"][0];
-        assert_eq!(route["route_state"], "running");
+        assert_eq!(route["route_state"], "needs_user");
         assert_eq!(route["has_blockers"], true);
         assert_eq!(route["counts"]["blocked"], 1);
+        assert_eq!(route["progress"]["active_delegation_id"], "del-1");
         assert_eq!(route["blocker_delegation_ids"][0], "del-1");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn orchestration_map_reports_verifying_route_progress() {
+        let root = test_root("route-verifying");
+        let state = AppState::new(root.clone());
+        let ts = state.now_iso();
+        state.delegations.lock().unwrap().insert(
+            "del-verify".to_string(),
+            test_delegation("del-verify", "AgentOS", DelegationStatus::Verifying, &ts),
+        );
+
+        let result = resolve_orchestration_map(
+            &state,
+            Some("AgentOS".to_string()),
+            Some("room-1".to_string()),
+        );
+        let route = &result["project_agent_routes"][0];
+        assert_eq!(route["route_state"], "verifying");
+        assert_eq!(route["action"], "monitor");
+        assert_eq!(route["progress"]["active_delegation_id"], "del-verify");
+        assert_eq!(result["route_progress"]["active"], 1);
+        assert_eq!(result["route_progress"]["counts"]["verifying"], 1);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn orchestration_map_reports_review_verdict_progress() {
+        let root = test_root("route-review-verdict");
+        let state = AppState::new(root.clone());
+        let ts = state.now_iso();
+        state.project_sessions.lock().unwrap().insert(
+            "ps-1".to_string(),
+            ProjectSession {
+                id: "ps-1".to_string(),
+                parent_room_session_id: "room-1".to_string(),
+                project: "AgentOS".to_string(),
+                title: "Review verdict lane".to_string(),
+                status: ProjectSessionStatus::Active,
+                executor_provider: ProviderKind::Codex,
+                reviewer_provider: Some(ProviderKind::Claude),
+                linked_work_item_ids: vec!["wi-1".to_string()],
+                created_at: ts.clone(),
+                updated_at: ts.clone(),
+            },
+        );
+        state.work_items.lock().unwrap().insert(
+            "wi-1".to_string(),
+            WorkItem {
+                id: "wi-1".to_string(),
+                parent_room_session_id: "room-1".to_string(),
+                project_session_id: Some("ps-1".to_string()),
+                project: "AgentOS".to_string(),
+                title: "Review completed route".to_string(),
+                task: "Keep reviewer verdict visible after completion".to_string(),
+                executor_provider: ProviderKind::Codex,
+                reviewer_provider: Some(ProviderKind::Claude),
+                assignee: WorkItemAssignee::Agent,
+                write_intent: WorkItemWriteIntent::ProposeWrite,
+                declared_paths: vec!["src-ui/chat.js".to_string()],
+                verify: None,
+                status: WorkItemStatus::Completed,
+                delegation_id: Some("del-1".to_string()),
+                result: Some("Implemented".to_string()),
+                review_verdict: Some(ReviewVerdict {
+                    status: ReviewVerdictStatus::Warn,
+                    summary: "Works, but needs follow-up smoke test".to_string(),
+                    next_action: Some("Run smoke test".to_string()),
+                    source_response: "WARN\nWorks, but needs follow-up smoke test".to_string(),
+                }),
+                source_kind: Some("plan_step".to_string()),
+                source_id: Some("step-1".to_string()),
+                created_at: ts.clone(),
+                updated_at: ts,
+            },
+        );
+
+        let result = resolve_orchestration_map(
+            &state,
+            Some("AgentOS".to_string()),
+            Some("room-1".to_string()),
+        );
+        let route = &result["project_agent_routes"][0];
+        assert_eq!(route["route_state"], "done");
+        assert_eq!(route["action"], "review_result");
+        assert_eq!(route["progress"]["review_verdict_status"], "warn");
+        assert_eq!(route["progress"]["active_work_item_id"], "wi-1");
+        assert_eq!(result["route_progress"]["done"], 1);
 
         let _ = std::fs::remove_dir_all(root);
     }

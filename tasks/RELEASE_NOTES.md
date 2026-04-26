@@ -1,3 +1,11 @@
+# Agent OS 0.3.0
+
+- Added a committed `v0.3.0` live route progress plan with 20 product improvements and 50 delivery slices focused on operational control, not another static dashboard.
+- Added route progress semantics to the orchestration map: every project-agent route now exposes phase, lifecycle steps, active delegation/work item, reviewer verdict, leases, blockers, and suggested action.
+- Added `route_progress` aggregates and wired them into managerial leverage so `needs_user`, active routes, queueable routes, and blocked routes change the recommendation and control load.
+- Upgraded the chat Orchestration Map Card with live progress summary, Russian operational labels, lifecycle dots, phase chips, reviewer verdict previews, and better route prompts for monitor/unblock/review flows.
+- Moved the visible big-plan metadata to `live_route_progress` stage `9/9` across orchestration map and execution timeline.
+
 # Agent OS 0.2.41
 
 - Added a committed Russian `v0.2.41` managerial-leverage plan focused on improving the user's ability to manage multiple AI agents in parallel with less manual control.
