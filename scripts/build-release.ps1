@@ -56,7 +56,26 @@ function Invoke-TauriBuild {
     }
 }
 
+function Invoke-UiChecks {
+    param(
+        [string]$WorkingDirectory
+    )
+
+    $process = Start-Process `
+        -FilePath "npm.cmd" `
+        -ArgumentList "run", "check:ui" `
+        -WorkingDirectory $WorkingDirectory `
+        -NoNewWindow `
+        -Wait `
+        -PassThru
+
+    if ($process.ExitCode -ne 0) {
+        throw "UI checks failed with exit code $($process.ExitCode)."
+    }
+}
+
 if (-not $SkipBuild) {
+    Invoke-UiChecks -WorkingDirectory $root
     Invoke-TauriBuild -WorkingDirectory $root
 }
 

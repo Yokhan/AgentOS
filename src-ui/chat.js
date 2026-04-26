@@ -40,6 +40,7 @@ import {
   showNewProject,
   showStrategy,
   showPlans,
+  plansData,
   inboxData,
   slashOpen,
   slashItems,

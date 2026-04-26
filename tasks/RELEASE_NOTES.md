@@ -1,3 +1,8 @@
+# Agent OS 0.3.1
+
+- Fixed a launch-blocking frontend runtime error in chat: `plansData` was used by the orchestration map refresh dependencies but was not imported from the shared store.
+- Added a static pre-release check for missing `store.js` signal imports in `chat.js` during the hotfix verification pass.
+
 # Agent OS 0.3.0
 
 - Added a committed `v0.3.0` live route progress plan with 20 product improvements and 50 delivery slices focused on operational control, not another static dashboard.
