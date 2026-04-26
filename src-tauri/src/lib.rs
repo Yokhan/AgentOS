@@ -201,6 +201,7 @@ pub fn run() {
             commands::plans::update_plan_step,
             commands::scope::get_active_scope,
             commands::scope::get_orchestration_map,
+            commands::event_contract::get_event_contract_schema,
             commands::timeline::get_execution_timeline,
             // Multi-agent sessions
             commands::multi_agent::create_multi_agent_session,

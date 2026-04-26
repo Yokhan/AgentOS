@@ -61,6 +61,7 @@ import {
   activeScope,
   orchestrationMap,
   executionTimeline,
+  eventContract,
   showToast,
 } from "/store.js";
 import { normalizeSoloSelection } from "/provider-caps.js";
@@ -711,10 +712,10 @@ async function loadOrchestrationMap(
     orchestrationMap.value = {
       status: "ok",
       big_plan: {
-        stage: "timeline",
-        stage_index: 4,
+        stage: "event_contract",
+        stage_index: 5,
         stage_total: 6,
-        label: "Execution timeline + event normalization",
+        label: "Event contract + normalized source adapters",
       },
       scope: activeScope.value || null,
       project: project || "",
@@ -753,13 +754,15 @@ async function loadExecutionTimeline(
   if (!__IS_TAURI) {
     executionTimeline.value = {
       status: "ok",
+      schema_version: "agentos.event.v1",
       project: project || "_orchestrator",
       big_plan: {
-        stage: "timeline",
-        stage_index: 4,
+        stage: "event_contract",
+        stage_index: 5,
         stage_total: 6,
-        label: "Execution timeline + event normalization",
+        label: "Event contract + normalized source adapters",
       },
+      contract: eventContract.value || null,
       counts: { items: 0, warnings: 0 },
       items: [],
     };
@@ -775,6 +778,53 @@ async function loadExecutionTimeline(
     return res;
   }
   throw new Error(res?.error || "Cannot load execution timeline");
+}
+
+async function loadEventContract() {
+  if (!__IS_TAURI) {
+    eventContract.value = {
+      status: "ok",
+      schema_version: "agentos.event.v1",
+      row_shape: [
+        "source",
+        "kind",
+        "status",
+        "title",
+        "detail",
+        "project",
+        "ts",
+      ],
+      sources: [
+        {
+          id: "chat",
+          label: "Solo/project chat stream",
+          coverage: ["run", "tool", "thinking"],
+        },
+        {
+          id: "duo",
+          label: "Duo room/session events",
+          coverage: ["session_event"],
+        },
+        {
+          id: "delegation",
+          label: "Project-agent delegation lifecycle",
+          coverage: ["state", "stage", "done"],
+        },
+      ],
+      guarantees: [
+        "read_only",
+        "backwards_compatible_jsonl",
+        "single_ui_row_contract",
+      ],
+    };
+    return eventContract.value;
+  }
+  const res = await __invoke("get_event_contract_schema", {});
+  if (res?.status === "ok") {
+    eventContract.value = res;
+    return res;
+  }
+  throw new Error(res?.error || "Cannot load event contract");
 }
 async function generateStrategy(goalText, ctx, roomSessionId = null) {
   strategyLoading.value = true;
@@ -2016,6 +2066,7 @@ export {
   loadActiveScope,
   loadOrchestrationMap,
   loadExecutionTimeline,
+  loadEventContract,
   generateStrategy,
   createAdhocPlanFromRoom,
   createRoomProjectSession,

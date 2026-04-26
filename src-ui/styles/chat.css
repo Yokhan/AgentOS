@@ -342,6 +342,23 @@
     color: var(--text);
     border-color: var(--cyan);
 }
+.exec-contract-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+}
+.exec-contract-strip span {
+    border: 1px solid color-mix(in srgb, var(--cyan) 32%, var(--border));
+    background: color-mix(in srgb, var(--cyan) 6%, var(--bg));
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 3px 7px;
+}
+.exec-contract-strip b {
+    color: var(--cyan);
+    margin-right: 4px;
+}
 .exec-list {
     display: flex;
     flex-direction: column;

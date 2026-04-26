@@ -437,13 +437,13 @@ pub fn resolve_orchestration_map(
     json!({
         "status": "ok",
         "big_plan": {
-            "stage": "timeline",
-            "stage_index": 4,
+            "stage": "event_contract",
+            "stage_index": 5,
             "stage_total": 6,
-            "label": "Execution timeline + event normalization",
-            "done": ["foundation", "route_card", "live_transcript", "orchestration_map"],
-            "current": ["execution_timeline", "project_agents", "code_context_status"],
-            "next": ["event_unification", "provider_adapters", "project_agent_routing"]
+            "label": "Event contract + normalized source adapters",
+            "done": ["foundation", "route_card", "live_transcript", "orchestration_map", "execution_timeline"],
+            "current": ["event_contract", "source_adapters", "code_context_status"],
+            "next": ["provider_adapters", "project_agent_routing", "release_hardening"]
         },
         "scope": scope,
         "project": resolved_project,
@@ -695,8 +695,8 @@ mod tests {
 
         let result = resolve_orchestration_map(&state, Some("AgentOS".to_string()), None);
         assert_eq!(result["status"], "ok");
-        assert_eq!(result["big_plan"]["stage"], "timeline");
-        assert_eq!(result["big_plan"]["stage_index"], 4);
+        assert_eq!(result["big_plan"]["stage"], "event_contract");
+        assert_eq!(result["big_plan"]["stage_index"], 5);
         assert_eq!(result["scope"]["kind"], "project");
 
         let _ = std::fs::remove_dir_all(root);

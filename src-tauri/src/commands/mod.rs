@@ -19,6 +19,7 @@ pub mod delegation_ext;
 pub mod delegation_models;
 pub mod delegation_stream;
 pub mod deploy;
+pub mod event_contract;
 pub mod feed;
 pub mod financial;
 pub mod gate;

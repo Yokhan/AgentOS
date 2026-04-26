@@ -61,6 +61,7 @@ import {
   activeScope,
   orchestrationMap,
   executionTimeline,
+  eventContract,
   permData,
 } from "/store.js";
 import {
@@ -94,6 +95,7 @@ import {
   loadActiveScope,
   loadOrchestrationMap,
   loadExecutionTimeline,
+  loadEventContract,
   setDualOrchestrator,
 } from "/api.js";
 import {
@@ -1016,13 +1018,14 @@ function timelineStatusClass(status) {
   return "info";
 }
 
-function ExecutionTimelineCard({ timeline, onRefresh }) {
+function ExecutionTimelineCard({ timeline, contract, onRefresh }) {
   if (!timeline || timeline.status !== "ok") return null;
   const big = timeline.big_plan || {};
+  const schema = contract || timeline.contract || {};
   const items = timeline.items || [];
   const visible = items.slice(-10);
   const counts = timeline.counts || {};
-  const stageIndex = Number(big.stage_index || 4);
+  const stageIndex = Number(big.stage_index || 5);
   const stageTotal = Number(big.stage_total || 6);
   const copySummary = () => {
     const lines = visible.map((item) => {
@@ -1044,6 +1047,11 @@ function ExecutionTimelineCard({ timeline, onRefresh }) {
         <div class="exec-title">
           ${big.label || "Execution timeline"}
           <span>${counts.items || items.length} events</span>
+          ${timeline.schema_version || schema.schema_version
+            ? html`<span
+                >${timeline.schema_version || schema.schema_version}</span
+              >`
+            : null}
           ${counts.warnings
             ? html`<em
                 >${counts.warnings}
@@ -1057,6 +1065,18 @@ function ExecutionTimelineCard({ timeline, onRefresh }) {
         <button onClick=${copySummary} disabled=${!visible.length}>copy</button>
       </div>
     </div>
+    ${schema.sources?.length
+      ? html`<div class="exec-contract-strip">
+          ${schema.sources.map(
+            (source) =>
+              html`<span>
+                <b>${source.id}</b>
+                ${source.coverage?.length || 0}
+                event${source.coverage?.length === 1 ? "" : "s"}
+              </span>`,
+          )}
+        </div>`
+      : null}
     ${visible.length
       ? html`<div class="exec-list">
           ${visible.map((item, index) => {
@@ -1431,6 +1451,11 @@ function ChatSidebar() {
     Object.keys(delegations.value || {}).length,
     plansData.value.length,
   ]);
+  useEffect(() => {
+    loadEventContract().catch((e) =>
+      console.warn("event contract load failed:", e),
+    );
+  }, []);
   useEffect(() => {
     loadExecutionTimeline(
       currentProject.value || "",
@@ -2030,6 +2055,7 @@ function ChatSidebar() {
     />
     <${ExecutionTimelineCard}
       timeline=${executionTimeline.value}
+      contract=${eventContract.value}
       onRefresh=${() =>
         loadExecutionTimeline(
           currentProject.value || "",

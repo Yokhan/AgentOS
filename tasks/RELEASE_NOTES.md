@@ -1,3 +1,11 @@
+# Agent OS 0.2.38
+
+- Added a committed `v0.2.38` event-contract plan and moved the visible big-plan stage to `5/6`.
+- Added a shared backend `agentos.event.v1` contract for normalized chat, Duo room, delegation state, and delegation stream events.
+- Refactored the execution timeline to aggregate through the shared event contract instead of owning ad-hoc parsers.
+- Added a `get_event_contract_schema` command and frontend event-contract state/API.
+- Extended the Execution Timeline Card with schema version and source coverage chips so the UI explains which event sources are normalized.
+
 # Agent OS 0.2.37
 
 - Added a committed `v0.2.37` execution timeline plan and moved the visible big-plan stage to `4/6`.
