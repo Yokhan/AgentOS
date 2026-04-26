@@ -60,6 +60,7 @@ import {
   dualBusy,
   activeScope,
   orchestrationMap,
+  executionTimeline,
   permData,
 } from "/store.js";
 import {
@@ -92,6 +93,7 @@ import {
   loadDualSession,
   loadActiveScope,
   loadOrchestrationMap,
+  loadExecutionTimeline,
   setDualOrchestrator,
 } from "/api.js";
 import {
@@ -901,7 +903,7 @@ function OrchestrationMapCard({
       item.status || "",
     ),
   );
-  const stageIndex = Number(big.stage_index || 3);
+  const stageIndex = Number(big.stage_index || 4);
   const stageTotal = Number(big.stage_total || 6);
   return html`<div class="orch-map-card">
     <div class="orch-map-head">
@@ -1001,6 +1003,91 @@ function OrchestrationMapCard({
       </button>
       <button onClick=${onOpenPlans}>plans</button>
     </div>
+  </div>`;
+}
+
+function timelineStatusClass(status) {
+  const s = String(status || "").toLowerCase();
+  if (["failed", "error", "cancelled", "warning"].includes(s)) return "warn";
+  if (["running", "started", "pending", "queued", "verifying"].includes(s)) {
+    return "live";
+  }
+  if (["done", "completed", "ok", "success"].includes(s)) return "done";
+  return "info";
+}
+
+function ExecutionTimelineCard({ timeline, onRefresh }) {
+  if (!timeline || timeline.status !== "ok") return null;
+  const big = timeline.big_plan || {};
+  const items = timeline.items || [];
+  const visible = items.slice(-10);
+  const counts = timeline.counts || {};
+  const stageIndex = Number(big.stage_index || 4);
+  const stageTotal = Number(big.stage_total || 6);
+  const copySummary = () => {
+    const lines = visible.map((item) => {
+      const project = item.project ? ` [${item.project}]` : "";
+      const detail = item.detail ? ` - ${item.detail}` : "";
+      return `${item.status || "info"} ${item.source || "event"}/${item.kind || "event"}${project}: ${item.title || "event"}${detail}`;
+    });
+    navigator.clipboard
+      ?.writeText(lines.join("\n"))
+      .then(() => showToast("timeline copied", "success", 1200))
+      .catch(() => showToast("copy failed", "error", 2000));
+  };
+  return html`<div class="exec-timeline-card">
+    <div class="exec-head">
+      <div>
+        <div class="orch-eyebrow">
+          execution timeline - stage ${stageIndex}/${stageTotal}
+        </div>
+        <div class="exec-title">
+          ${big.label || "Execution timeline"}
+          <span>${counts.items || items.length} events</span>
+          ${counts.warnings
+            ? html`<em
+                >${counts.warnings}
+                warning${counts.warnings === 1 ? "" : "s"}</em
+              >`
+            : null}
+        </div>
+      </div>
+      <div class="exec-actions">
+        <button onClick=${onRefresh}>refresh</button>
+        <button onClick=${copySummary} disabled=${!visible.length}>copy</button>
+      </div>
+    </div>
+    ${visible.length
+      ? html`<div class="exec-list">
+          ${visible.map((item, index) => {
+            const cls = timelineStatusClass(item.status);
+            return html`<div
+              class="exec-row ${cls}"
+              key=${`${item.ts || ""}-${index}`}
+            >
+              <span class="exec-dot"></span>
+              <div class="exec-main">
+                <div class="exec-row-top">
+                  <b>${item.title || "event"}</b>
+                  <span
+                    >${item.source || "event"} / ${item.kind || "event"}</span
+                  >
+                </div>
+                ${item.detail
+                  ? html`<div class="exec-detail">${item.detail}</div>`
+                  : null}
+              </div>
+              <div class="exec-meta">
+                <span>${item.status || "info"}</span>
+                ${item.project ? html`<span>${item.project}</span>` : null}
+                ${item.ts ? html`<span>${ft(item.ts)}</span>` : null}
+              </div>
+            </div>`;
+          })}
+        </div>`
+      : html`<div class="exec-empty">
+          No timeline events yet. Start a chat run, Duo round, or delegation.
+        </div>`}
   </div>`;
 }
 
@@ -1343,6 +1430,22 @@ function ChatSidebar() {
     dualBusy.value,
     Object.keys(delegations.value || {}).length,
     plansData.value.length,
+  ]);
+  useEffect(() => {
+    loadExecutionTimeline(
+      currentProject.value || "",
+      activeDualSession.value || null,
+      80,
+    ).catch((e) => console.warn("execution timeline load failed:", e));
+  }, [
+    currentProject.value,
+    activeDualSession.value,
+    dualBusy.value,
+    activeRun.value?.status,
+    activeRun.value?.phase,
+    activeRun.value?.detail,
+    streamChain.value.length,
+    Object.keys(delegations.value || {}).length,
   ]);
   useEffect(() => {
     if (!duoEnabled) return;
@@ -1924,6 +2027,15 @@ function ChatSidebar() {
         showPlans.value = true;
         loadPlansData().catch((e) => console.warn("plans refresh:", e));
       }}
+    />
+    <${ExecutionTimelineCard}
+      timeline=${executionTimeline.value}
+      onRefresh=${() =>
+        loadExecutionTimeline(
+          currentProject.value || "",
+          activeDualSession.value || null,
+          80,
+        ).catch((e) => console.warn("execution timeline refresh:", e))}
     />
     ${duoEnabled
       ? html`<div class="duo-brief">

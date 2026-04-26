@@ -1,3 +1,11 @@
+# Agent OS 0.2.37
+
+- Added a committed `v0.2.37` execution timeline plan and moved the visible big-plan stage to `4/6`.
+- Added a read-only backend execution timeline over chat stream events, Duo session events, delegation state, and delegation stream stage/done events.
+- Added a chat-side Execution Timeline Card showing normalized event source, kind, status, project, detail, warnings, and quick copy/refresh actions.
+- Kept this wave read-only: timeline is an observability layer, not another execution source of truth.
+- Confirmed code context remains routed through the graph context pipeline while timeline focuses on what is happening now.
+
 # Agent OS 0.2.36
 
 - Added a committed `v0.2.36` orchestration-map plan and made the current big-plan stage visible in the product.

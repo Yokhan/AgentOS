@@ -60,6 +60,7 @@ import {
   dualBusy,
   activeScope,
   orchestrationMap,
+  executionTimeline,
   showToast,
 } from "/store.js";
 import { normalizeSoloSelection } from "/provider-caps.js";
@@ -710,10 +711,10 @@ async function loadOrchestrationMap(
     orchestrationMap.value = {
       status: "ok",
       big_plan: {
-        stage: "routing",
-        stage_index: 3,
+        stage: "timeline",
+        stage_index: 4,
         stage_total: 6,
-        label: "Project routing + plan/work-item visibility",
+        label: "Execution timeline + event normalization",
       },
       scope: activeScope.value || null,
       project: project || "",
@@ -742,6 +743,38 @@ async function loadOrchestrationMap(
     return res;
   }
   throw new Error(res?.error || "Cannot resolve orchestration map");
+}
+
+async function loadExecutionTimeline(
+  project = currentProject.value || "",
+  sessionId = activeDualSession.value || null,
+  limit = 80,
+) {
+  if (!__IS_TAURI) {
+    executionTimeline.value = {
+      status: "ok",
+      project: project || "_orchestrator",
+      big_plan: {
+        stage: "timeline",
+        stage_index: 4,
+        stage_total: 6,
+        label: "Execution timeline + event normalization",
+      },
+      counts: { items: 0, warnings: 0 },
+      items: [],
+    };
+    return executionTimeline.value;
+  }
+  const res = await __invoke("get_execution_timeline", {
+    project: project || null,
+    roomSessionId: sessionId || null,
+    limit,
+  });
+  if (res?.status === "ok") {
+    executionTimeline.value = res;
+    return res;
+  }
+  throw new Error(res?.error || "Cannot load execution timeline");
 }
 async function generateStrategy(goalText, ctx, roomSessionId = null) {
   strategyLoading.value = true;
@@ -1982,6 +2015,7 @@ export {
   loadPlansData,
   loadActiveScope,
   loadOrchestrationMap,
+  loadExecutionTimeline,
   generateStrategy,
   createAdhocPlanFromRoom,
   createRoomProjectSession,

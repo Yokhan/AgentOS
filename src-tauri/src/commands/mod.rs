@@ -46,4 +46,5 @@ pub mod signals;
 pub mod status;
 pub mod strategy;
 pub mod strategy_models;
+pub mod timeline;
 pub mod usage;
