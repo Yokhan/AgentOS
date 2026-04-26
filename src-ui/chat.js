@@ -1290,7 +1290,6 @@ function ExecutionTimelineCard({ timeline, contract, onRefresh }) {
               </div>
             </div>`;
           })}
-          </div>
         </div>`
       : html`<div class="exec-empty">
           No timeline events yet. Start a chat run, Duo round, or delegation.
@@ -3889,6 +3888,7 @@ export {
   ToolCard,
   ThinkBlock,
   ProgressBar,
+  ExecutionTimelineCard,
   ChatMsg,
   StreamBubble,
   DelegBtn,

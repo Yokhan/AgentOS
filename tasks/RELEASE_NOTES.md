@@ -1,3 +1,8 @@
+# Agent OS 0.3.2
+
+- Fixed a second launch-blocking frontend runtime error in `ExecutionTimelineCard` caused by an invalid nested `html` template in the execution event list.
+- Extended the UI release gate with a chat render smoke check that imports the chat module and renders `DetailView` plus the affected execution timeline card before updater packaging.
+
 # Agent OS 0.3.1
 
 - Fixed a launch-blocking frontend runtime error in chat: `plansData` was used by the orchestration map refresh dependencies but was not imported from the shared store.
