@@ -42,6 +42,7 @@ import {
   showPlan,
   orchOk,
   signalsData,
+  composerDraftText,
   showToast,
 } from "/store.js";
 import {
@@ -865,6 +866,12 @@ function GraphInspector() {
     showGraph.value = false;
     sendMessage(prompt);
   };
+  const attachToChat = (prompt) => {
+    currentProject.value = null;
+    composerDraftText.value = prompt;
+    showGraph.value = false;
+    showToast("Graph context attached to chat", "success", 1500);
+  };
   return html`<div class="panel" style="min-width:320px;max-width:420px">
     <h3>${node.path || node.label}</h3>
     <div
@@ -897,6 +904,15 @@ function GraphInspector() {
             <button
               class="action-btn"
               onClick=${() =>
+                attachToChat(
+                  `[GRAPH_CONTEXT:${node.label}]\nReview routing and dependency risks for this project before delegation.`,
+                )}
+            >
+              attach graph
+            </button>
+            <button
+              class="action-btn"
+              onClick=${() =>
                 askOrchestrator(
                   `[GRAPH_CONTEXT:${node.label}]\nReview routing and dependency risks for this project before delegation.`,
                 )}
@@ -906,6 +922,15 @@ function GraphInspector() {
         : null}
       ${project && node.path
         ? html`<button
+              class="action-btn"
+              onClick=${() =>
+                attachToChat(
+                  `[GRAPH_IMPACT:${project}:${node.path}]\nExplain what breaks if I change this file and propose safe delegation steps.`,
+                )}
+            >
+              attach impact
+            </button>
+            <button
               class="action-btn"
               onClick=${() =>
                 askOrchestrator(
@@ -926,11 +951,17 @@ function GraphInspector() {
         : null}
       ${project
         ? html`<button
-            class="action-btn"
-            onClick=${() => askOrchestrator(`[GRAPH_VERIFY:${project}]`)}
-          >
-            verify graph
-          </button>`
+              class="action-btn"
+              onClick=${() => attachToChat(`[GRAPH_VERIFY:${project}]`)}
+            >
+              attach verify
+            </button>
+            <button
+              class="action-btn"
+              onClick=${() => askOrchestrator(`[GRAPH_VERIFY:${project}]`)}
+            >
+              verify graph
+            </button>`
         : null}
     </div>
     <div style="margin-top:var(--sp-m)">

@@ -1164,6 +1164,20 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
         })
     };
     let codex_models = codex_available_models(&codex_acp);
+    let codex_models_count = codex_models.len();
+    let mut codex_model_sources: Vec<String> = Vec::new();
+    for model in &codex_models {
+        if let Some(source) = model.get("source").and_then(|v| v.as_str()) {
+            if !codex_model_sources.iter().any(|item| item == source) {
+                codex_model_sources.push(source.to_string());
+            }
+        }
+    }
+    let codex_models_source = if codex_model_sources.is_empty() {
+        "fallback".to_string()
+    } else {
+        codex_model_sources.join("+")
+    };
     let codex_model = cfg
         .get("codex_model")
         .and_then(|v| v.as_str())
@@ -1240,6 +1254,8 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
                 "acp_command": codex_acp.get("command").cloned().unwrap_or(Value::Null),
                 "acp_args": codex_acp.get("args").cloned().unwrap_or(Value::Array(vec![])),
                 "acp_probe": codex_acp.get("probe").cloned().unwrap_or(Value::String("ACP unavailable".to_string())),
+                "models_count": codex_models_count,
+                "models_source": codex_models_source,
                 "models": codex_models,
             }
         },
@@ -1350,6 +1366,12 @@ mod tests {
                 .and_then(|model| model.get("slug"))
                 .and_then(|slug| slug.as_str()),
             Some("gpt-5.5")
+        );
+        assert_eq!(
+            out.first()
+                .and_then(|model| model.get("source"))
+                .and_then(|source| source.as_str()),
+            Some("test")
         );
     }
 

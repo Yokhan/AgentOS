@@ -84,7 +84,7 @@ pub fn is_cancelled(state: &AppState, chat_key: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub fn kill_existing(state: &AppState, chat_key: &str) {
+pub fn kill_existing(state: &AppState, chat_key: &str) -> Option<u32> {
     if let Ok(mut pids) = state.running_pids.lock() {
         if let Some(pid) = pids.remove(chat_key) {
             #[cfg(target_os = "windows")]
@@ -99,8 +99,10 @@ pub fn kill_existing(state: &AppState, chat_key: &str) {
                     .args(["-9", &pid.to_string()])
                     .output();
             }
+            return Some(pid);
         }
     }
+    None
 }
 
 pub fn kill_all_tracked(state: &AppState) {

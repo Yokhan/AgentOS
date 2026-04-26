@@ -36,6 +36,13 @@
     opacity: 0.55;
     cursor: not-allowed;
 }
+.ch-title .chat-mode-toggle,
+.ch-title .chat-access-select,
+.ch-title select[title="Solo provider"],
+.ch-title select[title$="model"],
+.ch-title select[title$="effort"] {
+    display: none;
+}
 .running-banner {
     padding: var(--sp-s) var(--sp-m);
     background: color-mix(in srgb, var(--green) 8%, var(--sf));
@@ -111,7 +118,7 @@
     white-space: nowrap;
 }
 .solo-compose-route {
-    display: flex;
+    display: none;
     align-items: center;
     gap: var(--sp-xs);
     flex-wrap: wrap;
@@ -121,6 +128,118 @@
     font-family: var(--font-mono);
     font-size: var(--fs-s);
     color: var(--t3);
+}
+.duo-compose-route {
+    display: none !important;
+}
+.route-card {
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--sf2) 88%, transparent),
+        color-mix(in srgb, var(--sf) 94%, transparent)
+    );
+    padding: var(--sp-s) var(--sp-m);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-xs);
+}
+.route-card.has-warnings {
+    border-left: 2px solid var(--yellow);
+}
+.route-main {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-s);
+}
+.route-eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    color: var(--t3);
+    text-transform: uppercase;
+    letter-spacing: 1.4px;
+}
+.route-path {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-xs);
+    color: var(--text);
+    font-weight: 650;
+    min-width: 0;
+}
+.route-path span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.route-path b {
+    color: var(--t3);
+    font-weight: 400;
+}
+.route-pills,
+.route-meta,
+.route-controls,
+.route-delegations,
+.route-warnings {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+}
+.route-pills span,
+.route-meta span,
+.route-warnings span {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 2px 7px;
+}
+.route-meta span {
+    color: var(--t3);
+}
+.route-warnings span {
+    color: var(--yellow);
+    border-color: color-mix(in srgb, var(--yellow) 45%, var(--border));
+}
+.route-run.running,
+.route-run.starting,
+.route-run.stopping {
+    color: var(--cyan) !important;
+}
+.route-run.failed {
+    color: var(--accent) !important;
+}
+.route-run.cancelled {
+    color: var(--yellow) !important;
+}
+.route-controls button,
+.route-controls select,
+.route-delegations button {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 3px 7px;
+    min-height: 25px;
+    cursor: pointer;
+}
+.route-controls button.primary {
+    border-color: var(--cyan);
+    color: var(--cyan);
+}
+.route-controls button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.route-controls button:hover:not(:disabled),
+.route-controls select:hover,
+.route-delegations button:hover {
+    color: var(--text);
+    border-color: var(--cyan);
 }
 .solo-compose-route span {
     display: flex;
@@ -1559,6 +1678,13 @@
     .analytics-bar {
         display: none;
     }
+    .route-main {
+        flex-direction: column;
+    }
+    .route-controls select,
+    .route-controls button {
+        flex: 1 1 120px;
+    }
 }
 
 /* === DELEGATION CARDS === */
@@ -1576,9 +1702,18 @@
     color: var(--t2);
     font-family: var(--font-mono);
     display: flex;
+    align-items: center;
     justify-content: space-between;
+    gap: var(--sp-xs);
     cursor: pointer;
     background: var(--sf);
+}
+.deleg-bulk summary {
+    color: var(--t3);
+    cursor: pointer;
+}
+.deleg-bulk button {
+    margin-left: var(--sp-xs);
 }
 
 /* === SOURCE LABELS === */

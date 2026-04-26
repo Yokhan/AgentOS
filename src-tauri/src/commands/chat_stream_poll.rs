@@ -90,9 +90,14 @@ pub fn stop_chat(state: State<Arc<AppState>>, project: Option<String>) -> Value 
         &json!({"type":"done","text":"","tools":[],"outcome":"cancelled"}),
         "stream cancelled done marker",
     );
-    kill_existing(&state, &chat_key);
+    let killed_pid = kill_existing(&state, &chat_key);
     clear_activity(&state, &chat_key);
-    json!({"status": "stopped", "project": chat_key})
+    json!({
+        "status": "stopped",
+        "project": chat_key,
+        "killed": killed_pid.is_some(),
+        "pid": killed_pid
+    })
 }
 
 /// Check if a chat is currently streaming

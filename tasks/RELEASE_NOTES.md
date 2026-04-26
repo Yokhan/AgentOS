@@ -1,3 +1,15 @@
+# Agent OS 0.2.34
+
+- Added a committed `v0.2.34` product UX/orchestration plan with 20 top-level improvements and 50 concrete implementation items.
+- Added a unified Route Card in chat showing the next-message target, provider/model, mode/access, runtime state, history depth, scope, model source, and delegation counts.
+- Moved common solo routing controls into the Route Card and hid duplicate header/route-strip controls to reduce cockpit noise.
+- Added route warnings for offline providers, read-only execution mismatch, and Duo execution without a write-enabled lead.
+- Added Duo route actions for ask-both, make-plan, and lead-exec from the same route surface.
+- Added graph/code context attach actions so Graph Inspector can either attach context into the composer or ask the orchestrator immediately.
+- Added backend provider metadata for Codex model source/count and backend Stop metadata for whether a provider PID was actually killed.
+- Improved Stop UX to show `stopping` while provider cleanup is in progress and then settle from stream events.
+- Hid bulk delegation approval behind a compact control while keeping per-delegation approve/reject visible.
+
 # Agent OS 0.2.33
 
 - Added a committed execution plan for the runtime/chat pass so release work is not only stored in the conversation.

@@ -13,6 +13,7 @@ import {
   currentProject,
   sideMessages,
   sideTitle,
+  composerDraftText,
   chatPageInfo,
   chatHistoryLoading,
   streamText,
@@ -146,6 +147,186 @@ function scopeNextTitle(scope, leadLabel) {
 
 function shortModelLabel(model) {
   return String(model || "auto").replace(/^gpt-/, "gpt ");
+}
+
+function codexModelSourceLabel(codexStatus) {
+  if (codexStatus?.models_source) return codexStatus.models_source;
+  const sources = new Set(
+    (codexStatus?.models || []).map((model) => model?.source).filter(Boolean),
+  );
+  if (sources.size) return [...sources].join("+");
+  return "fallback";
+}
+
+function providerAvailability(provider, providerStatus) {
+  const info = providerStatus?.providers?.[provider] || {};
+  if (info.available === false) return "offline";
+  if (provider === "codex") return info.transport || "cli";
+  return "ready";
+}
+
+function summarizeDelegationsForRoute(allDelegations, project) {
+  const entries = Object.entries(allDelegations || {}).filter(([_, item]) =>
+    project ? item?.project === project : true,
+  );
+  const counts = {
+    total: entries.length,
+    pending: 0,
+    running: 0,
+    failed: 0,
+    done: 0,
+  };
+  for (const [, item] of entries) {
+    const status = item?.status || "pending";
+    if (status === "done") counts.done++;
+    else if (status === "running" || status === "escalated") counts.running++;
+    else if (status === "failed" || status === "error") counts.failed++;
+    else counts.pending++;
+  }
+  return { ...counts, entries: entries.slice(0, 4) };
+}
+
+function duoInputLabel(action, lead, target) {
+  if (action === "send") return `${lead?.label || "selected lead"} executes`;
+  if (action === "challenge") return `challenge ${target?.label || "target"}`;
+  if (action === "mention") return `message ${target?.label || "agent"}`;
+  if (action === "rebuttal") return `rebut ${target?.label || "agent"}`;
+  if (action === "promote_plan") return "create project/global plan";
+  if (action === "promote_strategy") return "create strategy";
+  if (action === "child_session") return "create project room";
+  return "both agents review";
+}
+
+function RouteCard({
+  route,
+  providerOptions,
+  modelOptions,
+  effortOptions,
+  accessOptions,
+  onToggleMode,
+  onAccess,
+  onProvider,
+  onModel,
+  onEffort,
+  onProjectContext,
+  onGraphContext,
+  onReview,
+  onAskBoth,
+  onMakePlan,
+  onLeadExecute,
+}) {
+  const run = route.run;
+  const warnings = route.warnings || [];
+  return html`<div class="route-card ${warnings.length ? "has-warnings" : ""}">
+    <div class="route-main">
+      <div>
+        <div class="route-eyebrow">next message route</div>
+        <div class="route-path">
+          <span>${route.target}</span><b>-></b><span>${route.inputLabel}</span>
+        </div>
+      </div>
+      <div class="route-pills">
+        <span>${route.provider}</span>
+        <span>${shortModelLabel(route.model)}</span>
+        <span>${route.mode}/${route.access}</span>
+        <span>${route.providerState}</span>
+      </div>
+    </div>
+    <div class="route-meta">
+      <span>models: ${route.modelCount} ${route.modelSource}</span>
+      <span
+        >history:
+        ${route.historyLoaded}/${route.historyTotal ||
+        route.historyLoaded}</span
+      >
+      <span>scope: ${route.scope}</span>
+      <span>
+        delegations: ${route.delegations.pending} pending,
+        ${route.delegations.running} running, ${route.delegations.failed}
+        failed, ${route.delegations.done} done
+      </span>
+      ${run
+        ? html`<span class="route-run ${run.status || "running"}">
+            ${run.status || "running"} ${run.phase || "run"} ${run.detail || ""}
+          </span>`
+        : null}
+    </div>
+    ${warnings.length
+      ? html`<div class="route-warnings">
+          ${warnings.map((warning) => html`<span>${warning}</span>`)}
+        </div>`
+      : null}
+    <div class="route-controls">
+      ${route.duo
+        ? html`<button onClick=${onAskBoth}>ask both</button>
+            <button onClick=${onMakePlan}>make plan</button>
+            <button
+              class="primary"
+              disabled=${!route.canLeadExecute}
+              onClick=${onLeadExecute}
+            >
+              lead executes
+            </button>`
+        : html`<button class="primary" onClick=${onToggleMode}>
+              ${route.mode === "plan" ? "switch to act" : "plan first"}
+            </button>
+            <select
+              value=${route.accessRaw}
+              disabled=${route.mode === "plan"}
+              onChange=${(e) => onAccess(e.target.value)}
+            >
+              ${accessOptions.map(
+                ([value, label]) =>
+                  html`<option value=${value}>${label}</option>`,
+              )}
+            </select>
+            <select
+              value=${route.providerRaw}
+              onChange=${(e) => onProvider(e.target.value)}
+            >
+              ${providerOptions.map(
+                ([value, label]) =>
+                  html`<option value=${value}>${label}</option>`,
+              )}
+            </select>
+            <select
+              value=${route.modelRaw}
+              onChange=${(e) => onModel(e.target.value)}
+            >
+              ${modelOptions.map(
+                ([value, label]) =>
+                  html`<option value=${value}>${label}</option>`,
+              )}
+            </select>
+            <select
+              value=${route.effortRaw}
+              onChange=${(e) => onEffort(e.target.value)}
+            >
+              ${effortOptions.map(
+                ([value, label]) =>
+                  html`<option value=${value}>${label}</option>`,
+              )}
+            </select>`}
+      <button onClick=${onProjectContext}>project context</button>
+      <button onClick=${onGraphContext}>graph context</button>
+      <button onClick=${onReview}>review route</button>
+    </div>
+    ${route.delegations.entries.length
+      ? html`<div class="route-delegations">
+          ${route.delegations.entries.map(
+            ([id, item]) =>
+              html`<button
+                title=${id}
+                onClick=${() => {
+                  if (item?.project) currentProject.value = item.project;
+                }}
+              >
+                ${item?.project || "project"}: ${item?.status || "pending"}
+              </button>`,
+          )}
+        </div>`
+      : null}
+  </div>`;
 }
 
 function Tile({ a }) {
@@ -479,27 +660,30 @@ function DelegationPanel() {
         delegation${active.length !== 1 ? "s" : ""}</span
       >
       ${pending.length > 1
-        ? html`<button
-            class="dc-btn"
-            style="background:var(--green);color:var(--bg)"
-            onClick=${async () => {
-              for (let i = 0; i < pending.length; i++) {
-                showToast(
-                  i +
-                    1 +
-                    "/" +
-                    pending.length +
-                    ": " +
-                    (pending[i][1]?.project || ""),
-                  "info",
-                  2000,
-                );
-                await approveDel(pending[i][0]);
-              }
-            }}
-          >
-            approve all
-          </button>`
+        ? html`<details class="deleg-bulk">
+            <summary>bulk</summary>
+            <button
+              class="dc-btn"
+              style="background:var(--green);color:var(--bg)"
+              onClick=${async () => {
+                for (let i = 0; i < pending.length; i++) {
+                  showToast(
+                    i +
+                      1 +
+                      "/" +
+                      pending.length +
+                      ": " +
+                      (pending[i][1]?.project || ""),
+                    "info",
+                    2000,
+                  );
+                  await approveDel(pending[i][0]);
+                }
+              }}
+            >
+              approve all
+            </button>
+          </details>`
         : null}
     </div>
     ${active.map(([id, d]) => {
@@ -989,6 +1173,11 @@ function ChatSidebar() {
       }
     }
   }, [soloProvider, selectedModelValue, selectedEffortValue]);
+  useEffect(() => {
+    if (!composerDraftText.value) return;
+    insertPrompt(composerDraftText.value);
+    composerDraftText.value = "";
+  }, [composerDraftText.value]);
   const onScroll = () => {
     if (msgsRef.current) {
       const el = msgsRef.current;
@@ -1156,6 +1345,81 @@ function ChatSidebar() {
     document.body.classList.add("chat-resizing");
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
+  };
+  const providerStatusSnapshot = permData.value?.provider_status || {};
+  const providerState = providerAvailability(
+    soloProvider,
+    providerStatusSnapshot,
+  );
+  const modelSource =
+    soloProvider === "codex" ? codexModelSourceLabel(codexStatus) : "static";
+  const modelCount =
+    soloProvider === "codex"
+      ? Number(codexStatus.models_count || 0) ||
+        (codexStatus.models || []).length ||
+        Math.max(0, modelOptions.length - 1)
+      : Math.max(0, modelOptions.length - 1);
+  const routeRun =
+    activeRun.value &&
+    activeRun.value.project === (currentProject.value || "_orchestrator")
+      ? activeRun.value
+      : null;
+  const routeDelegations = summarizeDelegationsForRoute(
+    delegations.value,
+    currentProject.value || "",
+  );
+  const routeWarnings = [];
+  if (providerState === "offline") {
+    routeWarnings.push(`${soloProvider} runtime is offline`);
+  }
+  if (
+    !duoEnabled &&
+    chatRunMode.value === "act" &&
+    chatAccessLevel.value === "read"
+  ) {
+    routeWarnings.push("act mode is read-only");
+  }
+  if (duoExecuteMode && !activeOrchestrator?.write_enabled) {
+    routeWarnings.push("execution needs a write-enabled lead");
+  }
+  const route = {
+    duo: duoEnabled,
+    target: currentProject.value || "orchestrator",
+    scope: `${scope.kind || "global"}:${scope.title || currentProject.value || "orchestrator"}`,
+    inputLabel: duoEnabled
+      ? duoInputLabel(duoComposerAction, activeOrchestrator, roomTarget)
+      : `${soloProvider} ${chatRunMode.value}`,
+    provider: duoEnabled ? activeOrchestrator?.provider || "duo" : soloProvider,
+    providerRaw: selectedSoloProvider.value,
+    providerState,
+    model: duoEnabled
+      ? activeOrchestrator?.model || "room"
+      : selectedModelValue || "auto",
+    modelRaw: selectedModelValue,
+    effortRaw: selectedEffortValue,
+    mode: duoEnabled
+      ? duoExecuteMode
+        ? "execute"
+        : duoCollaborateMode
+          ? "review"
+          : "chat"
+      : chatRunMode.value,
+    access: duoEnabled
+      ? activeOrchestrator?.write_enabled
+        ? "write"
+        : "read"
+      : chatRunMode.value === "plan"
+        ? "read"
+        : chatAccessLevel.value || "write",
+    accessRaw: chatAccessLevel.value,
+    modelSource,
+    modelCount,
+    historyLoaded: chatPageInfo.value.loaded || sideMessages.value.length,
+    historyTotal: chatPageInfo.value.total || sideMessages.value.length,
+    delegations: routeDelegations,
+    run: routeRun,
+    warnings: routeWarnings,
+    canLeadExecute: !!activeOrchestrator?.write_enabled,
   };
   return html`<div
     class="chat-side"
@@ -1353,6 +1617,64 @@ function ChatSidebar() {
     ${isDrag.value ? html`<div class="drop-zone">Drop files here</div>` : null}
     <${RunningBanner} />
     <${LiveRunHud} />
+    <${RouteCard}
+      route=${route}
+      providerOptions=${soloProviderOptions}
+      modelOptions=${modelOptions}
+      effortOptions=${effortOptions}
+      accessOptions=${accessOptions}
+      onToggleMode=${() => {
+        chatRunMode.value = chatRunMode.value === "plan" ? "act" : "plan";
+      }}
+      onAccess=${(value) => {
+        chatAccessLevel.value = value;
+        showToast("access: " + value, "success", 1200);
+      }}
+      onProvider=${(value) => {
+        selectedSoloProvider.value = value;
+        showToast(
+          "provider: " + (value || configuredSoloProvider),
+          "success",
+          1200,
+        );
+      }}
+      onModel=${(value) => {
+        if (soloProvider === "codex") selectedCodexModel.value = value;
+        else selectedClaudeModel.value = value;
+        showToast("model: " + (value || "auto"), "success", 1200);
+      }}
+      onEffort=${(value) => {
+        if (soloProvider === "codex") selectedCodexEffort.value = value;
+        else selectedClaudeEffort.value = value;
+        showToast("effort: " + (value || "default"), "success", 1200);
+      }}
+      onProjectContext=${() =>
+        insertPrompt(
+          currentProject.value
+            ? `[PROJECT_CONTEXT:${currentProject.value}]\nSummarize current state, blockers, dirty files, and safest next action.`
+            : "[DASHBOARD_FULL]\nSummarize the global project state, blockers, and safest next route.",
+        )}
+      onGraphContext=${() =>
+        insertPrompt(
+          currentProject.value
+            ? `[GRAPH_CONTEXT:${currentProject.value}]\nUse code graph context to identify dependency risks before making changes.`
+            : "[GRAPH_CONTEXT:overview]\nUse the project graph to choose the safest orchestration target.",
+        )}
+      onReview=${() =>
+        insertPrompt(
+          currentProject.value
+            ? "Review this route and project state. If execution is safe, propose the exact next step; otherwise state the blocker."
+            : "Review the global orchestration route. Choose the safest project, provider, and execution mode.",
+        )}
+      onAskBoth=${() => {
+        setDuoComposerAction("ask_both");
+        setDuoComposerTarget("");
+        setDuoView("collaborate");
+        focusComposerSoon();
+      }}
+      onMakePlan=${draftPlanFromDuo}
+      onLeadExecute=${openExecutionWithLead}
+    />
     ${duoEnabled
       ? html`<div class="duo-brief">
           <div class="scope-strip">
@@ -1470,6 +1792,16 @@ function ChatSidebar() {
                   insertPrompt("[HEALTH_CHECK:all]\n[DASHBOARD_FULL]")}
               >
                 health bundle
+              </button>
+              <button
+                onClick=${() =>
+                  insertPrompt(
+                    currentProject.value
+                      ? `[GRAPH_CONTEXT:${currentProject.value}]\nMap the code structure, risks, and safest implementation path.`
+                      : "[GRAPH_CONTEXT:overview]\nMap project dependencies and identify the safest next orchestration target.",
+                  )}
+              >
+                graph context
               </button>
             </div>
           </div>`
@@ -1821,8 +2153,8 @@ function ChatSidebar() {
                 return "ask both agents for review...";
               })()
             : chatRunMode.value === "plan"
-              ? "ask for a plan..."
-              : "tell " + sideTitle.value + " what to do..."}
+              ? `plan with ${route.inputLabel}...`
+              : `tell ${route.inputLabel} what to do...`}
         rows="1"
         style=${isStreaming.value ? "opacity:0.5" : ""}
         onKeyDown=${onKey}
@@ -1850,19 +2182,28 @@ function ChatSidebar() {
               __invoke &&
                 __invoke("stop_chat", {
                   project: currentProject.value || null,
-                });
+                })
+                  .then((res) => {
+                    showToast(
+                      res?.killed
+                        ? `Stopped provider pid ${res.pid}`
+                        : "Stop requested",
+                      "info",
+                      2000,
+                    );
+                  })
+                  .catch((e) => showToast("Stop error: " + e, "error"));
               curActivity.value = "stopping; preserving visible output...";
               if (activeRun.value) {
                 activeRun.value = {
                   ...activeRun.value,
-                  status: "cancelled",
-                  outcome: "cancelled",
-                  phase: "cancelled",
-                  detail: "stopped by user",
+                  status: "stopping",
+                  outcome: "",
+                  phase: "cancelling",
+                  detail: "stop requested; waiting for provider cleanup",
                   updatedAt: Date.now(),
                 };
               }
-              showToast("Stopped", "info", 2000);
             }}
           >
             ■

@@ -6,6 +6,7 @@ const agents = signal([]);
 const currentProject = signal(null);
 const sideMessages = signal([]);
 const sideTitle = signal("orchestrator");
+const composerDraftText = signal("");
 const chatPageInfo = signal({
   project: "",
   total: 0,
@@ -175,6 +176,7 @@ export {
   currentProject,
   sideMessages,
   sideTitle,
+  composerDraftText,
   chatPageInfo,
   chatHistoryLoading,
   streamText,
