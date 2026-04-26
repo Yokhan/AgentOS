@@ -59,6 +59,7 @@ import {
   dualHistories,
   dualBusy,
   activeScope,
+  orchestrationMap,
   showToast,
 } from "/store.js";
 import { normalizeSoloSelection } from "/provider-caps.js";
@@ -699,6 +700,48 @@ async function loadActiveScope(
     return res.scope;
   }
   throw new Error(res?.error || "Cannot resolve active scope");
+}
+
+async function loadOrchestrationMap(
+  project = currentProject.value || "",
+  sessionId = activeDualSession.value || null,
+) {
+  if (!__IS_TAURI) {
+    orchestrationMap.value = {
+      status: "ok",
+      big_plan: {
+        stage: "routing",
+        stage_index: 3,
+        stage_total: 6,
+        label: "Project routing + plan/work-item visibility",
+      },
+      scope: activeScope.value || null,
+      project: project || "",
+      plans: [],
+      project_sessions: [],
+      work_items: [],
+      delegations: {
+        counts: { pending: 0, running: 0, failed: 0, done: 0 },
+        items: [],
+      },
+      leases: { active: 0, items: [] },
+      graph_context: {
+        available: false,
+        project: project || "",
+        reason: __IS_TAURI ? "" : "desktop command unavailable",
+      },
+    };
+    return orchestrationMap.value;
+  }
+  const res = await __invoke("get_orchestration_map", {
+    project: project || null,
+    roomSessionId: sessionId || null,
+  });
+  if (res?.status === "ok") {
+    orchestrationMap.value = res;
+    return res;
+  }
+  throw new Error(res?.error || "Cannot resolve orchestration map");
 }
 async function generateStrategy(goalText, ctx, roomSessionId = null) {
   strategyLoading.value = true;
@@ -1938,6 +1981,7 @@ export {
   loadStrategies,
   loadPlansData,
   loadActiveScope,
+  loadOrchestrationMap,
   generateStrategy,
   createAdhocPlanFromRoom,
   createRoomProjectSession,

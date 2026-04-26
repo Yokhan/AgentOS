@@ -166,6 +166,7 @@ const dualSessionData = signal(null);
 const dualHistories = signal({});
 const dualBusy = signal("");
 const activeScope = signal(null);
+const orchestrationMap = signal(null);
 
 // Clock interval (global, no cleanup needed for desktop app)
 setInterval(() => (clock.value = new Date().toLocaleTimeString()), 1000);
@@ -248,5 +249,6 @@ export {
   dualHistories,
   dualBusy,
   activeScope,
+  orchestrationMap,
   showToast,
 };

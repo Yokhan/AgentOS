@@ -171,6 +171,121 @@
     border-color: var(--cyan);
     color: var(--text);
 }
+.orch-map-card {
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--sf) 72%, var(--bg));
+    padding: var(--sp-s) var(--sp-m);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-xs);
+}
+.orch-map-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-s);
+}
+.orch-eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    color: var(--t3);
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+}
+.orch-title {
+    color: var(--text);
+    font-weight: 650;
+}
+.orch-stage {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+.orch-stage span {
+    width: 18px;
+    height: 4px;
+    background: var(--border);
+}
+.orch-stage span.done {
+    background: var(--green);
+}
+.orch-stage span.current {
+    background: var(--yellow);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--yellow) 45%, transparent);
+}
+.orch-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-xs);
+}
+.orch-grid > div,
+.orch-next {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.orch-grid b,
+.orch-next b {
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    color: var(--t3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.orch-grid span,
+.orch-next span {
+    color: var(--t2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.orch-grid .ok span {
+    color: var(--green);
+}
+.orch-grid .warn span {
+    color: var(--yellow);
+}
+.orch-work-strip,
+.orch-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+}
+.orch-work {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 3px 7px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.orch-work.running,
+.orch-work.queued {
+    border-color: color-mix(in srgb, var(--cyan) 45%, var(--border));
+    color: var(--cyan);
+}
+.orch-actions button {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 3px 8px;
+    cursor: pointer;
+}
+.orch-actions button:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--cyan);
+}
 .scroll-catchup {
     position: absolute;
     bottom: 80px;

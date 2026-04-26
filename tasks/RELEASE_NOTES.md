@@ -1,3 +1,11 @@
+# Agent OS 0.2.36
+
+- Added a committed `v0.2.36` orchestration-map plan and made the current big-plan stage visible in the product.
+- Added a read-only backend orchestration map that joins active scope, plans, project sessions, work items, delegations, file leases, and graph/code-context status.
+- Added a chat-side Orchestration Map Card showing stage `3/6`, current scope, project-agent sessions, open work items, delegation counts, active write leases, and code-context readiness.
+- Added route-aware actions for attaching graph/code context, opening the graph, verifying graph risk, and opening plans.
+- Confirmed the code-context path is the existing graph context pipeline: `[GRAPH_CONTEXT:project]` plus `graph_ops::build_graph_context()` for delegation prompts.
+
 # Agent OS 0.2.35
 
 - Added a committed `v0.2.35` live transcript plan focused on scroll stability, visible runtime state, and output durability.

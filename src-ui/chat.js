@@ -59,6 +59,7 @@ import {
   activeDualSession,
   dualBusy,
   activeScope,
+  orchestrationMap,
   permData,
 } from "/store.js";
 import {
@@ -74,6 +75,8 @@ import {
   loadChat,
   loadOlderChat,
   loadModules,
+  loadGraph,
+  loadPlansData,
   loadProjectPlan,
   sendMessage,
   approveDel,
@@ -88,6 +91,7 @@ import {
   createRoomProjectSession,
   loadDualSession,
   loadActiveScope,
+  loadOrchestrationMap,
   setDualOrchestrator,
 } from "/api.js";
 import {
@@ -875,6 +879,131 @@ function TranscriptStatusBar({
   </div>`;
 }
 
+function OrchestrationMapCard({
+  map,
+  onAttachGraph,
+  onOpenGraph,
+  onVerifyGraph,
+  onOpenPlans,
+}) {
+  if (!map || map.status !== "ok") return null;
+  const big = map.big_plan || {};
+  const scope = map.scope || {};
+  const graph = map.graph_context || {};
+  const delegCounts = map.delegations?.counts || {};
+  const plans = map.plans || [];
+  const projectSessions = map.project_sessions || [];
+  const workItems = map.work_items || [];
+  const nextPlan = plans[0] || null;
+  const nextStep = nextPlan?.next_step || null;
+  const openWork = workItems.filter((item) =>
+    ["ready", "queued", "running", "reviewing", "draft"].includes(
+      item.status || "",
+    ),
+  );
+  const stageIndex = Number(big.stage_index || 3);
+  const stageTotal = Number(big.stage_total || 6);
+  return html`<div class="orch-map-card">
+    <div class="orch-map-head">
+      <div>
+        <div class="orch-eyebrow">
+          big plan stage ${stageIndex}/${stageTotal}
+        </div>
+        <div class="orch-title">${big.label || "Orchestration map"}</div>
+      </div>
+      <div class="orch-stage">
+        ${Array.from({ length: stageTotal }).map(
+          (_, idx) =>
+            html`<span
+              class=${idx + 1 < stageIndex
+                ? "done"
+                : idx + 1 === stageIndex
+                  ? "current"
+                  : ""}
+            ></span>`,
+        )}
+      </div>
+    </div>
+    <div class="orch-grid">
+      <div>
+        <b>scope</b>
+        <span
+          >${scope.kind || "global"} /
+          ${scope.title || map.project || "_orchestrator"}</span
+        >
+      </div>
+      <div>
+        <b>project agents</b>
+        <span
+          >${projectSessions.length}
+          session${projectSessions.length === 1 ? "" : "s"}</span
+        >
+      </div>
+      <div>
+        <b>work items</b>
+        <span>${openWork.length} open / ${workItems.length} shown</span>
+      </div>
+      <div>
+        <b>delegations</b>
+        <span>
+          ${delegCounts.pending || 0} pending, ${delegCounts.running || 0}
+          running, ${delegCounts.failed || 0} failed
+        </span>
+      </div>
+      <div>
+        <b>leases</b>
+        <span
+          >${map.leases?.active || 0} active write
+          lease${map.leases?.active === 1 ? "" : "s"}</span
+        >
+      </div>
+      <div class=${graph.available ? "ok" : "warn"}>
+        <b>code context</b>
+        <span>
+          ${graph.available
+            ? `${graph.nodes || 0} nodes, ${graph.edges || 0} deps, ${graph.context_chars || 0} ctx chars`
+            : graph.reason || "not available"}
+        </span>
+      </div>
+    </div>
+    ${nextPlan
+      ? html`<div class="orch-next">
+          <b>next plan step</b>
+          <span>
+            ${nextStep
+              ? `${nextStep.project || map.project || "project"}: ${nextStep.task || "next step"}`
+              : `${nextPlan.title}: no open step`}
+          </span>
+        </div>`
+      : null}
+    ${workItems.length
+      ? html`<div class="orch-work-strip">
+          ${workItems
+            .slice(0, 4)
+            .map(
+              (item) =>
+                html`<span class="orch-work ${item.status || ""}">
+                  ${item.project}: ${item.status || "open"} ->
+                  ${item.title || item.task}
+                </span>`,
+            )}
+        </div>`
+      : null}
+    <div class="orch-actions">
+      <button onClick=${onAttachGraph} disabled=${!map.project}>
+        attach code context
+      </button>
+      <button onClick=${onOpenGraph} disabled=${!map.project}>
+        open graph
+      </button>
+      <button onClick=${onVerifyGraph} disabled=${!map.project}>
+        verify graph
+      </button>
+      <button onClick=${onOpenPlans}>plans</button>
+    </div>
+  </div>`;
+}
+
 function ChatSidebar() {
   const inputRef = useRef();
   const msgsRef = useRef();
@@ -1203,6 +1332,18 @@ function ChatSidebar() {
       activeDualSession.value || null,
     ).catch((e) => console.warn("scope load failed:", e));
   }, [duoEnabled, currentProject.value, activeDualSession.value]);
+  useEffect(() => {
+    loadOrchestrationMap(
+      currentProject.value || "",
+      activeDualSession.value || null,
+    ).catch((e) => console.warn("orchestration map load failed:", e));
+  }, [
+    currentProject.value,
+    activeDualSession.value,
+    dualBusy.value,
+    Object.keys(delegations.value || {}).length,
+    plansData.value.length,
+  ]);
   useEffect(() => {
     if (!duoEnabled) return;
     const normalized = normalizeDuoView(activeRoomTab.value);
@@ -1763,6 +1904,26 @@ function ChatSidebar() {
       unreadLive=${unreadLive}
       onFollow=${scrollToBottom}
       onLoadOlder=${loadOlder}
+    />
+    <${OrchestrationMapCard}
+      map=${orchestrationMap.value}
+      onAttachGraph=${() =>
+        insertPrompt(
+          currentProject.value
+            ? `[GRAPH_CONTEXT:${currentProject.value}]\nUse this code context when planning and executing. Call out dependency risks before edits.`
+            : "[GRAPH_CONTEXT:overview]\nUse the project graph to choose the safest orchestration route.",
+        )}
+      onOpenGraph=${() => loadGraph(currentProject.value || "overview")}
+      onVerifyGraph=${() =>
+        insertPrompt(
+          currentProject.value
+            ? `[GRAPH_VERIFY:${currentProject.value}]\nVerify graph health and dependency risks before continuing.`
+            : "[GRAPH_CONTEXT:overview]\nVerify global dependency and orchestration risks.",
+        )}
+      onOpenPlans=${() => {
+        showPlans.value = true;
+        loadPlansData().catch((e) => console.warn("plans refresh:", e));
+      }}
     />
     ${duoEnabled
       ? html`<div class="duo-brief">
