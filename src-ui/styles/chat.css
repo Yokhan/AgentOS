@@ -249,6 +249,73 @@
 .orch-grid .warn span {
     color: var(--yellow);
 }
+.management-card {
+    border: 1px solid color-mix(in srgb, var(--cyan) 28%, var(--border));
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--cyan) 8%, var(--bg)),
+        color-mix(in srgb, var(--sf) 80%, var(--bg))
+    );
+    padding: 8px;
+    display: grid;
+    gap: var(--sp-xs);
+}
+.management-card.grade-a {
+    border-color: color-mix(in srgb, var(--green) 50%, var(--border));
+}
+.management-card.grade-c,
+.management-card.grade-d {
+    border-color: color-mix(in srgb, var(--yellow) 55%, var(--border));
+}
+.management-head {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--sp-s);
+}
+.management-head b {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.management-head span,
+.management-rec {
+    color: var(--t2);
+}
+.management-head strong {
+    color: var(--cyan);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
+.management-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+}
+.management-chips span {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 3px 7px;
+}
+.management-card button {
+    justify-self: start;
+    border: 1px solid color-mix(in srgb, var(--cyan) 50%, var(--border));
+    background: var(--bg);
+    color: var(--cyan);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 4px 8px;
+    cursor: pointer;
+}
+.management-card button:hover {
+    color: var(--text);
+    border-color: var(--text);
+}
 .orch-work-strip,
 .orch-actions {
     display: flex;
@@ -367,9 +434,6 @@
     padding: 2px 6px;
     text-transform: uppercase;
     white-space: nowrap;
-}
-.route-lane .lane-action + small {
-    display: none;
 }
 .route-lane.can-queue .lane-action {
     border-color: color-mix(in srgb, var(--cyan) 50%, var(--border));

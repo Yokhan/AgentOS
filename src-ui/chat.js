@@ -891,12 +891,14 @@ function OrchestrationMapCard({
   onVerifyGraph,
   onOpenPlans,
   onRouteAgent,
+  onManagementPrompt,
 }) {
   const [showAllRoutes, setShowAllRoutes] = useState(false);
   if (!map || map.status !== "ok") return null;
   const big = map.big_plan || {};
   const scope = map.scope || {};
   const graph = map.graph_context || {};
+  const leverage = map.managerial_leverage || null;
   const delegCounts = map.delegations?.counts || {};
   const plans = map.plans || [];
   const projectSessions = map.project_sessions || [];
@@ -976,6 +978,42 @@ function OrchestrationMapCard({
         </span>
       </div>
     </div>
+    ${leverage
+      ? html`<div
+          class="management-card grade-${String(
+            leverage.grade || "D",
+          ).toLowerCase()}"
+        >
+          <div class="management-head">
+            <div>
+              <b>управляемость</b>
+              <span>${leverage.summary || "нет данных"}</span>
+            </div>
+            <strong>${leverage.grade || "?"} ${leverage.score || 0}/100</strong>
+          </div>
+          <div class="management-rec">
+            ${leverage.recommendation || "Нет рекомендации."}
+          </div>
+          <div class="management-chips">
+            <span>
+              параллель: ${leverage.parallelism?.projects_in_motion || 0}
+              проектов / ${leverage.parallelism?.queueable_routes || 0} ready
+            </span>
+            <span>
+              качество: ${leverage.quality?.reviewer_coverage_percent || 0}%
+              reviewers / ${leverage.quality?.cross_provider_routes || 0} cross
+            </span>
+            <span>
+              контроль: ${leverage.control?.load || "?"} /
+              ${leverage.control?.user_attention || 0} attention
+            </span>
+            <span>стратегия: ${leverage.alignment?.status || "unknown"}</span>
+          </div>
+          <button type="button" onClick=${() => onManagementPrompt(leverage)}>
+            управленческий следующий шаг
+          </button>
+        </div>`
+      : null}
     ${nextPlan
       ? html`<div class="orch-next">
           <b>next plan step</b>
@@ -1053,10 +1091,6 @@ function OrchestrationMapCard({
                 <em>${next.title || route.title || "No queued task"}</em>
                 <small>${meta}</small>
                 <span class="lane-action">${actionLabel}</span>
-                <small>
-                  ${counts.work_items || 0} tasks · ${counts.active_leases || 0}
-                  leases
-                </small>
               </button>`;
             })}
           </div>
@@ -2122,6 +2156,11 @@ function ChatSidebar() {
         showPlans.value = true;
         loadPlansData().catch((e) => console.warn("plans refresh:", e));
       }}
+      onManagementPrompt=${(leverage) =>
+        insertPrompt(
+          leverage?.management_prompt ||
+            "[MANAGEMENT_REVIEW]\nОцени управляемость текущей работы: параллельность, качество через reviewer/cross-check, контрольную нагрузку и связь со стратегией. Дай следующий управленческий шаг без микроменеджмента.",
+        )}
       onRouteAgent=${async (route) => {
         const next = route.next_work_item || {};
         if (route.can_queue_next && next.id) {

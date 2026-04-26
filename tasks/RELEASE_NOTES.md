@@ -1,3 +1,9 @@
+# Agent OS 0.2.41
+
+- Added a committed Russian `v0.2.41` managerial-leverage plan focused on improving the user's ability to manage multiple AI agents in parallel with less manual control.
+- Added `managerial_leverage` to the orchestration map: score, grade, parallelism, quality/cross-check coverage, control load, strategy alignment, bottleneck, recommendation, and management prompt.
+- Added a compact Management Leverage card to chat so the user sees whether work is parallelized, reviewed, blocked, or drifting away from strategy before starting more execution.
+
 # Agent OS 0.2.40
 
 - Added a committed `v0.2.40` route-lane stabilization plan with 20 product-level improvements and 50 concrete implementation items.

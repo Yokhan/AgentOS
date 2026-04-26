@@ -3,9 +3,9 @@
 //! This is intentionally read-only: UI should ask for "where am I now?" without
 //! creating another source of truth beside sessions, plans, and work items.
 
-use crate::commands::plans::load_all_plans_internal;
+use crate::commands::plans::{load_all_plans_internal, Plan as SavedPlan};
 use crate::commands::status::{DelegationStatus, PlanStatus};
-use crate::commands::strategy_models::load_strategies;
+use crate::commands::strategy_models::{load_strategies, Assignee};
 use crate::state::{
     AppState, Delegation, FileLeaseStatus, MultiAgentSession, ProjectSession, ProjectSessionStatus,
     SessionStatus, WorkItem, WorkItemAssignee, WorkItemStatus, WorkItemWriteIntent,
@@ -577,6 +577,398 @@ fn collect_project_agent_routes(
     routes.into_iter().map(RouteLane::into_value).collect()
 }
 
+fn percent(part: usize, total: usize) -> usize {
+    if total == 0 {
+        0
+    } else {
+        ((part.min(total) * 100) + (total / 2)) / total
+    }
+}
+
+fn score_grade(score: usize) -> &'static str {
+    match score {
+        85..=100 => "A",
+        70..=84 => "B",
+        50..=69 => "C",
+        _ => "D",
+    }
+}
+
+fn collect_managerial_leverage(
+    state: &AppState,
+    resolved_project: &str,
+    room_session_id: Option<&str>,
+    routes: &[Value],
+    graph_context: &Value,
+    plans: &[SavedPlan],
+) -> Value {
+    let scope_matches_project =
+        |project: &str| resolved_project.is_empty() || project == resolved_project;
+    let scope_matches_room =
+        |room_id: &str| room_session_id.map(|id| room_id == id).unwrap_or(true);
+
+    let work_items: Vec<WorkItem> = state
+        .work_items
+        .lock()
+        .map(|items| {
+            items
+                .values()
+                .filter(|item| {
+                    scope_matches_project(&item.project)
+                        && scope_matches_room(&item.parent_room_session_id)
+                        && active_work_item_status(&item.status)
+                })
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let project_sessions: Vec<ProjectSession> = state
+        .project_sessions
+        .lock()
+        .map(|sessions| {
+            sessions
+                .values()
+                .filter(|session| {
+                    scope_matches_project(&session.project)
+                        && scope_matches_room(&session.parent_room_session_id)
+                        && !matches!(session.status, ProjectSessionStatus::Closed)
+                })
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let delegations: Vec<Delegation> = state
+        .delegations
+        .lock()
+        .map(|delegations| {
+            delegations
+                .values()
+                .filter(|d| scope_matches_project(&d.project))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let active_leases = state
+        .file_leases
+        .lock()
+        .map(|leases| {
+            leases
+                .values()
+                .filter(|lease| {
+                    scope_matches_project(&lease.project)
+                        && matches!(lease.status, FileLeaseStatus::Active)
+                })
+                .count()
+        })
+        .unwrap_or(0);
+
+    let mut projects_in_motion: HashSet<String> = HashSet::new();
+    for item in &work_items {
+        projects_in_motion.insert(item.project.clone());
+    }
+    for session in &project_sessions {
+        projects_in_motion.insert(session.project.clone());
+    }
+    for delegation in &delegations {
+        if matches!(
+            delegation.status,
+            DelegationStatus::Pending
+                | DelegationStatus::Scheduled
+                | DelegationStatus::Running
+                | DelegationStatus::Escalated
+                | DelegationStatus::Deciding
+                | DelegationStatus::Verifying
+        ) {
+            projects_in_motion.insert(delegation.project.clone());
+        }
+    }
+
+    let running_work = work_items
+        .iter()
+        .filter(|item| matches!(item.status, WorkItemStatus::Running))
+        .count();
+    let reviewing_work = work_items
+        .iter()
+        .filter(|item| matches!(item.status, WorkItemStatus::Reviewing))
+        .count();
+    let manual_work_items = work_items
+        .iter()
+        .filter(|item| matches!(&item.assignee, WorkItemAssignee::User))
+        .count();
+    let unaligned_work_items = work_items
+        .iter()
+        .filter(|item| item.source_kind.is_none() && item.source_id.is_none())
+        .count();
+    let work_items_with_reviewer = work_items
+        .iter()
+        .filter(|item| item.reviewer_provider.is_some())
+        .count();
+
+    let active_routes = routes.len();
+    let queueable_routes = routes
+        .iter()
+        .filter(|route| route.get("can_queue_next").and_then(Value::as_bool) == Some(true))
+        .count();
+    let blocked_routes = routes
+        .iter()
+        .filter(|route| route.get("has_blockers").and_then(Value::as_bool) == Some(true))
+        .count();
+    let routes_with_reviewer = routes
+        .iter()
+        .filter(|route| {
+            route
+                .get("reviewer_provider")
+                .and_then(Value::as_str)
+                .is_some()
+        })
+        .count();
+    let cross_provider_routes = routes
+        .iter()
+        .filter(|route| {
+            let executor = route.get("executor_provider").and_then(Value::as_str);
+            let reviewer = route.get("reviewer_provider").and_then(Value::as_str);
+            matches!((executor, reviewer), (Some(a), Some(b)) if a != b)
+        })
+        .count();
+
+    let relevant_plans: Vec<&SavedPlan> = plans
+        .iter()
+        .filter(|plan| {
+            plan.status == PlanStatus::Active
+                && (resolved_project.is_empty()
+                    || plan
+                        .steps
+                        .iter()
+                        .any(|step| step.project == resolved_project))
+        })
+        .collect();
+    let active_plan_count = relevant_plans.len();
+    let open_plan_steps = relevant_plans
+        .iter()
+        .flat_map(|plan| plan.steps.iter())
+        .filter(|step| {
+            (resolved_project.is_empty() || step.project == resolved_project)
+                && !step.status.is_terminal()
+        })
+        .count();
+
+    let strategies = load_strategies(state);
+    let mut active_strategy_count = 0usize;
+    let mut strategy_steps_total = 0usize;
+    let mut strategy_steps_done = 0usize;
+    let mut strategy_steps_open = 0usize;
+    let mut manual_strategy_steps = 0usize;
+    for strategy in strategies
+        .iter()
+        .filter(|strategy| strategy.status.is_active())
+    {
+        let mut strategy_relevant = false;
+        for tactic in strategy.all_tactics() {
+            for plan in tactic.plans {
+                if !resolved_project.is_empty() && plan.project != resolved_project {
+                    continue;
+                }
+                strategy_relevant = true;
+                for step in plan.steps {
+                    strategy_steps_total += 1;
+                    if step.status.is_terminal() {
+                        strategy_steps_done += 1;
+                    } else {
+                        strategy_steps_open += 1;
+                    }
+                    if matches!(step.assignee, Assignee::User) {
+                        manual_strategy_steps += 1;
+                    }
+                }
+            }
+        }
+        if strategy_relevant || resolved_project.is_empty() {
+            active_strategy_count += 1;
+        }
+    }
+
+    let mut pending_delegations = 0usize;
+    let mut active_delegations = 0usize;
+    let mut blocked_delegations = 0usize;
+    for delegation in &delegations {
+        match delegation.status {
+            DelegationStatus::Pending | DelegationStatus::Scheduled => pending_delegations += 1,
+            DelegationStatus::Running
+            | DelegationStatus::Escalated
+            | DelegationStatus::Deciding
+            | DelegationStatus::Verifying => active_delegations += 1,
+            DelegationStatus::Failed
+            | DelegationStatus::Rejected
+            | DelegationStatus::Cancelled
+            | DelegationStatus::NeedsPermission => blocked_delegations += 1,
+            DelegationStatus::Done => {}
+        }
+    }
+
+    let reviewable_units = active_routes.max(work_items.len());
+    let reviewer_units = routes_with_reviewer.max(work_items_with_reviewer);
+    let reviewer_coverage = percent(reviewer_units, reviewable_units);
+    let quality_status = if reviewer_coverage >= 70 && cross_provider_routes > 0 {
+        "strong"
+    } else if reviewer_coverage >= 35 {
+        "partial"
+    } else {
+        "weak"
+    };
+
+    let alignment_status = if active_strategy_count == 0 {
+        "missing_strategy"
+    } else if active_plan_count == 0 && open_plan_steps == 0 {
+        "missing_plan"
+    } else if unaligned_work_items > 0 {
+        "weak"
+    } else {
+        "aligned"
+    };
+    let alignment_score = match alignment_status {
+        "aligned" => 100,
+        "weak" => 65,
+        "missing_plan" => 45,
+        _ => 25,
+    };
+
+    let user_attention = pending_delegations
+        + blocked_delegations
+        + manual_work_items
+        + manual_strategy_steps
+        + blocked_routes;
+    let control_load = if user_attention >= 6 || blocked_delegations >= 3 {
+        "high"
+    } else if user_attention >= 2 || blocked_delegations > 0 {
+        "medium"
+    } else {
+        "low"
+    };
+
+    let parallel_score = (projects_in_motion.len() * 20
+        + running_work * 15
+        + reviewing_work * 10
+        + queueable_routes * 10
+        + active_routes * 5)
+        .min(100);
+    let graph_ready = graph_context
+        .get("available")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let quality_score = (reviewer_coverage + if graph_ready { 10 } else { 0 }).min(100);
+    let control_score = 100usize.saturating_sub((user_attention * 12).min(85));
+    let score = ((parallel_score * 30)
+        + (quality_score * 30)
+        + (alignment_score * 25)
+        + (control_score * 15))
+        / 100;
+
+    let primary_bottleneck = if blocked_delegations > 0 {
+        "blocked_delegations"
+    } else if pending_delegations > 0 {
+        "pending_approval"
+    } else if unaligned_work_items > 0 {
+        "strategy_drift"
+    } else if reviewer_coverage < 35 && reviewable_units > 0 {
+        "missing_cross_check"
+    } else if queueable_routes > 0 {
+        "ready_to_execute"
+    } else {
+        "none"
+    };
+
+    let recommendation = match primary_bottleneck {
+        "blocked_delegations" => {
+            "Разбери blockers перед новой волной: есть упавшие или permission-blocked делегации."
+        }
+        "pending_approval" => {
+            "Подтверди или отклони pending delegations, чтобы освободить очередь."
+        }
+        "strategy_drift" => {
+            "Привяжи текущие work items к plan/strategy или явно заархивируй лишнюю работу."
+        }
+        "missing_cross_check" => {
+            "Добавь reviewer/cross-check для активных route lanes перед масштабированием."
+        }
+        "ready_to_execute" => "Можно запускать следующую queueable route lane.",
+        _ if active_strategy_count == 0 => {
+            "Сначала создай или выбери стратегию, иначе execution рискует уйти в стол."
+        }
+        _ => "Система управляема: продолжай execution по route lanes и контролируй timeline.",
+    };
+
+    let summary = format!(
+        "{} / parallel {} / quality {} / control {} / alignment {}",
+        score_grade(score),
+        projects_in_motion.len(),
+        quality_status,
+        control_load,
+        alignment_status
+    );
+
+    let management_prompt = format!(
+        "[MANAGEMENT_REVIEW]\nОцени текущую управляемость Agent OS: parallelism={}, quality={}, control_load={}, alignment={}. Рекомендация системы: {} Сформулируй следующий управленческий шаг без микроменеджмента.",
+        projects_in_motion.len(),
+        quality_status,
+        control_load,
+        alignment_status,
+        recommendation
+    );
+
+    json!({
+        "score": score,
+        "grade": score_grade(score),
+        "summary": summary,
+        "recommendation": recommendation,
+        "management_prompt": management_prompt,
+        "parallelism": {
+            "score": parallel_score,
+            "projects_in_motion": projects_in_motion.len(),
+            "active_project_sessions": project_sessions.len(),
+            "active_routes": active_routes,
+            "queueable_routes": queueable_routes,
+            "running_work_items": running_work,
+            "reviewing_work_items": reviewing_work,
+            "active_leases": active_leases
+        },
+        "quality": {
+            "score": quality_score,
+            "status": quality_status,
+            "reviewer_coverage_percent": reviewer_coverage,
+            "routes_with_reviewer": routes_with_reviewer,
+            "cross_provider_routes": cross_provider_routes,
+            "work_items_with_reviewer": work_items_with_reviewer,
+            "graph_context_ready": graph_ready
+        },
+        "control": {
+            "score": control_score,
+            "load": control_load,
+            "user_attention": user_attention,
+            "pending_delegations": pending_delegations,
+            "active_delegations": active_delegations,
+            "blocked_delegations": blocked_delegations,
+            "manual_work_items": manual_work_items,
+            "manual_strategy_steps": manual_strategy_steps,
+            "blocked_routes": blocked_routes,
+            "primary_bottleneck": primary_bottleneck
+        },
+        "alignment": {
+            "score": alignment_score,
+            "status": alignment_status,
+            "active_strategies": active_strategy_count,
+            "active_plans": active_plan_count,
+            "open_plan_steps": open_plan_steps,
+            "strategy_steps_total": strategy_steps_total,
+            "strategy_steps_done": strategy_steps_done,
+            "strategy_steps_open": strategy_steps_open,
+            "unaligned_work_items": unaligned_work_items
+        }
+    })
+}
+
 pub fn resolve_orchestration_map(
     state: &AppState,
     project: Option<String>,
@@ -846,17 +1238,25 @@ pub fn resolve_orchestration_map(
 
     let project_agent_routes =
         collect_project_agent_routes(state, &resolved_project, room_session_id.as_deref());
+    let managerial_leverage = collect_managerial_leverage(
+        state,
+        &resolved_project,
+        room_session_id.as_deref(),
+        &project_agent_routes,
+        &graph_context,
+        &plans,
+    );
 
     json!({
         "status": "ok",
         "big_plan": {
-            "stage": "route_lane_stabilization",
-            "stage_index": 7,
-            "stage_total": 7,
-            "label": "Executable route lanes + blocker visibility",
-            "done": ["foundation", "route_card", "live_transcript", "orchestration_map", "execution_timeline", "event_contract", "project_agent_routing"],
-            "current": ["route_lane_stabilization", "blocker_visibility", "queue_next_action"],
-            "next": ["production_feedback", "provider_expansion", "project_rollout"]
+            "stage": "managerial_leverage",
+            "stage_index": 8,
+            "stage_total": 8,
+            "label": "Managerial leverage + cross-check visibility",
+            "done": ["foundation", "route_card", "live_transcript", "orchestration_map", "execution_timeline", "event_contract", "project_agent_routing", "route_lane_stabilization"],
+            "current": ["managerial_leverage", "parallel_capacity", "quality_cross_check", "strategy_alignment"],
+            "next": ["live_route_progress", "provider_expansion", "project_rollout"]
         },
         "scope": scope,
         "project": resolved_project,
@@ -864,6 +1264,7 @@ pub fn resolve_orchestration_map(
         "project_sessions": project_sessions,
         "work_items": work_items,
         "project_agent_routes": project_agent_routes,
+        "managerial_leverage": managerial_leverage,
         "delegations": {
             "counts": delegation_counts,
             "items": delegation_values
@@ -1030,9 +1431,14 @@ pub fn resolve_active_scope(
 #[cfg(test)]
 mod tests {
     use super::{resolve_active_scope, resolve_orchestration_map};
-    use crate::commands::plans::{save_plan_internal, Plan};
+    use crate::commands::plans::{save_plan_internal, Plan, PlanStep};
     use crate::commands::provider_runner::ProviderKind;
-    use crate::commands::status::{DelegationStatus, PlanStatus};
+    use crate::commands::status::{
+        DelegationStatus, PlanStatus, PlanStepStatus, StepStatus, StrategyStatus,
+    };
+    use crate::commands::strategy_models::{
+        save_strategies, Assignee, Plan as StrategyPlan, Step, Strategy, Tactic, TacticStatus,
+    };
     use crate::state::{
         AppState, Delegation, MultiAgentSession, ProjectSession, ProjectSessionStatus, SessionMode,
         SessionStatus, WorkItem, WorkItemAssignee, WorkItemStatus, WorkItemWriteIntent,
@@ -1143,8 +1549,8 @@ mod tests {
 
         let result = resolve_orchestration_map(&state, Some("AgentOS".to_string()), None);
         assert_eq!(result["status"], "ok");
-        assert_eq!(result["big_plan"]["stage"], "route_lane_stabilization");
-        assert_eq!(result["big_plan"]["stage_index"], 7);
+        assert_eq!(result["big_plan"]["stage"], "managerial_leverage");
+        assert_eq!(result["big_plan"]["stage_index"], 8);
         assert_eq!(result["scope"]["kind"], "project");
 
         let _ = std::fs::remove_dir_all(root);
@@ -1213,6 +1619,127 @@ mod tests {
             result["project_agent_routes"][0]["executor_provider"],
             "codex"
         );
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn orchestration_map_reports_managerial_leverage() {
+        let root = test_root("managerial-leverage");
+        let state = AppState::new(root.clone());
+        let ts = state.now_iso();
+        save_plan_internal(
+            &state,
+            &Plan {
+                id: "plan-1".to_string(),
+                title: "Leverage plan".to_string(),
+                status: PlanStatus::Active,
+                steps: vec![PlanStep {
+                    id: "step-1".to_string(),
+                    project: "AgentOS".to_string(),
+                    task: "Route work through cross-check".to_string(),
+                    assignee: Assignee::Agent,
+                    verify: None,
+                    work_item_id: Some("wi-1".to_string()),
+                    status: PlanStepStatus::Pending,
+                    delegation_id: None,
+                    result: None,
+                }],
+                room_session_id: Some("room-1".to_string()),
+                created: ts.clone(),
+                updated: ts.clone(),
+            },
+        );
+        save_strategies(
+            &state,
+            &[Strategy {
+                id: "strat-1".to_string(),
+                goal_id: "goal-1".to_string(),
+                title: "Improve orchestration leverage".to_string(),
+                tactics: vec![Tactic {
+                    id: "tactic-1".to_string(),
+                    title: "Execution quality".to_string(),
+                    category: None,
+                    plans: vec![StrategyPlan {
+                        project: "AgentOS".to_string(),
+                        steps: vec![Step {
+                            id: "s1".to_string(),
+                            task: "Cross-check execution lane".to_string(),
+                            status: StepStatus::Approved,
+                            response: None,
+                            depends_on: Vec::new(),
+                            delegation_id: None,
+                            assignee: Assignee::Agent,
+                            verify: None,
+                        }],
+                        priority: "HIGH".to_string(),
+                        depends_on: Vec::new(),
+                        category: None,
+                        context: "Quality through reviewer coverage".to_string(),
+                    }],
+                    status: TacticStatus::Active,
+                }],
+                plans: Vec::new(),
+                status: StrategyStatus::Approved,
+                created: ts.clone(),
+                room_session_id: Some("room-1".to_string()),
+                category: None,
+                deadline: None,
+                metrics: None,
+            }],
+        );
+        state.project_sessions.lock().unwrap().insert(
+            "ps-1".to_string(),
+            ProjectSession {
+                id: "ps-1".to_string(),
+                parent_room_session_id: "room-1".to_string(),
+                project: "AgentOS".to_string(),
+                title: "AgentOS leverage lane".to_string(),
+                status: ProjectSessionStatus::Active,
+                executor_provider: ProviderKind::Codex,
+                reviewer_provider: Some(ProviderKind::Claude),
+                linked_work_item_ids: vec!["wi-1".to_string()],
+                created_at: ts.clone(),
+                updated_at: ts.clone(),
+            },
+        );
+        state.work_items.lock().unwrap().insert(
+            "wi-1".to_string(),
+            WorkItem {
+                id: "wi-1".to_string(),
+                parent_room_session_id: "room-1".to_string(),
+                project_session_id: Some("ps-1".to_string()),
+                project: "AgentOS".to_string(),
+                title: "Queue leverage work".to_string(),
+                task: "Start a cross-checked route lane".to_string(),
+                executor_provider: ProviderKind::Codex,
+                reviewer_provider: Some(ProviderKind::Claude),
+                assignee: WorkItemAssignee::Agent,
+                write_intent: WorkItemWriteIntent::ProposeWrite,
+                declared_paths: vec!["src-ui/chat.js".to_string()],
+                verify: None,
+                status: WorkItemStatus::Ready,
+                delegation_id: None,
+                result: None,
+                review_verdict: None,
+                source_kind: Some("plan_step".to_string()),
+                source_id: Some("step-1".to_string()),
+                created_at: ts.clone(),
+                updated_at: ts,
+            },
+        );
+
+        let result = resolve_orchestration_map(
+            &state,
+            Some("AgentOS".to_string()),
+            Some("room-1".to_string()),
+        );
+        let leverage = &result["managerial_leverage"];
+        assert_eq!(leverage["alignment"]["status"], "aligned");
+        assert_eq!(leverage["quality"]["status"], "strong");
+        assert_eq!(leverage["control"]["load"], "low");
+        assert_eq!(leverage["parallelism"]["queueable_routes"], 1);
+        assert_eq!(leverage["quality"]["cross_provider_routes"], 1);
 
         let _ = std::fs::remove_dir_all(root);
     }
