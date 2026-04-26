@@ -1,3 +1,9 @@
+# Agent OS 0.2.40
+
+- Added a committed `v0.2.40` route-lane stabilization plan with 20 product-level improvements and 50 concrete implementation items.
+- Made project-agent route lanes actionable: lanes with a queueable next work item now call the real work-item execution API and refresh the orchestration map/timeline afterward.
+- Added expandable route-board UX, route action labels, blocker counts, synthetic blocker-only lanes, and backend tests for blocker visibility and running-with-blockers semantics.
+
 # Agent OS 0.2.39
 
 - Added a committed `v0.2.39` project-agent routing plan and moved the visible big-plan stage to `6/6`.

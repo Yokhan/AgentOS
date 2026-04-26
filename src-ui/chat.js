@@ -91,6 +91,7 @@ import {
   generateStrategy,
   createAdhocPlanFromRoom,
   createRoomProjectSession,
+  queueWorkItemExecution,
   loadDualSession,
   loadActiveScope,
   loadOrchestrationMap,
@@ -891,6 +892,7 @@ function OrchestrationMapCard({
   onOpenPlans,
   onRouteAgent,
 }) {
+  const [showAllRoutes, setShowAllRoutes] = useState(false);
   if (!map || map.status !== "ok") return null;
   const big = map.big_plan || {};
   const scope = map.scope || {};
@@ -900,6 +902,8 @@ function OrchestrationMapCard({
   const projectSessions = map.project_sessions || [];
   const workItems = map.work_items || [];
   const routes = map.project_agent_routes || [];
+  const visibleRoutes = showAllRoutes ? routes : routes.slice(0, 4);
+  const hiddenRoutes = Math.max(0, routes.length - visibleRoutes.length);
   const nextPlan = plans[0] || null;
   const nextStep = nextPlan?.next_step || null;
   const openWork = workItems.filter((item) =>
@@ -996,27 +1000,66 @@ function OrchestrationMapCard({
         </div>`
       : null}
     ${routes.length
-      ? html`<div class="route-lanes">
-          ${routes.slice(0, 4).map((route) => {
-            const next = route.next_work_item || {};
-            const counts = route.counts || {};
-            return html`<button
-              class="route-lane ${route.route_state || "idle"}"
-              onClick=${() => onRouteAgent(route)}
-              title=${next.task || route.title || "Project-agent lane"}
-            >
-              <span class="lane-state">${route.route_state || "idle"}</span>
-              <b
-                >${route.project || "project"} /
-                ${route.executor_provider || "agent"}</b
+      ? html`<div class="route-lanes-panel">
+          <div class="route-lanes-head">
+            <b>project-agent routes</b>
+            <span>${routes.length} lane${routes.length === 1 ? "" : "s"}</span>
+            ${routes.length > 4
+              ? html`<button
+                  type="button"
+                  onClick=${() => setShowAllRoutes(!showAllRoutes)}
+                >
+                  ${showAllRoutes ? "compact" : `show all +${hiddenRoutes}`}
+                </button>`
+              : null}
+          </div>
+          <div class="route-lanes ${showAllRoutes ? "expanded" : ""}">
+            ${visibleRoutes.map((route) => {
+              const next = route.next_work_item || {};
+              const counts = route.counts || {};
+              const meta = [
+                `${counts.work_items || 0} tasks`,
+                `${counts.active_leases || 0} leases`,
+                route.has_blockers ? `${counts.blocked || 0} blockers` : "",
+              ]
+                .filter(Boolean)
+                .join(" | ");
+              const actionLabel = route.can_queue_next
+                ? "queue next"
+                : route.action === "resolve_blocker"
+                  ? "resolve"
+                  : route.action === "monitor"
+                    ? "monitor"
+                    : "prompt";
+              return html`<button
+                type="button"
+                class=${[
+                  "route-lane",
+                  route.route_state || "idle",
+                  route.has_blockers ? "has-blockers" : "",
+                  route.can_queue_next ? "can-queue" : "prompt-only",
+                  route.synthetic ? "synthetic" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick=${() => onRouteAgent(route)}
+                title=${next.task || route.title || "Project-agent lane"}
               >
-              <em>${next.title || route.title || "No queued task"}</em>
-              <small>
-                ${counts.work_items || 0} tasks · ${counts.active_leases || 0}
-                leases
-              </small>
-            </button>`;
-          })}
+                <span class="lane-state">${route.route_state || "idle"}</span>
+                <b
+                  >${route.project || "project"} /
+                  ${route.executor_provider || "agent"}</b
+                >
+                <em>${next.title || route.title || "No queued task"}</em>
+                <small>${meta}</small>
+                <span class="lane-action">${actionLabel}</span>
+                <small>
+                  ${counts.work_items || 0} tasks · ${counts.active_leases || 0}
+                  leases
+                </small>
+              </button>`;
+            })}
+          </div>
         </div>`
       : null}
     <div class="orch-actions">
@@ -1130,6 +1173,7 @@ function ExecutionTimelineCard({ timeline, contract, onRefresh }) {
               </div>
             </div>`;
           })}
+          </div>
         </div>`
       : html`<div class="exec-empty">
           No timeline events yet. Start a chat run, Duo round, or delegation.
@@ -2078,8 +2122,27 @@ function ChatSidebar() {
         showPlans.value = true;
         loadPlansData().catch((e) => console.warn("plans refresh:", e));
       }}
-      onRouteAgent=${(route) => {
+      onRouteAgent=${async (route) => {
         const next = route.next_work_item || {};
+        if (route.can_queue_next && next.id) {
+          try {
+            await queueWorkItemExecution(next.id);
+            await Promise.allSettled([
+              loadOrchestrationMap(
+                currentProject.value || "",
+                activeDualSession.value || null,
+              ),
+              loadExecutionTimeline(
+                currentProject.value || "",
+                activeDualSession.value || null,
+                80,
+              ),
+            ]);
+            return;
+          } catch (e) {
+            showToast("Route queue failed: " + e, "error", 6000);
+          }
+        }
         insertPrompt(
           [
             `[PROJECT_AGENT_ROUTE:${route.project || currentProject.value || "_orchestrator"}]`,
@@ -2090,6 +2153,10 @@ function ChatSidebar() {
             next.id
               ? `Work item: ${next.id} - ${next.title || next.task}`
               : `Lane: ${route.title || "project-agent lane"}`,
+            route.has_blockers
+              ? `Blockers: ${(route.blocker_delegation_ids || []).join(", ") || "present"}`
+              : "",
+            route.action ? `Suggested action: ${route.action}` : "",
             "Continue the safest next step. Use graph context if code changes are likely, explain blockers before edits, and route subdelegations only when needed.",
           ]
             .filter(Boolean)

@@ -273,21 +273,52 @@
     border-color: color-mix(in srgb, var(--cyan) 45%, var(--border));
     color: var(--cyan);
 }
+.route-lanes-panel {
+    display: grid;
+    gap: var(--sp-xs);
+}
+.route-lanes-head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-xs);
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+}
+.route-lanes-head b {
+    color: var(--text);
+    font-weight: 700;
+}
+.route-lanes-head button {
+    margin-left: auto;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--cyan);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    padding: 2px 7px;
+    cursor: pointer;
+}
 .route-lanes {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--sp-xs);
+}
+.route-lanes.expanded {
+    grid-template-columns: 1fr;
 }
 .route-lane {
     border: 1px solid var(--border);
     background: color-mix(in srgb, var(--bg) 72%, transparent);
     color: var(--t2);
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
     grid-template-areas:
-        "state title"
-        "state next"
-        "state meta";
+        "state title action"
+        "state next action"
+        "state meta action";
+    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 2px var(--sp-xs);
     text-align: left;
     padding: 7px 8px;
@@ -325,6 +356,37 @@
     grid-area: meta;
     font-family: var(--font-mono);
     color: var(--t3);
+}
+.route-lane .lane-action {
+    grid-area: action;
+    align-self: center;
+    border: 1px solid var(--border);
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    padding: 2px 6px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.route-lane .lane-action + small {
+    display: none;
+}
+.route-lane.can-queue .lane-action {
+    border-color: color-mix(in srgb, var(--cyan) 50%, var(--border));
+    color: var(--cyan);
+}
+.route-lane.prompt-only .lane-action {
+    opacity: 0.75;
+}
+.route-lane.has-blockers {
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--yellow) 10%, transparent),
+        color-mix(in srgb, var(--bg) 72%, transparent)
+    );
+}
+.route-lane.synthetic {
+    border-style: dashed;
 }
 .route-lane.ready {
     border-color: color-mix(in srgb, var(--cyan) 40%, var(--border));

@@ -4,11 +4,11 @@
 //! creating another source of truth beside sessions, plans, and work items.
 
 use crate::commands::plans::load_all_plans_internal;
-use crate::commands::status::PlanStatus;
+use crate::commands::status::{DelegationStatus, PlanStatus};
 use crate::commands::strategy_models::load_strategies;
 use crate::state::{
-    AppState, FileLeaseStatus, MultiAgentSession, ProjectSession, ProjectSessionStatus,
-    SessionStatus, WorkItem, WorkItemStatus, WorkItemWriteIntent,
+    AppState, Delegation, FileLeaseStatus, MultiAgentSession, ProjectSession, ProjectSessionStatus,
+    SessionStatus, WorkItem, WorkItemAssignee, WorkItemStatus, WorkItemWriteIntent,
 };
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -210,6 +210,12 @@ fn work_item_route_priority(item: &WorkItem) -> u8 {
     }
 }
 
+fn can_queue_work_item(item: &WorkItem) -> bool {
+    matches!(item.status, WorkItemStatus::Draft | WorkItemStatus::Ready)
+        && matches!(item.assignee, WorkItemAssignee::Agent)
+        && item.delegation_id.is_none()
+}
+
 #[derive(Clone)]
 struct RouteLane {
     id: String,
@@ -227,6 +233,8 @@ struct RouteLane {
     draft: usize,
     blocked: usize,
     active_leases: usize,
+    blocker_delegation_ids: Vec<String>,
+    synthetic: bool,
     next_work_item: Option<WorkItem>,
     updated_at: String,
 }
@@ -249,6 +257,8 @@ impl RouteLane {
             draft: 0,
             blocked: 0,
             active_leases: 0,
+            blocker_delegation_ids: Vec::new(),
+            synthetic: false,
             next_work_item: None,
             updated_at: session.updated_at.clone(),
         }
@@ -281,8 +291,41 @@ impl RouteLane {
             draft: 0,
             blocked: 0,
             active_leases: 0,
+            blocker_delegation_ids: Vec::new(),
+            synthetic: false,
             next_work_item: None,
             updated_at: item.updated_at.clone(),
+        }
+    }
+
+    fn from_blocked_delegation(delegation: &Delegation) -> Self {
+        let mut work_item_ids = HashSet::new();
+        if let Some(work_item_id) = delegation.work_item_id.as_ref() {
+            work_item_ids.insert(work_item_id.clone());
+        }
+        Self {
+            id: format!("delegation-blocker:{}", delegation.id),
+            project: delegation.project.clone(),
+            project_session_id: delegation.project_session_id.clone(),
+            title: "Blocked delegation".to_string(),
+            status: delegation.status.to_string(),
+            executor_provider: delegation
+                .executor_provider
+                .map(|p| p.as_str().to_string())
+                .unwrap_or_else(|| "agent".to_string()),
+            reviewer_provider: delegation.reviewer_provider.map(|p| p.as_str().to_string()),
+            work_item_ids,
+            ready: 0,
+            queued: 0,
+            running: 0,
+            reviewing: 0,
+            draft: 0,
+            blocked: 1,
+            active_leases: 0,
+            blocker_delegation_ids: vec![delegation.id.clone()],
+            synthetic: true,
+            next_work_item: None,
+            updated_at: delegation.ts.clone(),
         }
     }
 
@@ -310,11 +353,32 @@ impl RouteLane {
         }
     }
 
+    fn add_blocker(&mut self, delegation: &Delegation) {
+        self.blocked += 1;
+        if !self.blocker_delegation_ids.contains(&delegation.id) {
+            self.blocker_delegation_ids.push(delegation.id.clone());
+        }
+        if let Some(work_item_id) = delegation.work_item_id.as_ref() {
+            self.work_item_ids.insert(work_item_id.clone());
+        }
+        if self.executor_provider == "agent" {
+            if let Some(provider) = delegation.executor_provider {
+                self.executor_provider = provider.as_str().to_string();
+            }
+        }
+        if self.reviewer_provider.is_none() {
+            self.reviewer_provider = delegation.reviewer_provider.map(|p| p.as_str().to_string());
+        }
+        if delegation.ts > self.updated_at {
+            self.updated_at = delegation.ts.clone();
+        }
+    }
+
     fn route_state(&self) -> &'static str {
-        if self.blocked > 0 {
-            "blocked"
-        } else if self.running > 0 || self.reviewing > 0 || self.active_leases > 0 {
+        if self.running > 0 || self.reviewing > 0 || self.active_leases > 0 {
             "running"
+        } else if self.blocked > 0 {
+            "blocked"
         } else if self.ready > 0 || self.queued > 0 || self.draft > 0 {
             "ready"
         } else {
@@ -324,6 +388,20 @@ impl RouteLane {
 
     fn into_value(self) -> Value {
         let route_state = self.route_state();
+        let can_queue_next = self
+            .next_work_item
+            .as_ref()
+            .map(can_queue_work_item)
+            .unwrap_or(false);
+        let action = if can_queue_next {
+            "queue_next"
+        } else if self.running > 0 || self.reviewing > 0 || self.active_leases > 0 {
+            "monitor"
+        } else if self.blocked > 0 {
+            "resolve_blocker"
+        } else {
+            "prompt"
+        };
         let next_work_item = self.next_work_item.map(|item| {
             json!({
                 "id": item.id,
@@ -342,8 +420,13 @@ impl RouteLane {
             "title": self.title,
             "status": self.status,
             "route_state": route_state,
+            "action": action,
+            "can_queue_next": can_queue_next,
             "executor_provider": self.executor_provider,
             "reviewer_provider": self.reviewer_provider,
+            "has_blockers": self.blocked > 0,
+            "blocker_delegation_ids": self.blocker_delegation_ids,
+            "synthetic": self.synthetic,
             "counts": {
                 "work_items": self.work_item_ids.len(),
                 "ready": self.ready,
@@ -358,6 +441,16 @@ impl RouteLane {
             "updated_at": self.updated_at
         })
     }
+}
+
+fn is_blocking_delegation_status(status: DelegationStatus) -> bool {
+    matches!(
+        status,
+        DelegationStatus::Failed
+            | DelegationStatus::Rejected
+            | DelegationStatus::Cancelled
+            | DelegationStatus::NeedsPermission
+    )
 }
 
 fn collect_project_agent_routes(
@@ -419,11 +512,7 @@ fn collect_project_agent_routes(
             .values()
             .filter(|d| resolved_project.is_empty() || d.project == resolved_project)
         {
-            let blocked = matches!(
-                d.status.to_string().as_str(),
-                "failed" | "rejected" | "cancelled" | "needs_permission"
-            );
-            if !blocked {
+            if !is_blocking_delegation_status(d.status) {
                 continue;
             }
             let keys = [
@@ -442,11 +531,19 @@ fn collect_project_agent_routes(
                 Some(format!("project:{}:claude", d.project)),
                 Some(format!("project:{}:codex", d.project)),
             ];
+            let mut attached = false;
             for key in keys.into_iter().flatten() {
                 if let Some(lane) = lanes.get_mut(&key) {
-                    lane.blocked += 1;
+                    lane.add_blocker(d);
+                    attached = true;
                     break;
                 }
+            }
+            if !attached {
+                lanes.insert(
+                    format!("delegation-blocker:{}", d.id),
+                    RouteLane::from_blocked_delegation(d),
+                );
             }
         }
     }
@@ -477,11 +574,7 @@ fn collect_project_agent_routes(
             .cmp(&state_rank(b.route_state()))
             .then_with(|| b.updated_at.cmp(&a.updated_at))
     });
-    routes
-        .into_iter()
-        .take(8)
-        .map(RouteLane::into_value)
-        .collect()
+    routes.into_iter().map(RouteLane::into_value).collect()
 }
 
 pub fn resolve_orchestration_map(
@@ -757,12 +850,12 @@ pub fn resolve_orchestration_map(
     json!({
         "status": "ok",
         "big_plan": {
-            "stage": "project_agent_routing",
-            "stage_index": 6,
-            "stage_total": 6,
-            "label": "Project-agent routing + release hardening",
-            "done": ["foundation", "route_card", "live_transcript", "orchestration_map", "execution_timeline", "event_contract"],
-            "current": ["project_agent_routing", "route_lanes", "release_hardening"],
+            "stage": "route_lane_stabilization",
+            "stage_index": 7,
+            "stage_total": 7,
+            "label": "Executable route lanes + blocker visibility",
+            "done": ["foundation", "route_card", "live_transcript", "orchestration_map", "execution_timeline", "event_contract", "project_agent_routing"],
+            "current": ["route_lane_stabilization", "blocker_visibility", "queue_next_action"],
             "next": ["production_feedback", "provider_expansion", "project_rollout"]
         },
         "scope": scope,
@@ -939,9 +1032,9 @@ mod tests {
     use super::{resolve_active_scope, resolve_orchestration_map};
     use crate::commands::plans::{save_plan_internal, Plan};
     use crate::commands::provider_runner::ProviderKind;
-    use crate::commands::status::PlanStatus;
+    use crate::commands::status::{DelegationStatus, PlanStatus};
     use crate::state::{
-        AppState, MultiAgentSession, ProjectSession, ProjectSessionStatus, SessionMode,
+        AppState, Delegation, MultiAgentSession, ProjectSession, ProjectSessionStatus, SessionMode,
         SessionStatus, WorkItem, WorkItemAssignee, WorkItemStatus, WorkItemWriteIntent,
     };
     use std::path::PathBuf;
@@ -956,6 +1049,36 @@ mod tests {
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).expect("create temp root");
         path
+    }
+
+    fn test_delegation(id: &str, project: &str, status: DelegationStatus, ts: &str) -> Delegation {
+        Delegation {
+            id: id.to_string(),
+            project: project.to_string(),
+            task: "Blocked project-agent task".to_string(),
+            ts: ts.to_string(),
+            status,
+            response: None,
+            retries: 0,
+            plan_id: None,
+            plan_step: None,
+            escalation_info: None,
+            strategy_id: None,
+            strategy_step_id: None,
+            room_session_id: Some("room-1".to_string()),
+            project_session_id: None,
+            work_item_id: None,
+            executor_provider: Some(ProviderKind::Codex),
+            reviewer_provider: Some(ProviderKind::Claude),
+            git_diff: None,
+            usage: None,
+            scheduled_at: None,
+            batch_id: None,
+            priority: None,
+            timeout_secs: None,
+            gate_result: None,
+            review_verdict: None,
+        }
     }
 
     #[test]
@@ -1020,8 +1143,8 @@ mod tests {
 
         let result = resolve_orchestration_map(&state, Some("AgentOS".to_string()), None);
         assert_eq!(result["status"], "ok");
-        assert_eq!(result["big_plan"]["stage"], "project_agent_routing");
-        assert_eq!(result["big_plan"]["stage_index"], 6);
+        assert_eq!(result["big_plan"]["stage"], "route_lane_stabilization");
+        assert_eq!(result["big_plan"]["stage_index"], 7);
         assert_eq!(result["scope"]["kind"], "project");
 
         let _ = std::fs::remove_dir_all(root);
@@ -1080,6 +1203,8 @@ mod tests {
         );
         assert_eq!(result["status"], "ok");
         assert_eq!(result["project_agent_routes"][0]["route_state"], "ready");
+        assert_eq!(result["project_agent_routes"][0]["action"], "queue_next");
+        assert_eq!(result["project_agent_routes"][0]["can_queue_next"], true);
         assert_eq!(
             result["project_agent_routes"][0]["next_work_item"]["id"],
             "wi-1"
@@ -1088,6 +1213,85 @@ mod tests {
             result["project_agent_routes"][0]["executor_provider"],
             "codex"
         );
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn orchestration_map_reports_blocker_only_route_lanes() {
+        let root = test_root("route-blocker-only");
+        let state = AppState::new(root.clone());
+        let ts = state.now_iso();
+        state.delegations.lock().unwrap().insert(
+            "del-1".to_string(),
+            test_delegation("del-1", "AgentOS", DelegationStatus::NeedsPermission, &ts),
+        );
+
+        let result = resolve_orchestration_map(
+            &state,
+            Some("AgentOS".to_string()),
+            Some("room-1".to_string()),
+        );
+        assert_eq!(result["status"], "ok");
+        let route = &result["project_agent_routes"][0];
+        assert_eq!(route["route_state"], "blocked");
+        assert_eq!(route["action"], "resolve_blocker");
+        assert_eq!(route["synthetic"], true);
+        assert_eq!(route["has_blockers"], true);
+        assert_eq!(route["blocker_delegation_ids"][0], "del-1");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn orchestration_map_keeps_running_state_with_blocker_metadata() {
+        let root = test_root("route-running-blocked");
+        let state = AppState::new(root.clone());
+        let ts = state.now_iso();
+        state.work_items.lock().unwrap().insert(
+            "wi-1".to_string(),
+            WorkItem {
+                id: "wi-1".to_string(),
+                parent_room_session_id: "room-1".to_string(),
+                project_session_id: None,
+                project: "AgentOS".to_string(),
+                title: "Run active work".to_string(),
+                task: "Keep active work visible despite blockers".to_string(),
+                executor_provider: ProviderKind::Codex,
+                reviewer_provider: Some(ProviderKind::Claude),
+                assignee: WorkItemAssignee::Agent,
+                write_intent: WorkItemWriteIntent::ProposeWrite,
+                declared_paths: vec!["src-ui/chat.js".to_string()],
+                verify: None,
+                status: WorkItemStatus::Running,
+                delegation_id: None,
+                result: None,
+                review_verdict: None,
+                source_kind: None,
+                source_id: None,
+                created_at: ts.clone(),
+                updated_at: ts.clone(),
+            },
+        );
+        let mut delegation = test_delegation("del-1", "AgentOS", DelegationStatus::Failed, &ts);
+        delegation.work_item_id = Some("wi-1".to_string());
+        state
+            .delegations
+            .lock()
+            .unwrap()
+            .insert("del-1".to_string(), delegation);
+
+        let result = resolve_orchestration_map(
+            &state,
+            Some("AgentOS".to_string()),
+            Some("room-1".to_string()),
+        );
+        assert_eq!(result["status"], "ok");
+        let route = &result["project_agent_routes"][0];
+        assert_eq!(route["route_state"], "running");
+        assert_eq!(route["has_blockers"], true);
+        assert_eq!(route["counts"]["blocked"], 1);
+        assert_eq!(route["blocker_delegation_ids"][0], "del-1");
 
         let _ = std::fs::remove_dir_all(root);
     }
