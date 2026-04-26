@@ -112,10 +112,10 @@ pub fn build_execution_timeline(
         "schema_version": EVENT_SCHEMA_VERSION,
         "project": if project.is_empty() { "_orchestrator" } else { project.as_str() },
         "big_plan": {
-            "stage": "event_contract",
-            "stage_index": 5,
+            "stage": "project_agent_routing",
+            "stage_index": 6,
             "stage_total": 6,
-            "label": "Event contract + normalized source adapters"
+            "label": "Project-agent routing + release hardening"
         },
         "contract": event_contract_schema_value(),
         "counts": {
@@ -174,7 +174,7 @@ mod tests {
         let result = build_execution_timeline(&state, None, None, 10);
         assert_eq!(result["status"], "ok");
         assert_eq!(result["schema_version"], "agentos.event.v1");
-        assert_eq!(result["big_plan"]["stage"], "event_contract");
+        assert_eq!(result["big_plan"]["stage"], "project_agent_routing");
         assert_eq!(result["items"][0]["kind"], "run");
         assert_eq!(result["items"][1]["kind"], "tool");
 

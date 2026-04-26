@@ -273,6 +273,74 @@
     border-color: color-mix(in srgb, var(--cyan) 45%, var(--border));
     color: var(--cyan);
 }
+.route-lanes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-xs);
+}
+.route-lane {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    color: var(--t2);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+        "state title"
+        "state next"
+        "state meta";
+    gap: 2px var(--sp-xs);
+    text-align: left;
+    padding: 7px 8px;
+    cursor: pointer;
+}
+.route-lane:hover {
+    border-color: var(--cyan);
+    color: var(--text);
+}
+.route-lane .lane-state {
+    grid-area: state;
+    align-self: stretch;
+    writing-mode: vertical-rl;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--t3);
+}
+.route-lane b {
+    grid-area: title;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.route-lane em {
+    grid-area: next;
+    font-style: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.route-lane small {
+    grid-area: meta;
+    font-family: var(--font-mono);
+    color: var(--t3);
+}
+.route-lane.ready {
+    border-color: color-mix(in srgb, var(--cyan) 40%, var(--border));
+}
+.route-lane.running {
+    border-color: color-mix(in srgb, var(--green) 42%, var(--border));
+}
+.route-lane.running .lane-state {
+    color: var(--green);
+}
+.route-lane.blocked {
+    border-color: color-mix(in srgb, var(--yellow) 55%, var(--border));
+}
+.route-lane.blocked .lane-state {
+    color: var(--yellow);
+}
 .orch-actions button {
     border: 1px solid var(--border);
     background: var(--bg);

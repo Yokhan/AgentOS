@@ -7,10 +7,11 @@ use crate::commands::plans::load_all_plans_internal;
 use crate::commands::status::PlanStatus;
 use crate::commands::strategy_models::load_strategies;
 use crate::state::{
-    AppState, FileLeaseStatus, MultiAgentSession, ProjectSessionStatus, SessionStatus, WorkItem,
-    WorkItemStatus,
+    AppState, FileLeaseStatus, MultiAgentSession, ProjectSession, ProjectSessionStatus,
+    SessionStatus, WorkItem, WorkItemStatus, WorkItemWriteIntent,
 };
 use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tauri::State;
 
@@ -165,6 +166,322 @@ fn active_work_item_status(status: &WorkItemStatus) -> bool {
         status,
         WorkItemStatus::Completed | WorkItemStatus::Failed | WorkItemStatus::Cancelled
     )
+}
+
+fn work_item_status_label(status: &WorkItemStatus) -> &'static str {
+    match status {
+        WorkItemStatus::Draft => "draft",
+        WorkItemStatus::Ready => "ready",
+        WorkItemStatus::Queued => "queued",
+        WorkItemStatus::Running => "running",
+        WorkItemStatus::Reviewing => "reviewing",
+        WorkItemStatus::Completed => "completed",
+        WorkItemStatus::Failed => "failed",
+        WorkItemStatus::Cancelled => "cancelled",
+    }
+}
+
+fn project_session_status_label(status: &ProjectSessionStatus) -> &'static str {
+    match status {
+        ProjectSessionStatus::Active => "active",
+        ProjectSessionStatus::Paused => "paused",
+        ProjectSessionStatus::Closed => "closed",
+    }
+}
+
+fn write_intent_label(intent: &WorkItemWriteIntent) -> &'static str {
+    match intent {
+        WorkItemWriteIntent::ReadOnly => "read_only",
+        WorkItemWriteIntent::ProposeWrite => "propose_write",
+        WorkItemWriteIntent::ExclusiveWrite => "exclusive_write",
+    }
+}
+
+fn work_item_route_priority(item: &WorkItem) -> u8 {
+    match item.status {
+        WorkItemStatus::Running => 0,
+        WorkItemStatus::Ready => 1,
+        WorkItemStatus::Queued => 2,
+        WorkItemStatus::Reviewing => 3,
+        WorkItemStatus::Draft => 4,
+        WorkItemStatus::Failed => 5,
+        WorkItemStatus::Cancelled => 6,
+        WorkItemStatus::Completed => 7,
+    }
+}
+
+#[derive(Clone)]
+struct RouteLane {
+    id: String,
+    project: String,
+    project_session_id: Option<String>,
+    title: String,
+    status: String,
+    executor_provider: String,
+    reviewer_provider: Option<String>,
+    work_item_ids: HashSet<String>,
+    ready: usize,
+    queued: usize,
+    running: usize,
+    reviewing: usize,
+    draft: usize,
+    blocked: usize,
+    active_leases: usize,
+    next_work_item: Option<WorkItem>,
+    updated_at: String,
+}
+
+impl RouteLane {
+    fn from_session(session: &ProjectSession) -> Self {
+        Self {
+            id: format!("session:{}", session.id),
+            project: session.project.clone(),
+            project_session_id: Some(session.id.clone()),
+            title: session.title.clone(),
+            status: project_session_status_label(&session.status).to_string(),
+            executor_provider: session.executor_provider.as_str().to_string(),
+            reviewer_provider: session.reviewer_provider.map(|p| p.as_str().to_string()),
+            work_item_ids: HashSet::new(),
+            ready: 0,
+            queued: 0,
+            running: 0,
+            reviewing: 0,
+            draft: 0,
+            blocked: 0,
+            active_leases: 0,
+            next_work_item: None,
+            updated_at: session.updated_at.clone(),
+        }
+    }
+
+    fn from_work_item(item: &WorkItem) -> Self {
+        let project_session_id = item.project_session_id.clone();
+        Self {
+            id: project_session_id
+                .as_ref()
+                .map(|id| format!("session:{}", id))
+                .unwrap_or_else(|| {
+                    format!(
+                        "project:{}:{}",
+                        item.project,
+                        item.executor_provider.as_str()
+                    )
+                }),
+            project: item.project.clone(),
+            project_session_id,
+            title: format!("{} agent lane", item.project),
+            status: "active".to_string(),
+            executor_provider: item.executor_provider.as_str().to_string(),
+            reviewer_provider: item.reviewer_provider.map(|p| p.as_str().to_string()),
+            work_item_ids: HashSet::new(),
+            ready: 0,
+            queued: 0,
+            running: 0,
+            reviewing: 0,
+            draft: 0,
+            blocked: 0,
+            active_leases: 0,
+            next_work_item: None,
+            updated_at: item.updated_at.clone(),
+        }
+    }
+
+    fn add_work_item(&mut self, item: &WorkItem) {
+        self.work_item_ids.insert(item.id.clone());
+        match item.status {
+            WorkItemStatus::Ready => self.ready += 1,
+            WorkItemStatus::Queued => self.queued += 1,
+            WorkItemStatus::Running => self.running += 1,
+            WorkItemStatus::Reviewing => self.reviewing += 1,
+            WorkItemStatus::Draft => self.draft += 1,
+            WorkItemStatus::Failed | WorkItemStatus::Cancelled => self.blocked += 1,
+            WorkItemStatus::Completed => {}
+        }
+        let replace_next = self
+            .next_work_item
+            .as_ref()
+            .map(|current| work_item_route_priority(item) < work_item_route_priority(current))
+            .unwrap_or(true);
+        if replace_next {
+            self.next_work_item = Some(item.clone());
+        }
+        if item.updated_at > self.updated_at {
+            self.updated_at = item.updated_at.clone();
+        }
+    }
+
+    fn route_state(&self) -> &'static str {
+        if self.blocked > 0 {
+            "blocked"
+        } else if self.running > 0 || self.reviewing > 0 || self.active_leases > 0 {
+            "running"
+        } else if self.ready > 0 || self.queued > 0 || self.draft > 0 {
+            "ready"
+        } else {
+            "idle"
+        }
+    }
+
+    fn into_value(self) -> Value {
+        let route_state = self.route_state();
+        let next_work_item = self.next_work_item.map(|item| {
+            json!({
+                "id": item.id,
+                "title": item.title,
+                "task": item.task,
+                "status": work_item_status_label(&item.status),
+                "write_intent": write_intent_label(&item.write_intent),
+                "declared_paths": item.declared_paths,
+                "delegation_id": item.delegation_id
+            })
+        });
+        json!({
+            "id": self.id,
+            "project": self.project,
+            "project_session_id": self.project_session_id,
+            "title": self.title,
+            "status": self.status,
+            "route_state": route_state,
+            "executor_provider": self.executor_provider,
+            "reviewer_provider": self.reviewer_provider,
+            "counts": {
+                "work_items": self.work_item_ids.len(),
+                "ready": self.ready,
+                "queued": self.queued,
+                "running": self.running,
+                "reviewing": self.reviewing,
+                "draft": self.draft,
+                "blocked": self.blocked,
+                "active_leases": self.active_leases
+            },
+            "next_work_item": next_work_item,
+            "updated_at": self.updated_at
+        })
+    }
+}
+
+fn collect_project_agent_routes(
+    state: &AppState,
+    resolved_project: &str,
+    room_session_id: Option<&str>,
+) -> Vec<Value> {
+    let sessions: Vec<ProjectSession> = state
+        .project_sessions
+        .lock()
+        .map(|items| items.values().cloned().collect())
+        .unwrap_or_default();
+    let work_items: Vec<WorkItem> = state
+        .work_items
+        .lock()
+        .map(|items| items.values().cloned().collect())
+        .unwrap_or_default();
+
+    let mut lanes: HashMap<String, RouteLane> = HashMap::new();
+    for session in sessions.iter().filter(|session| {
+        (resolved_project.is_empty() || session.project == resolved_project)
+            && room_session_id
+                .map(|id| session.parent_room_session_id == id)
+                .unwrap_or(true)
+            && !matches!(session.status, ProjectSessionStatus::Closed)
+    }) {
+        lanes.insert(
+            format!("session:{}", session.id),
+            RouteLane::from_session(session),
+        );
+    }
+
+    for item in work_items.iter().filter(|item| {
+        (resolved_project.is_empty() || item.project == resolved_project)
+            && room_session_id
+                .map(|id| item.parent_room_session_id == id)
+                .unwrap_or(true)
+            && active_work_item_status(&item.status)
+    }) {
+        let key = item
+            .project_session_id
+            .as_ref()
+            .map(|id| format!("session:{}", id))
+            .unwrap_or_else(|| {
+                format!(
+                    "project:{}:{}",
+                    item.project,
+                    item.executor_provider.as_str()
+                )
+            });
+        lanes
+            .entry(key)
+            .or_insert_with(|| RouteLane::from_work_item(item))
+            .add_work_item(item);
+    }
+
+    if let Ok(delegations) = state.delegations.lock() {
+        for d in delegations
+            .values()
+            .filter(|d| resolved_project.is_empty() || d.project == resolved_project)
+        {
+            let blocked = matches!(
+                d.status.to_string().as_str(),
+                "failed" | "rejected" | "cancelled" | "needs_permission"
+            );
+            if !blocked {
+                continue;
+            }
+            let keys = [
+                d.project_session_id
+                    .as_ref()
+                    .map(|id| format!("session:{}", id)),
+                d.work_item_id.as_ref().and_then(|work_id| {
+                    lanes.iter().find_map(|(key, lane)| {
+                        if lane.work_item_ids.contains(work_id) {
+                            Some(key.clone())
+                        } else {
+                            None
+                        }
+                    })
+                }),
+                Some(format!("project:{}:claude", d.project)),
+                Some(format!("project:{}:codex", d.project)),
+            ];
+            for key in keys.into_iter().flatten() {
+                if let Some(lane) = lanes.get_mut(&key) {
+                    lane.blocked += 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    if let Ok(leases) = state.file_leases.lock() {
+        for lease in leases.values().filter(|lease| {
+            (resolved_project.is_empty() || lease.project == resolved_project)
+                && matches!(lease.status, FileLeaseStatus::Active)
+        }) {
+            if let Some((_key, lane)) = lanes
+                .iter_mut()
+                .find(|(_, lane)| lane.work_item_ids.contains(&lease.work_item_id))
+            {
+                lane.active_leases += 1;
+            }
+        }
+    }
+
+    let mut routes: Vec<RouteLane> = lanes.into_values().collect();
+    routes.sort_by(|a, b| {
+        let state_rank = |state: &str| match state {
+            "blocked" => 0,
+            "running" => 1,
+            "ready" => 2,
+            _ => 3,
+        };
+        state_rank(a.route_state())
+            .cmp(&state_rank(b.route_state()))
+            .then_with(|| b.updated_at.cmp(&a.updated_at))
+    });
+    routes
+        .into_iter()
+        .take(8)
+        .map(RouteLane::into_value)
+        .collect()
 }
 
 pub fn resolve_orchestration_map(
@@ -434,22 +751,26 @@ pub fn resolve_orchestration_map(
         }
     };
 
+    let project_agent_routes =
+        collect_project_agent_routes(state, &resolved_project, room_session_id.as_deref());
+
     json!({
         "status": "ok",
         "big_plan": {
-            "stage": "event_contract",
-            "stage_index": 5,
+            "stage": "project_agent_routing",
+            "stage_index": 6,
             "stage_total": 6,
-            "label": "Event contract + normalized source adapters",
-            "done": ["foundation", "route_card", "live_transcript", "orchestration_map", "execution_timeline"],
-            "current": ["event_contract", "source_adapters", "code_context_status"],
-            "next": ["provider_adapters", "project_agent_routing", "release_hardening"]
+            "label": "Project-agent routing + release hardening",
+            "done": ["foundation", "route_card", "live_transcript", "orchestration_map", "execution_timeline", "event_contract"],
+            "current": ["project_agent_routing", "route_lanes", "release_hardening"],
+            "next": ["production_feedback", "provider_expansion", "project_rollout"]
         },
         "scope": scope,
         "project": resolved_project,
         "plans": relevant_plans,
         "project_sessions": project_sessions,
         "work_items": work_items,
+        "project_agent_routes": project_agent_routes,
         "delegations": {
             "counts": delegation_counts,
             "items": delegation_values
@@ -617,8 +938,12 @@ pub fn resolve_active_scope(
 mod tests {
     use super::{resolve_active_scope, resolve_orchestration_map};
     use crate::commands::plans::{save_plan_internal, Plan};
+    use crate::commands::provider_runner::ProviderKind;
     use crate::commands::status::PlanStatus;
-    use crate::state::{AppState, MultiAgentSession, SessionMode, SessionStatus};
+    use crate::state::{
+        AppState, MultiAgentSession, ProjectSession, ProjectSessionStatus, SessionMode,
+        SessionStatus, WorkItem, WorkItemAssignee, WorkItemStatus, WorkItemWriteIntent,
+    };
     use std::path::PathBuf;
 
     fn test_root(name: &str) -> PathBuf {
@@ -695,9 +1020,74 @@ mod tests {
 
         let result = resolve_orchestration_map(&state, Some("AgentOS".to_string()), None);
         assert_eq!(result["status"], "ok");
-        assert_eq!(result["big_plan"]["stage"], "event_contract");
-        assert_eq!(result["big_plan"]["stage_index"], 5);
+        assert_eq!(result["big_plan"]["stage"], "project_agent_routing");
+        assert_eq!(result["big_plan"]["stage_index"], 6);
         assert_eq!(result["scope"]["kind"], "project");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn orchestration_map_reports_project_agent_routes() {
+        let root = test_root("route-lanes");
+        let state = AppState::new(root.clone());
+        let ts = state.now_iso();
+        state.project_sessions.lock().unwrap().insert(
+            "ps-1".to_string(),
+            ProjectSession {
+                id: "ps-1".to_string(),
+                parent_room_session_id: "room-1".to_string(),
+                project: "AgentOS".to_string(),
+                title: "AgentOS release lane".to_string(),
+                status: ProjectSessionStatus::Active,
+                executor_provider: ProviderKind::Codex,
+                reviewer_provider: Some(ProviderKind::Claude),
+                linked_work_item_ids: vec!["wi-1".to_string()],
+                created_at: ts.clone(),
+                updated_at: ts.clone(),
+            },
+        );
+        state.work_items.lock().unwrap().insert(
+            "wi-1".to_string(),
+            WorkItem {
+                id: "wi-1".to_string(),
+                parent_room_session_id: "room-1".to_string(),
+                project_session_id: Some("ps-1".to_string()),
+                project: "AgentOS".to_string(),
+                title: "Ship routing lane".to_string(),
+                task: "Expose project-agent route lanes".to_string(),
+                executor_provider: ProviderKind::Codex,
+                reviewer_provider: Some(ProviderKind::Claude),
+                assignee: WorkItemAssignee::Agent,
+                write_intent: WorkItemWriteIntent::ProposeWrite,
+                declared_paths: vec!["src-ui/chat.js".to_string()],
+                verify: None,
+                status: WorkItemStatus::Ready,
+                delegation_id: None,
+                result: None,
+                review_verdict: None,
+                source_kind: Some("plan_step".to_string()),
+                source_id: Some("step-1".to_string()),
+                created_at: ts.clone(),
+                updated_at: ts,
+            },
+        );
+
+        let result = resolve_orchestration_map(
+            &state,
+            Some("AgentOS".to_string()),
+            Some("room-1".to_string()),
+        );
+        assert_eq!(result["status"], "ok");
+        assert_eq!(result["project_agent_routes"][0]["route_state"], "ready");
+        assert_eq!(
+            result["project_agent_routes"][0]["next_work_item"]["id"],
+            "wi-1"
+        );
+        assert_eq!(
+            result["project_agent_routes"][0]["executor_provider"],
+            "codex"
+        );
 
         let _ = std::fs::remove_dir_all(root);
     }

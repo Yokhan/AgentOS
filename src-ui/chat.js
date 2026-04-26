@@ -889,6 +889,7 @@ function OrchestrationMapCard({
   onOpenGraph,
   onVerifyGraph,
   onOpenPlans,
+  onRouteAgent,
 }) {
   if (!map || map.status !== "ok") return null;
   const big = map.big_plan || {};
@@ -898,6 +899,7 @@ function OrchestrationMapCard({
   const plans = map.plans || [];
   const projectSessions = map.project_sessions || [];
   const workItems = map.work_items || [];
+  const routes = map.project_agent_routes || [];
   const nextPlan = plans[0] || null;
   const nextStep = nextPlan?.next_step || null;
   const openWork = workItems.filter((item) =>
@@ -905,7 +907,7 @@ function OrchestrationMapCard({
       item.status || "",
     ),
   );
-  const stageIndex = Number(big.stage_index || 4);
+  const stageIndex = Number(big.stage_index || 6);
   const stageTotal = Number(big.stage_total || 6);
   return html`<div class="orch-map-card">
     <div class="orch-map-head">
@@ -993,6 +995,30 @@ function OrchestrationMapCard({
             )}
         </div>`
       : null}
+    ${routes.length
+      ? html`<div class="route-lanes">
+          ${routes.slice(0, 4).map((route) => {
+            const next = route.next_work_item || {};
+            const counts = route.counts || {};
+            return html`<button
+              class="route-lane ${route.route_state || "idle"}"
+              onClick=${() => onRouteAgent(route)}
+              title=${next.task || route.title || "Project-agent lane"}
+            >
+              <span class="lane-state">${route.route_state || "idle"}</span>
+              <b
+                >${route.project || "project"} /
+                ${route.executor_provider || "agent"}</b
+              >
+              <em>${next.title || route.title || "No queued task"}</em>
+              <small>
+                ${counts.work_items || 0} tasks · ${counts.active_leases || 0}
+                leases
+              </small>
+            </button>`;
+          })}
+        </div>`
+      : null}
     <div class="orch-actions">
       <button onClick=${onAttachGraph} disabled=${!map.project}>
         attach code context
@@ -1025,7 +1051,7 @@ function ExecutionTimelineCard({ timeline, contract, onRefresh }) {
   const items = timeline.items || [];
   const visible = items.slice(-10);
   const counts = timeline.counts || {};
-  const stageIndex = Number(big.stage_index || 5);
+  const stageIndex = Number(big.stage_index || 6);
   const stageTotal = Number(big.stage_total || 6);
   const copySummary = () => {
     const lines = visible.map((item) => {
@@ -2051,6 +2077,24 @@ function ChatSidebar() {
       onOpenPlans=${() => {
         showPlans.value = true;
         loadPlansData().catch((e) => console.warn("plans refresh:", e));
+      }}
+      onRouteAgent=${(route) => {
+        const next = route.next_work_item || {};
+        insertPrompt(
+          [
+            `[PROJECT_AGENT_ROUTE:${route.project || currentProject.value || "_orchestrator"}]`,
+            `Executor: ${route.executor_provider || "auto"}`,
+            route.reviewer_provider
+              ? `Reviewer: ${route.reviewer_provider}`
+              : "",
+            next.id
+              ? `Work item: ${next.id} - ${next.title || next.task}`
+              : `Lane: ${route.title || "project-agent lane"}`,
+            "Continue the safest next step. Use graph context if code changes are likely, explain blockers before edits, and route subdelegations only when needed.",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        );
       }}
     />
     <${ExecutionTimelineCard}

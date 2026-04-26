@@ -1,3 +1,11 @@
+# Agent OS 0.2.39
+
+- Added a committed `v0.2.39` project-agent routing plan and moved the visible big-plan stage to `6/6`.
+- Added `project_agent_routes` to the orchestration map, joining project sessions, work items, delegation blockers, and active write leases into route lanes.
+- Added route-lane UI in the Orchestration Map Card showing lane state, executor provider, next work item, task counts, and active leases.
+- Added one-click route prompt insertion via `[PROJECT_AGENT_ROUTE:project]` so the selected lead can continue the safest next project-agent task.
+- Hardened the release workflow for GitHub's Node 24 action runtime by setting `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` and building with Node 24.
+
 # Agent OS 0.2.38
 
 - Added a committed `v0.2.38` event-contract plan and moved the visible big-plan stage to `5/6`.
