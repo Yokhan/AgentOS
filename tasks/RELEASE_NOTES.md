@@ -1,3 +1,9 @@
+# Agent OS 0.3.3
+
+- Reworked the default dashboard into a workbench: operational focus, unblock actions, live delegation counters, and compact project navigation instead of a full-screen static project grid.
+- Moved heavy route/context/delegation cards in chat into a collapsible context drawer so the transcript and composer stay primary.
+- Added dashboard workbench rendering to the frontend smoke check so release gates catch another startup/runtime UI crash before updater packaging.
+
 # Agent OS 0.3.2
 
 - Fixed a second launch-blocking frontend runtime error in `ExecutionTimelineCard` caused by an invalid nested `html` template in the execution event list.

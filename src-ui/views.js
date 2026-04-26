@@ -203,7 +203,7 @@ ${pagesErr}</pre
                   ? duoWorkspace
                   : currentProject.value
                     ? html`<${DetailView} />`
-                    : html`<${DashboardView} />`}<${ChatSidebar} />
+                    : html`<${DashboardWorkbenchView} />`}<${ChatSidebar} />
     </div>
     <${AnalyticsBar} />
   </div>`;
@@ -727,6 +727,153 @@ function SignalsPanel() {
   </div>`;
 }
 
+function WorkbenchFocus({ all }) {
+  const attention = [...all]
+    .filter((x) => x.blockers || (x.uncommitted || 0) > 20)
+    .sort((a, b) => (b.uncommitted || 0) - (a.uncommitted || 0))
+    .slice(0, 6);
+  const active = all.filter((x) => x.task).slice(0, 4);
+  const runningDelegations = Object.values(delegations.value || {}).filter(
+    (d) => ["running", "escalated", "deciding"].includes(d?.status),
+  );
+  const pendingDelegations = Object.values(delegations.value || {}).filter(
+    (d) => d?.status === "pending",
+  );
+  const queued = queueTasks.value.filter((t) => !t.done).slice(0, 4);
+  const top = attention[0] || active[0] || all[0] || null;
+  const focusLabel = top
+    ? `${top.name}: ${top.blockers ? "blocked" : top.task || "needs triage"}`
+    : "No active project focus";
+  return html`<div class="workbench-hero">
+    <div class="workbench-hero-main">
+      <div class="workbench-eyebrow">operational focus</div>
+      <h2>${focusLabel}</h2>
+      <p>
+        ${attention.length
+          ? `${attention.length} project routes need attention. Start by clearing blockers/permissions/failures, then delegate the next safe wave.`
+          : active.length
+            ? `${active.length} projects are active. Monitor execution, verify outputs, and only open new work when routes are clean.`
+            : "No active route is selected. Pick a project or ask the orchestrator for the safest next route."}
+      </p>
+      <div class="workbench-actions">
+        <button
+          onClick=${() => {
+            activeFilter.value = "attention";
+            composerDraftText.value =
+              "[DASHBOARD_FULL]\nReview attention projects, explain blockers, and propose the safest unblock order.";
+          }}
+        >
+          ask unblock order
+        </button>
+        <button
+          onClick=${() => {
+            chatCollabMode.value = "duo";
+            activeRoomTab.value = "collaborate";
+            composerDraftText.value =
+              "Compare current operational state with both agents. Build a concise plan, then choose the execution lead.";
+          }}
+        >
+          discuss with two
+        </button>
+        <button
+          onClick=${() => {
+            showPlans.value = true;
+            loadPlansData();
+          }}
+        >
+          open plans
+        </button>
+      </div>
+    </div>
+    <div class="workbench-pulse">
+      <div>
+        <b>${runningDelegations.length}</b>
+        <span>running delegations</span>
+      </div>
+      <div>
+        <b>${pendingDelegations.length}</b>
+        <span>pending approvals</span>
+      </div>
+      <div>
+        <b>${queued.length}</b>
+        <span>queued tasks</span>
+      </div>
+    </div>
+    <div class="workbench-stack">
+      <div class="workbench-stack-head">
+        <span>attention stack</span>
+        <button onClick=${() => (activeFilter.value = "attention")}>
+          filter
+        </button>
+      </div>
+      ${(attention.length ? attention : active).slice(0, 6).map(
+        (ag) =>
+          html`<button
+            class="workbench-route"
+            onClick=${() => (currentProject.value = ag.name)}
+          >
+            <span class="dot ${ag.status || "sleeping"}"></span>
+            <b>${ag.name}</b>
+            <em>${ag.blockers ? "blocked" : ag.task || "triage"}</em>
+            <small>${ag.uncommitted || 0} dirty</small>
+          </button>`,
+      )}
+    </div>
+  </div>`;
+}
+
+function ProjectRail({ items, segMap, useFlat, flatItems }) {
+  const groups = useFlat
+    ? [["all", flatItems]]
+    : Object.entries(segMap).filter(([_, list]) => list.length);
+  if (!items.length) {
+    return html`<div class="project-rail-empty">
+      <b>No projects match</b>
+      <button
+        onClick=${() => {
+          activeFilter.value = "";
+          searchQuery.value = "";
+        }}
+      >
+        clear filters
+      </button>
+    </div>`;
+  }
+  return html`<div class="project-rail-list">
+    ${groups.map(
+      ([name, list]) =>
+        html`<section class="project-rail-group">
+          <div class="project-rail-title">
+            <span>${name || "all projects"}</span>
+            <em>${list.length}</em>
+          </div>
+          ${list.map(
+            (ag) =>
+              html`<button
+                class="project-rail-row ${currentProject.value === ag.name
+                  ? "selected"
+                  : ""}"
+                onClick=${() => (currentProject.value = ag.name)}
+              >
+                <span class="dot ${ag.status || "sleeping"}"></span>
+                <span class="project-rail-name">${ag.name}</span>
+                <span class="project-rail-state">
+                  ${ag.task || ag.status || "sleeping"}
+                </span>
+                <span
+                  class="project-rail-dirty ${(ag.uncommitted || 0) > 20
+                    ? "hot"
+                    : ""}"
+                >
+                  ${ag.uncommitted || 0}
+                </span>
+              </button>`,
+          )}
+        </section>`,
+    )}
+  </div>`;
+}
+
 function graphBounds(nodes) {
   if (!nodes.length) return { x: 0, y: 0, w: 1000, h: 520 };
   const minX = Math.min(...nodes.map((n) => Number(n.x || 0)));
@@ -1222,6 +1369,126 @@ function DashboardView() {
   </div>`;
 }
 
+function DashboardWorkbenchView() {
+  const seg = segments.value;
+  const allAgents = agents.value;
+  let visibleAgents = allAgents;
+  const sq = searchQuery.value.toLowerCase();
+  if (sq) {
+    visibleAgents = visibleAgents.filter(
+      (x) =>
+        x.name.toLowerCase().includes(sq) ||
+        x.task?.toLowerCase().includes(sq) ||
+        (x.segment || "").toLowerCase().includes(sq),
+    );
+  }
+  const af = activeFilter.value;
+  if (af === "attention") {
+    visibleAgents = visibleAgents.filter(
+      (x) => x.blockers || (x.uncommitted || 0) > 20,
+    );
+  }
+  if (af === "active") visibleAgents = visibleAgents.filter((x) => x.task);
+  if (af === "stale") {
+    visibleAgents = visibleAgents.filter((x) => (x.days || 999) > 7);
+  }
+
+  const sb = sortBy.value;
+  if (sb === "name") {
+    visibleAgents = [...visibleAgents].sort((x, y) =>
+      x.name.localeCompare(y.name),
+    );
+  } else if (sb === "uncommitted") {
+    visibleAgents = [...visibleAgents].sort(
+      (x, y) => (y.uncommitted || 0) - (x.uncommitted || 0),
+    );
+  } else if (sb === "days") {
+    visibleAgents = [...visibleAgents].sort(
+      (x, y) => (x.days || 999) - (y.days || 999),
+    );
+  } else if (sb === "status") {
+    const o = { blocked: 0, working: 1, idle: 2, sleeping: 3 };
+    visibleAgents = [...visibleAgents].sort(
+      (x, y) => (o[x.status] ?? 4) - (o[y.status] ?? 4),
+    );
+  }
+
+  const segMap = {};
+  const assigned = new Set();
+  const otherItems = [];
+  for (const [name, projects] of Object.entries(seg)) {
+    const items = visibleAgents.filter((x) => projects.includes(x.name));
+    if (items.length > 2) segMap[name] = items;
+    else otherItems.push(...items);
+    projects.forEach((p) => assigned.add(p));
+  }
+  const unassigned = visibleAgents.filter((x) => !assigned.has(x.name));
+  otherItems.push(...unassigned);
+  if (otherItems.length) segMap["Other"] = otherItems;
+  const useFlat = sb !== "";
+  const flatItems = useFlat ? visibleAgents : [];
+  const filterBar = af
+    ? html`<div class="project-rail-filter">
+        Filter: ${af}
+        <span onClick=${() => (activeFilter.value = "")}>clear</span>
+      </div>`
+    : null;
+
+  if (isLoading.value) {
+    return html`<div class="content workbench-content">
+      <section class="workbench-primary">
+        <${StatsRow} />
+        <div class="grid">
+          ${[0, 1, 2, 3, 4, 5].map(
+            (i) => html`<div class="skeleton" key=${i} />`,
+          )}
+        </div>
+      </section>
+    </div>`;
+  }
+  if (!allAgents.length && !af && !sq) {
+    return html`<div class="content"><${StatsRow} /><${EmptyState} /></div>`;
+  }
+
+  return html`<div class="content workbench-content">
+    <section class="workbench-primary">
+      <${StatsRow} />
+      <${WorkbenchFocus} all=${allAgents} />
+      <div class="workbench-panels">
+        <${ActivePlanCard} />
+        <${PlanPanel} />
+        <${QueuePanel} />
+        <${SignalsPanel} />
+      </div>
+    </section>
+    <aside class="project-rail">
+      <div class="project-rail-head">
+        <div>
+          <div class="workbench-eyebrow">project navigation</div>
+          <b>${visibleAgents.length}/${allAgents.length} visible</b>
+        </div>
+        <button
+          onClick=${() => {
+            activeFilter.value = "";
+            searchQuery.value = "";
+            sortBy.value = "";
+          }}
+        >
+          reset
+        </button>
+      </div>
+      <${SearchBar} />
+      ${filterBar}
+      <${ProjectRail}
+        items=${visibleAgents}
+        segMap=${segMap}
+        useFlat=${useFlat}
+        flatItems=${flatItems}
+      />
+    </aside>
+  </div>`;
+}
+
 export {
   OrchWarning,
   Breadcrumb,
@@ -1236,4 +1503,5 @@ export {
   KeyboardHelp,
   AnalyticsBar,
   DashboardView,
+  DashboardWorkbenchView,
 };

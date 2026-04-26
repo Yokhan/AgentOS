@@ -15,6 +15,7 @@ const files = [
   "provider-caps.js",
   "store.js",
   "utils.js",
+  "views.js",
   path.join("vendor", "preact-bundle.mjs"),
 ];
 
@@ -64,10 +65,56 @@ globalThis.setInterval = (...args) => {
   return timer;
 };
 
+const storeModuleUrl = pathToFileURL(path.join(tempDir, "store.js")).href;
 const chatModuleUrl = pathToFileURL(path.join(tempDir, "chat.js")).href;
+const viewsModuleUrl = pathToFileURL(path.join(tempDir, "views.js")).href;
+const {
+  agents,
+  isLoading,
+  segments,
+  delegations,
+  queueTasks,
+  searchQuery,
+  activeFilter,
+  sortBy,
+} = await import(storeModuleUrl);
 const { DetailView, ExecutionTimelineCard } = await import(chatModuleUrl);
+const { DashboardWorkbenchView } = await import(viewsModuleUrl);
+
+isLoading.value = false;
+searchQuery.value = "";
+activeFilter.value = "";
+sortBy.value = "";
+agents.value = [
+  {
+    name: "AgentOS",
+    status: "working",
+    task: "Workbench smoke",
+    uncommitted: 4,
+    days: 0,
+    segment: "Infrastructure",
+  },
+  {
+    name: "BlockedProject",
+    status: "blocked",
+    task: "Needs unblock",
+    blockers: true,
+    uncommitted: 42,
+    days: 16,
+    segment: "Other",
+  },
+];
+segments.value = {
+  Infrastructure: ["AgentOS"],
+  Other: ["BlockedProject"],
+};
+delegations.value = {
+  smoke: { status: "running" },
+};
+queueTasks.value = [{ done: false, text: "smoke task" }];
 
 DetailView();
+DashboardWorkbenchView();
 
 ExecutionTimelineCard({
   timeline: {
@@ -106,4 +153,4 @@ ExecutionTimelineCard({
   onRefresh: () => {},
 });
 
-console.log("chat render smoke ok");
+console.log("chat/dashboard render smoke ok");

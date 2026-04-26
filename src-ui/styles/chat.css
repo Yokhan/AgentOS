@@ -171,6 +171,50 @@
     border-color: var(--cyan);
     color: var(--text);
 }
+.chat-context-drawer {
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 88%, var(--sf));
+    max-height: 34px;
+    overflow: hidden;
+}
+.chat-context-drawer[open] {
+    max-height: min(48vh, 520px);
+    overflow-y: auto;
+}
+.chat-context-drawer > summary {
+    min-height: 34px;
+    padding: 6px var(--sp-m);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-s);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    color: var(--t2);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    user-select: none;
+}
+.chat-context-drawer > summary::marker {
+    color: var(--yellow);
+}
+.chat-context-drawer > summary em {
+    font-style: normal;
+    color: var(--t3);
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: nowrap;
+}
+.chat-context-drawer .orch-map-card,
+.chat-context-drawer .exec-timeline-card,
+.chat-context-drawer .duo-brief,
+.chat-context-drawer .inbox-panel,
+.chat-context-drawer .deleg-panel {
+    border-top: 1px solid var(--border);
+    border-bottom: 0;
+}
 .orch-map-card {
     border-bottom: 1px solid var(--border);
     background: color-mix(in srgb, var(--sf) 72%, var(--bg));

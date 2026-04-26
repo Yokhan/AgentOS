@@ -2219,186 +2219,196 @@ function ChatSidebar() {
       onFollow=${scrollToBottom}
       onLoadOlder=${loadOlder}
     />
-    <${OrchestrationMapCard}
-      map=${orchestrationMap.value}
-      onAttachGraph=${() =>
-        insertPrompt(
-          currentProject.value
-            ? `[GRAPH_CONTEXT:${currentProject.value}]\nUse this code context when planning and executing. Call out dependency risks before edits.`
-            : "[GRAPH_CONTEXT:overview]\nUse the project graph to choose the safest orchestration route.",
-        )}
-      onOpenGraph=${() => loadGraph(currentProject.value || "overview")}
-      onVerifyGraph=${() =>
-        insertPrompt(
-          currentProject.value
-            ? `[GRAPH_VERIFY:${currentProject.value}]\nVerify graph health and dependency risks before continuing.`
-            : "[GRAPH_CONTEXT:overview]\nVerify global dependency and orchestration risks.",
-        )}
-      onOpenPlans=${() => {
-        showPlans.value = true;
-        loadPlansData().catch((e) => console.warn("plans refresh:", e));
-      }}
-      onManagementPrompt=${(leverage) =>
-        insertPrompt(
-          leverage?.management_prompt ||
-            "[MANAGEMENT_REVIEW]\nОцени управляемость текущей работы: параллельность, качество через reviewer/cross-check, контрольную нагрузку, live route progress и связь со стратегией. Дай следующий управленческий шаг без микроменеджмента.",
-        )}
-      onRouteAgent=${async (route) => {
-        const next = route.next_work_item || {};
-        const progress = route.progress || {};
-        const phase = progress.phase || route.route_state || "idle";
-        if (route.can_queue_next && next.id) {
-          try {
-            await queueWorkItemExecution(next.id);
-            await Promise.allSettled([
-              loadOrchestrationMap(
-                currentProject.value || "",
-                activeDualSession.value || null,
-              ),
-              loadExecutionTimeline(
-                currentProject.value || "",
-                activeDualSession.value || null,
-                80,
-              ),
-            ]);
-            return;
-          } catch (e) {
-            showToast("Route queue failed: " + e, "error", 6000);
+    <details class="chat-context-drawer">
+      <summary>
+        <span>context / routes / tools</span>
+        <em>
+          ${(orchestrationMap.value?.project_agent_routes || []).length} routes
+          · ${(executionTimeline.value?.items || []).length} events ·
+          ${Object.keys(delegations.value || {}).length} delegations
+        </em>
+      </summary>
+      <${OrchestrationMapCard}
+        map=${orchestrationMap.value}
+        onAttachGraph=${() =>
+          insertPrompt(
+            currentProject.value
+              ? `[GRAPH_CONTEXT:${currentProject.value}]\nUse this code context when planning and executing. Call out dependency risks before edits.`
+              : "[GRAPH_CONTEXT:overview]\nUse the project graph to choose the safest orchestration route.",
+          )}
+        onOpenGraph=${() => loadGraph(currentProject.value || "overview")}
+        onVerifyGraph=${() =>
+          insertPrompt(
+            currentProject.value
+              ? `[GRAPH_VERIFY:${currentProject.value}]\nVerify graph health and dependency risks before continuing.`
+              : "[GRAPH_CONTEXT:overview]\nVerify global dependency and orchestration risks.",
+          )}
+        onOpenPlans=${() => {
+          showPlans.value = true;
+          loadPlansData().catch((e) => console.warn("plans refresh:", e));
+        }}
+        onManagementPrompt=${(leverage) =>
+          insertPrompt(
+            leverage?.management_prompt ||
+              "[MANAGEMENT_REVIEW]\nОцени управляемость текущей работы: параллельность, качество через reviewer/cross-check, контрольную нагрузку, live route progress и связь со стратегией. Дай следующий управленческий шаг без микроменеджмента.",
+          )}
+        onRouteAgent=${async (route) => {
+          const next = route.next_work_item || {};
+          const progress = route.progress || {};
+          const phase = progress.phase || route.route_state || "idle";
+          if (route.can_queue_next && next.id) {
+            try {
+              await queueWorkItemExecution(next.id);
+              await Promise.allSettled([
+                loadOrchestrationMap(
+                  currentProject.value || "",
+                  activeDualSession.value || null,
+                ),
+                loadExecutionTimeline(
+                  currentProject.value || "",
+                  activeDualSession.value || null,
+                  80,
+                ),
+              ]);
+              return;
+            } catch (e) {
+              showToast("Route queue failed: " + e, "error", 6000);
+            }
           }
-        }
-        insertPrompt(
-          [
-            `[PROJECT_AGENT_ROUTE:${route.project || currentProject.value || "_orchestrator"}]`,
-            `Фаза: ${routePhaseLabel(phase)} (${phase})`,
-            `Исполнитель: ${route.executor_provider || "auto"}`,
-            route.reviewer_provider
-              ? `Ревьюер: ${route.reviewer_provider}`
-              : "",
-            progress.active_delegation_id
-              ? `Делегация: ${progress.active_delegation_id}`
-              : "",
-            next.id
-              ? `Work item: ${next.id} - ${next.title || next.task}`
-              : `Lane: ${route.title || "project-agent lane"}`,
-            route.has_blockers
-              ? `Блокеры: ${(route.blocker_delegation_ids || []).join(", ") || "present"}`
-              : "",
-            progress.review_verdict_status
-              ? `Reviewer verdict: ${progress.review_verdict_status} ${progress.review_verdict_summary || ""}`
-              : "",
-            route.action ? `Рекомендуемое действие: ${route.action}` : "",
-            phase === "needs_user"
-              ? "Разбери, что именно требует моего решения, предложи минимальный unblock-step и не запускай новую волну без подтверждения."
-              : phase === "running" ||
-                  phase === "verifying" ||
-                  phase === "reviewing"
-                ? "Проверь live-состояние маршрута, кратко объясни прогресс, риски и следующий безопасный шаг."
-                : "Продолжи самый безопасный следующий шаг. Используй graph context, если вероятны изменения кода, и делегируй подзадачи только при необходимости.",
-          ]
-            .filter(Boolean)
-            .join("\n"),
-        );
-      }}
-    />
-    <${ExecutionTimelineCard}
-      timeline=${executionTimeline.value}
-      contract=${eventContract.value}
-      onRefresh=${() =>
-        loadExecutionTimeline(
-          currentProject.value || "",
-          activeDualSession.value || null,
-          80,
-        ).catch((e) => console.warn("execution timeline refresh:", e))}
-    />
-    ${duoEnabled
-      ? html`<div class="duo-brief">
-          <div class="scope-strip">
-            <div class="scope-path">
-              ${scopeCrumbs.map(
-                (crumb, index) =>
-                  html`<span class="scope-crumb">
-                    ${index > 0 ? html`<b>/</b>` : null}${crumb.label}
-                  </span>`,
-              )}
-            </div>
-            <span class="scope-kind">${scope.label || scope.kind}</span>
-          </div>
-          <div class="duo-brief-top">
-            <div>
-              <div class="duo-eyebrow">${scope.kind || "global"} context</div>
-              <div class="duo-title">
-                ${scope.title ||
-                activeOrchestrator?.label ||
-                "Choose work area"}
+          insertPrompt(
+            [
+              `[PROJECT_AGENT_ROUTE:${route.project || currentProject.value || "_orchestrator"}]`,
+              `Фаза: ${routePhaseLabel(phase)} (${phase})`,
+              `Исполнитель: ${route.executor_provider || "auto"}`,
+              route.reviewer_provider
+                ? `Ревьюер: ${route.reviewer_provider}`
+                : "",
+              progress.active_delegation_id
+                ? `Делегация: ${progress.active_delegation_id}`
+                : "",
+              next.id
+                ? `Work item: ${next.id} - ${next.title || next.task}`
+                : `Lane: ${route.title || "project-agent lane"}`,
+              route.has_blockers
+                ? `Блокеры: ${(route.blocker_delegation_ids || []).join(", ") || "present"}`
+                : "",
+              progress.review_verdict_status
+                ? `Reviewer verdict: ${progress.review_verdict_status} ${progress.review_verdict_summary || ""}`
+                : "",
+              route.action ? `Рекомендуемое действие: ${route.action}` : "",
+              phase === "needs_user"
+                ? "Разбери, что именно требует моего решения, предложи минимальный unblock-step и не запускай новую волну без подтверждения."
+                : phase === "running" ||
+                    phase === "verifying" ||
+                    phase === "reviewing"
+                  ? "Проверь live-состояние маршрута, кратко объясни прогресс, риски и следующий безопасный шаг."
+                  : "Продолжи самый безопасный следующий шаг. Используй graph context, если вероятны изменения кода, и делегируй подзадачи только при необходимости.",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          );
+        }}
+      />
+      <${ExecutionTimelineCard}
+        timeline=${executionTimeline.value}
+        contract=${eventContract.value}
+        onRefresh=${() =>
+          loadExecutionTimeline(
+            currentProject.value || "",
+            activeDualSession.value || null,
+            80,
+          ).catch((e) => console.warn("execution timeline refresh:", e))}
+      />
+      ${duoEnabled
+        ? html`<div class="duo-brief">
+            <div class="scope-strip">
+              <div class="scope-path">
+                ${scopeCrumbs.map(
+                  (crumb, index) =>
+                    html`<span class="scope-crumb">
+                      ${index > 0 ? html`<b>/</b>` : null}${crumb.label}
+                    </span>`,
+                )}
               </div>
-              <div class="duo-sub">
-                ${scope.summary ||
-                (duoExecuteMode
-                  ? "Execution board is open in the main canvas."
+              <span class="scope-kind">${scope.label || scope.kind}</span>
+            </div>
+            <div class="duo-brief-top">
+              <div>
+                <div class="duo-eyebrow">${scope.kind || "global"} context</div>
+                <div class="duo-title">
+                  ${scope.title ||
+                  activeOrchestrator?.label ||
+                  "Choose work area"}
+                </div>
+                <div class="duo-sub">
+                  ${scope.summary ||
+                  (duoExecuteMode
+                    ? "Execution board is open in the main canvas."
+                    : duoCollaborateMode
+                      ? "Ask both agents, then choose who leads the next step."
+                      : "Normal chat mode; Duo room is standing by.")}
+                </div>
+              </div>
+              <span class="duo-pill ${duoExecuteMode ? "hot" : ""}">
+                ${duoExecuteMode
+                  ? "execute"
                   : duoCollaborateMode
-                    ? "Ask both agents, then choose who leads the next step."
-                    : "Normal chat mode; Duo room is standing by.")}
-              </div>
+                    ? "review"
+                    : "chat"}
+              </span>
             </div>
-            <span class="duo-pill ${duoExecuteMode ? "hot" : ""}">
-              ${duoExecuteMode
-                ? "execute"
-                : duoCollaborateMode
-                  ? "review"
-                  : "chat"}
-            </span>
-          </div>
-          <div class="scope-actions">
-            ${scopeActions.map(
-              (action) =>
-                html`<button
-                  class="scope-action ${action.tone === "primary"
-                    ? "primary"
-                    : ""}"
-                  disabled=${!!dualBusy.value}
-                  onClick=${() => runScopeAction(action.id)}
-                >
-                  ${action.label}
-                </button>`,
-            )}
-          </div>
-          <details class="duo-small-controls">
-            <summary>lead / mode</summary>
-            <div class="duo-control-grid">
-              ${visibleLeadCandidates.map(
-                (participant) =>
+            <div class="scope-actions">
+              ${scopeActions.map(
+                (action) =>
                   html`<button
-                    class=${participant.id === activeOrchestratorId
-                      ? "lead selected"
-                      : "lead"}
+                    class="scope-action ${action.tone === "primary"
+                      ? "primary"
+                      : ""}"
                     disabled=${!!dualBusy.value}
-                    onClick=${() => useDuoOrchestrator(participant.id)}
+                    onClick=${() => runScopeAction(action.id)}
                   >
-                    lead:
-                    ${participant.label}${participant.write_enabled
-                      ? ""
-                      : " + write"}
-                  </button>`,
-              )}
-              ${[
-                ["chat", "plain chat"],
-                ["collaborate", "review room"],
-                ["execute", "execution board"],
-              ].map(
-                ([id, label]) =>
-                  html`<button
-                    class=${duoView === id ? "selected" : ""}
-                    onClick=${() => setDuoView(id)}
-                  >
-                    ${label}
+                    ${action.label}
                   </button>`,
               )}
             </div>
-          </details>
-        </div>`
-      : null}
-    <${InboxPanel} />
-    <${DelegationPanel} />
+            <details class="duo-small-controls">
+              <summary>lead / mode</summary>
+              <div class="duo-control-grid">
+                ${visibleLeadCandidates.map(
+                  (participant) =>
+                    html`<button
+                      class=${participant.id === activeOrchestratorId
+                        ? "lead selected"
+                        : "lead"}
+                      disabled=${!!dualBusy.value}
+                      onClick=${() => useDuoOrchestrator(participant.id)}
+                    >
+                      lead:
+                      ${participant.label}${participant.write_enabled
+                        ? ""
+                        : " + write"}
+                    </button>`,
+                )}
+                ${[
+                  ["chat", "plain chat"],
+                  ["collaborate", "review room"],
+                  ["execute", "execution board"],
+                ].map(
+                  ([id, label]) =>
+                    html`<button
+                      class=${duoView === id ? "selected" : ""}
+                      onClick=${() => setDuoView(id)}
+                    >
+                      ${label}
+                    </button>`,
+                )}
+              </div>
+            </details>
+          </div>`
+        : null}
+      <${InboxPanel} />
+      <${DelegationPanel} />
+    </details>
     <div
       class="ch-msgs"
       ref=${msgsRef}
