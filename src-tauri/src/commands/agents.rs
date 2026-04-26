@@ -22,7 +22,10 @@ pub fn get_agents_cached(state: &AppState) -> Value {
     }
 
     // Scan projects
-    let ps = state.project_segment.lock().unwrap_or_else(|e| e.into_inner());
+    let ps = state
+        .project_segment
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let mut projects = scanner::scan_projects(&state.docs_dir, &ps);
     drop(ps);
 
@@ -38,7 +41,9 @@ pub fn get_agents_cached(state: &AppState) -> Value {
             if let Ok(entry) = serde_json::from_str::<Value>(line) {
                 if let Some(ts) = entry.get("ts").and_then(|v| v.as_str()) {
                     if let Some(ts_slice) = ts.get(..19) {
-                        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(ts_slice, "%Y-%m-%dT%H:%M:%S") {
+                        if let Ok(dt) =
+                            chrono::NaiveDateTime::parse_from_str(ts_slice, "%Y-%m-%dT%H:%M:%S")
+                        {
                             let entry_ts = dt.and_utc().timestamp() as f64;
                             if (now - entry_ts) / 60.0 < 30.0 {
                                 if let Some(proj) = entry.get("project").and_then(|v| v.as_str()) {

@@ -1,3 +1,12 @@
+# Agent OS 0.2.33
+
+- Added a committed execution plan for the runtime/chat pass so release work is not only stored in the conversation.
+- Fixed Codex chat cancellation at the process level: Codex CLI runs now register their child PID, and Stop can kill the tracked process tree instead of waiting for the CLI to return naturally.
+- Added race-safe PID untracking so a late-finishing old provider process cannot remove the PID for a newer run in the same chat.
+- Added an immediate cancelled `done` stream marker from Stop so the frontend can settle the run without waiting for provider cleanup.
+- Added paginated chat history loading with `before/limit`, `total`, `loaded`, `has_more`, and `next_before` metadata.
+- Added a `load older` control at the top of chat, preserving scroll position while older history is prepended.
+
 # Agent OS 0.2.32
 
 - Fixed chat auto-scroll during active thinking/streaming: the chat now stays where the user scrolls and only follows output while already near the bottom.

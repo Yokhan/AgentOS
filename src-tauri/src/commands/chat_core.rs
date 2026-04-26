@@ -96,8 +96,13 @@ pub fn get_chats_core(state: &AppState) -> Value {
     json!({"chats": chats})
 }
 
-/// Get chat history for a project (shared by Tauri command and API handler).
-pub fn get_chat_history_core(state: &AppState, project: &str) -> Value {
+/// Get a page of chat history. `before` is an exclusive line index in the JSONL file.
+pub fn get_chat_history_page_core(
+    state: &AppState,
+    project: &str,
+    before: Option<usize>,
+    limit: Option<usize>,
+) -> Value {
     if project.contains("..")
         || project.contains('/')
         || project.contains('\\')
@@ -107,16 +112,31 @@ pub fn get_chat_history_core(state: &AppState, project: &str) -> Value {
     }
     let path = state.chats_dir.join(format!("{}.jsonl", project));
     let mut messages = Vec::new();
+    let mut total = 0usize;
+    let mut start = 0usize;
+    let mut end = 0usize;
+    let limit = limit.unwrap_or(200).clamp(1, 500);
 
     if let Ok(content) = std::fs::read_to_string(&path) {
         let lines: Vec<&str> = content.lines().collect();
-        let recent = &lines[lines.len().saturating_sub(200)..];
-        for line in recent {
+        total = lines.len();
+        end = before.unwrap_or(total).min(total);
+        start = end.saturating_sub(limit);
+        for line in &lines[start..end] {
             if let Ok(msg) = serde_json::from_str::<Value>(line) {
                 messages.push(msg);
             }
         }
     }
 
-    json!({"project": project, "messages": messages})
+    json!({
+        "project": project,
+        "messages": messages,
+        "total": total,
+        "start": start,
+        "end": end,
+        "loaded": end.saturating_sub(start),
+        "has_more": start > 0,
+        "next_before": if start > 0 { json!(start) } else { Value::Null }
+    })
 }

@@ -1,7 +1,8 @@
 //! Streaming chat: stream_chat, poll_stream, stop_chat, is_chat_running.
 use super::claude_runner::{get_permission_path, get_permission_path_for_profile, unique_tmp};
 use super::process_manager::{
-    clear_activity, clear_cancel, is_cancelled, kill_existing, set_activity, track_pid, untrack_pid,
+    clear_activity, clear_cancel, is_cancelled, kill_existing, set_activity, track_pid,
+    untrack_pid_if_match,
 };
 use crate::state::AppState;
 use serde_json::{json, Value};
@@ -229,7 +230,7 @@ pub async fn stream_chat(
                 }),
                 "stream codex provider running",
             );
-            let response = super::provider_runner::run_provider_with_opts(
+            let response = super::provider_runner::run_provider_with_chat_control(
                 &state_arc,
                 provider,
                 &cwd_bg,
@@ -237,6 +238,7 @@ pub async fn stream_chat(
                 Some(&perm_path_bg),
                 resolved_model.as_deref(),
                 resolved_effort.as_deref(),
+                Some(&chat_key_bg),
             );
             if is_cancelled(&state_arc, &chat_key_bg) {
                 append_stream_event(
@@ -698,7 +700,7 @@ fn stream_reader_loop(
     // Drain stderr before wait to avoid deadlock
     let exit_status = child.wait();
     let stderr_bytes = super::claude_runner::collect_reader(stderr_handle).unwrap_or_default();
-    untrack_pid(state, chat_key);
+    untrack_pid_if_match(state, chat_key, child.id());
     let _ = std::fs::remove_file(tmp);
     clear_activity(state, chat_key);
     let exit_code = exit_status.as_ref().ok().and_then(|s| s.code());

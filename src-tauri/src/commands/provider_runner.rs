@@ -8,6 +8,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::State;
 
+use super::process_manager::{track_pid, untrack_pid_if_match};
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderKind {
@@ -837,12 +839,31 @@ fn render_template_args(
         .collect())
 }
 
+fn wait_with_optional_pid_tracking(
+    mut cmd: std::process::Command,
+    state: &AppState,
+    chat_key: Option<&str>,
+) -> std::io::Result<std::process::Output> {
+    let child = cmd.spawn()?;
+    let pid = child.id();
+    if let Some(key) = chat_key {
+        track_pid(state, key, pid);
+        crate::log_info!("[provider:{}] spawned pid={}", key, pid);
+    }
+    let output = child.wait_with_output();
+    if let Some(key) = chat_key {
+        untrack_pid_if_match(state, key, pid);
+    }
+    output
+}
+
 fn run_codex_with_template(
     state: &AppState,
     cwd: &Path,
     prompt: &str,
     model: Option<&str>,
     reasoning_effort: Option<&str>,
+    chat_key: Option<&str>,
 ) -> String {
     let template = codex_template(state);
     if template.is_empty() {
@@ -873,11 +894,13 @@ fn run_codex_with_template(
     };
 
     let binary = resolve_provider_binary(state, ProviderKind::Codex);
-    let output = super::claude_runner::silent_cmd(&binary)
-        .args(args)
+    let mut cmd = super::claude_runner::silent_cmd(&binary);
+    cmd.args(args)
         .current_dir(cwd)
         .env("PYTHONIOENCODING", "utf-8")
-        .output();
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let output = wait_with_optional_pid_tracking(cmd, state, chat_key);
 
     let _ = std::fs::remove_file(&tmp);
 
@@ -924,6 +947,7 @@ fn run_codex_official_cli(
     perm_path: Option<&str>,
     model: Option<&str>,
     reasoning_effort: Option<&str>,
+    chat_key: Option<&str>,
 ) -> String {
     let binary = resolve_codex_binary(state);
     let prompt_file = super::claude_runner::unique_tmp("codex-prompt");
@@ -964,13 +988,12 @@ fn run_codex_official_cli(
         cmd.args(["-c", &arg]);
     }
 
-    let output = cmd
-        .current_dir(cwd)
+    cmd.current_dir(cwd)
         .stdin(std::process::Stdio::from(stdin_file))
         .env("PYTHONIOENCODING", "utf-8")
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .output();
+        .stderr(std::process::Stdio::piped());
+    let output = wait_with_optional_pid_tracking(cmd, state, chat_key);
 
     let response = match output {
         Ok(output) => {
@@ -1061,6 +1084,28 @@ pub fn run_provider_with_opts(
     model: Option<&str>,
     reasoning_effort: Option<&str>,
 ) -> String {
+    run_provider_with_chat_control(
+        state,
+        provider,
+        cwd,
+        prompt,
+        perm_path,
+        model,
+        reasoning_effort,
+        None,
+    )
+}
+
+pub fn run_provider_with_chat_control(
+    state: &AppState,
+    provider: ProviderKind,
+    cwd: &Path,
+    prompt: &str,
+    perm_path: Option<&str>,
+    model: Option<&str>,
+    reasoning_effort: Option<&str>,
+    chat_key: Option<&str>,
+) -> String {
     match provider {
         ProviderKind::Claude => super::claude_runner::run_claude_with_opts(
             cwd,
@@ -1072,9 +1117,17 @@ pub fn run_provider_with_opts(
         ProviderKind::Codex => match effective_codex_transport(state, model, reasoning_effort) {
             CodexTransport::Cli => {
                 if codex_template(state).is_empty() {
-                    run_codex_official_cli(state, cwd, prompt, perm_path, model, reasoning_effort)
+                    run_codex_official_cli(
+                        state,
+                        cwd,
+                        prompt,
+                        perm_path,
+                        model,
+                        reasoning_effort,
+                        chat_key,
+                    )
                 } else {
-                    run_codex_with_template(state, cwd, prompt, model, reasoning_effort)
+                    run_codex_with_template(state, cwd, prompt, model, reasoning_effort, chat_key)
                 }
             }
             CodexTransport::Acp => run_codex_via_acp(state, cwd, prompt, model, reasoning_effort),

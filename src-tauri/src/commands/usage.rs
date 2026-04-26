@@ -42,20 +42,39 @@ pub fn get_usage_summary(state: State<Arc<AppState>>) -> Value {
 
     for line in content.lines() {
         if let Ok(entry) = serde_json::from_str::<Value>(line) {
-            let project = entry.get("project").and_then(|v| v.as_str()).unwrap_or("unknown");
-            let input = entry.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-            let output = entry.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-            let cost = entry.get("cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let project = entry
+                .get("project")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            let input = entry
+                .get("input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let output = entry
+                .get("output_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let cost = entry
+                .get("cost_usd")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
 
             total_input += input;
             total_output += output;
             total_cost += cost;
 
-            let proj = by_project.entry(project.to_string())
-                .or_insert_with(|| json!({"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "count": 0}));
+            let proj = by_project.entry(project.to_string()).or_insert_with(
+                || json!({"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "count": 0}),
+            );
             if let Some(obj) = proj.as_object_mut() {
-                let pi = obj.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                let po = obj.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                let pi = obj
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let po = obj
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
                 let pc = obj.get("cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0);
                 let pn = obj.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
                 obj.insert("input_tokens".to_string(), json!(pi + input));

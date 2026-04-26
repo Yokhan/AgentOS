@@ -81,8 +81,13 @@ pub fn enrich_delegation_with_category(state: &AppState, project: &str) -> Strin
     };
 
     let segments = state.segments.lock().unwrap_or_else(|e| e.into_inner());
-    let related: Vec<&String> = segments.get(&cat_name)
-        .map(|v| v.iter().filter(|p| !p.eq_ignore_ascii_case(project)).collect())
+    let related: Vec<&String> = segments
+        .get(&cat_name)
+        .map(|v| {
+            v.iter()
+                .filter(|p| !p.eq_ignore_ascii_case(project))
+                .collect()
+        })
         .unwrap_or_default();
 
     let mut ctx = format!("\n[CATEGORY CONTEXT: {}]", cat_name);

@@ -85,6 +85,11 @@ pub fn stop_chat(state: State<Arc<AppState>>, project: Option<String>) -> Value 
         }),
         "stream cancelled by user",
     );
+    let _ = super::jsonl::append_jsonl_logged(
+        &buf_path,
+        &json!({"type":"done","text":"","tools":[],"outcome":"cancelled"}),
+        "stream cancelled done marker",
+    );
     kill_existing(&state, &chat_key);
     clear_activity(&state, &chat_key);
     json!({"status": "stopped", "project": chat_key})

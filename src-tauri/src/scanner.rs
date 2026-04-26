@@ -4,9 +4,8 @@ use std::sync::LazyLock;
 
 use crate::commands::claude_runner::silent_cmd;
 
-static RE_BLOCKERS: LazyLock<regex::Regex> = LazyLock::new(|| {
-    regex::Regex::new(r"(?m)^## [Bb]locker.*\n+\S").unwrap()
-});
+static RE_BLOCKERS: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"(?m)^## [Bb]locker.*\n+\S").unwrap());
 
 /// Scanned project info - mirrors Python scan-projects-fast.py output
 #[derive(Clone, Serialize, Deserialize)]
@@ -33,9 +32,12 @@ pub struct ProjectInfo {
     pub has_brain: bool,
 }
 
-
 /// Scan a single git repository. Returns None if not a valid repo.
-fn scan_repo(path: &Path, index: usize, project_segment: &std::collections::HashMap<String, String>) -> Option<ProjectInfo> {
+fn scan_repo(
+    path: &Path,
+    index: usize,
+    project_segment: &std::collections::HashMap<String, String>,
+) -> Option<ProjectInfo> {
     let git_dir = path.join(".git");
     if !git_dir.exists() {
         return None;
@@ -45,7 +47,13 @@ fn scan_repo(path: &Path, index: usize, project_segment: &std::collections::Hash
 
     // git log -1 --format=%D|%cr|%ct
     let log_output = silent_cmd("git")
-        .args(["-C", &path.to_string_lossy(), "log", "-1", "--format=%D|%cr|%ct"])
+        .args([
+            "-C",
+            &path.to_string_lossy(),
+            "log",
+            "-1",
+            "--format=%D|%cr|%ct",
+        ])
         .output()
         .ok()?;
 
@@ -75,7 +83,13 @@ fn scan_repo(path: &Path, index: usize, project_segment: &std::collections::Hash
 
     // git status --porcelain
     let status_output = silent_cmd("git")
-        .args(["-C", &path.to_string_lossy(), "status", "--porcelain", "-unormal"])
+        .args([
+            "-C",
+            &path.to_string_lossy(),
+            "status",
+            "--porcelain",
+            "-unormal",
+        ])
         .output()
         .ok();
     let uncommitted = status_output
@@ -94,7 +108,11 @@ fn scan_repo(path: &Path, index: usize, project_segment: &std::collections::Hash
         std::fs::read_to_string(&manifest_path)
             .ok()
             .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
-            .and_then(|v| v.get("template_version").and_then(|v| v.as_str()).map(String::from))
+            .and_then(|v| {
+                v.get("template_version")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+            })
             .unwrap_or_else(|| "?".to_string())
     } else {
         "none".to_string()
@@ -139,12 +157,13 @@ fn scan_repo(path: &Path, index: usize, project_segment: &std::collections::Hash
         "sleeping"
     };
 
-    let segment = project_segment
-        .get(&name)
-        .cloned()
-        .unwrap_or_else(|| {
-            if has_manifest { "Other".to_string() } else { "Unmanaged".to_string() }
-        });
+    let segment = project_segment.get(&name).cloned().unwrap_or_else(|| {
+        if has_manifest {
+            "Other".to_string()
+        } else {
+            "Unmanaged".to_string()
+        }
+    });
 
     Some(ProjectInfo {
         id: index,
@@ -193,17 +212,36 @@ fn read_current_task(path: &Path) -> (String, bool, String, Vec<String>) {
     let mut in_next = false;
     for line in content.lines() {
         let lower = line.to_lowercase();
-        if lower.contains("blocker") && line.starts_with("## ") { in_blockers = true; in_next = false; continue; }
-        if lower.contains("next") && line.starts_with("## ") { in_next = true; in_blockers = false; continue; }
-        if line.starts_with("## ") { in_blockers = false; in_next = false; }
+        if lower.contains("blocker") && line.starts_with("## ") {
+            in_blockers = true;
+            in_next = false;
+            continue;
+        }
+        if lower.contains("next") && line.starts_with("## ") {
+            in_next = true;
+            in_blockers = false;
+            continue;
+        }
+        if line.starts_with("## ") {
+            in_blockers = false;
+            in_next = false;
+        }
         let trimmed = line.trim();
         if in_blockers && (trimmed.starts_with('-') || trimmed.starts_with('*')) {
             let t = trimmed.trim_start_matches(|c: char| "-* ".contains(c));
-            if !t.is_empty() { blocker_text = t.chars().take(200).collect(); }
+            if !t.is_empty() {
+                blocker_text = t.chars().take(200).collect();
+            }
         }
-        if in_next && (trimmed.starts_with('-') || trimmed.starts_with('*') || trimmed.starts_with(|c: char| c.is_ascii_digit())) {
+        if in_next
+            && (trimmed.starts_with('-')
+                || trimmed.starts_with('*')
+                || trimmed.starts_with(|c: char| c.is_ascii_digit()))
+        {
             let t = trimmed.trim_start_matches(|c: char| "-*0123456789. ".contains(c));
-            if !t.is_empty() { next_steps.push(t.chars().take(100).collect()); }
+            if !t.is_empty() {
+                next_steps.push(t.chars().take(100).collect());
+            }
         }
     }
 
@@ -220,7 +258,11 @@ fn read_phase(path: &Path) -> String {
         let lower = line.to_lowercase();
         if lower.contains("phase") && line.contains(':') {
             if let Some(val) = line.split(':').nth(1) {
-                return val.trim().trim_matches(|c: char| "_[]*".contains(c)).trim().to_string();
+                return val
+                    .trim()
+                    .trim_matches(|c: char| "_[]*".contains(c))
+                    .trim()
+                    .to_string();
             }
         }
     }
@@ -261,10 +303,15 @@ fn read_mcp_servers(path: &Path) -> Vec<String> {
 fn read_agents(path: &Path) -> Vec<String> {
     let agents_dir = path.join(".claude").join("agents");
     if let Ok(entries) = std::fs::read_dir(&agents_dir) {
-        return entries.flatten()
+        return entries
+            .flatten()
             .filter_map(|e| {
                 let name = e.file_name().to_string_lossy().to_string();
-                if name.ends_with(".md") { Some(name[..name.len()-3].to_string()) } else { None }
+                if name.ends_with(".md") {
+                    Some(name[..name.len() - 3].to_string())
+                } else {
+                    None
+                }
             })
             .collect();
     }
@@ -278,7 +325,10 @@ fn count_lessons(path: &Path) -> u32 {
 }
 
 /// Scan all projects in the documents directory.
-pub fn scan_projects(docs_dir: &Path, project_segment: &std::collections::HashMap<String, String>) -> Vec<ProjectInfo> {
+pub fn scan_projects(
+    docs_dir: &Path,
+    project_segment: &std::collections::HashMap<String, String>,
+) -> Vec<ProjectInfo> {
     let entries: Vec<PathBuf> = match std::fs::read_dir(docs_dir) {
         Ok(rd) => rd
             .filter_map(|e| e.ok())
@@ -294,11 +344,12 @@ pub fn scan_projects(docs_dir: &Path, project_segment: &std::collections::HashMa
         let handles: Vec<_> = entries
             .iter()
             .enumerate()
-            .map(|(i, path)| {
-                s.spawn(move || scan_repo(path, i, segment_ref))
-            })
+            .map(|(i, path)| s.spawn(move || scan_repo(path, i, segment_ref)))
             .collect();
-        handles.into_iter().map(|h| h.join().unwrap_or(None)).collect()
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap_or(None))
+            .collect()
     });
 
     let mut projects: Vec<ProjectInfo> = results.into_iter().flatten().collect();

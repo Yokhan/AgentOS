@@ -5,13 +5,14 @@
 use crate::state::AppState;
 use axum::{
     extract::State as AxState,
-    extract::{Json, Path, Request},
+    extract::{Json, Path, Query, Request},
     http::{header, Method, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
     Router,
 };
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
@@ -128,12 +129,22 @@ async fn get_chats(AxState(state): AxState<Arc<AppState>>) -> impl IntoResponse 
     Json(crate::commands::chat_core::get_chats_core(&state))
 }
 
+#[derive(Deserialize)]
+struct ChatHistoryQuery {
+    before: Option<usize>,
+    limit: Option<usize>,
+}
+
 async fn get_chat_history(
     AxState(state): AxState<Arc<AppState>>,
     Path(project): Path<String>,
+    Query(query): Query<ChatHistoryQuery>,
 ) -> impl IntoResponse {
-    Json(crate::commands::chat_core::get_chat_history_core(
-        &state, &project,
+    Json(crate::commands::chat_core::get_chat_history_page_core(
+        &state,
+        &project,
+        query.before,
+        query.limit,
     ))
 }
 

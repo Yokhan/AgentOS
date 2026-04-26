@@ -1,8 +1,8 @@
 //! Extended delegation commands execution: batch, chain, retry, cancel, etc.
 
-use crate::state::AppState;
-use super::pa_commands_deleg::DelegPaCommand;
 use super::delegation_models::{DelegationPriority, DelegationTemplate};
+use super::pa_commands_deleg::DelegPaCommand;
+use crate::state::AppState;
 
 /// Execute an extended delegation command. Returns optional text for PA response.
 pub fn execute_deleg_command(state: &AppState, cmd: &DelegPaCommand) -> Option<String> {
@@ -23,15 +23,22 @@ pub fn execute_deleg_command(state: &AppState, cmd: &DelegPaCommand) -> Option<S
 }
 
 fn exec_batch(state: &AppState, projects: &[String], task: &str) -> Option<String> {
-    let batch_id = format!("batch-{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+    let batch_id = format!(
+        "batch-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    );
     let mut ids = Vec::new();
 
     for project in projects {
         let valid = state.validate_project_name_from_llm(project);
         let name = valid.as_deref().unwrap_or(project);
         let did = super::delegation::queue_delegation_internal(state, name, task);
-        if did.is_empty() { continue; }
+        if did.is_empty() {
+            continue;
+        }
         // Set batch_id
         if let Ok(mut delegations) = state.delegations.lock() {
             if let Some(del) = delegations.get_mut(&did) {
@@ -41,25 +48,46 @@ fn exec_batch(state: &AppState, projects: &[String], task: &str) -> Option<Strin
         ids.push(format!("{}: {}", name, did));
     }
     state.save_delegations();
-    crate::log_info!("[deleg_ext] batch '{}' created: {} delegations", batch_id, ids.len());
-    Some(format!("**Batch {}:** {} delegations queued\n{}", batch_id, ids.len(), ids.join("\n")))
+    crate::log_info!(
+        "[deleg_ext] batch '{}' created: {} delegations",
+        batch_id,
+        ids.len()
+    );
+    Some(format!(
+        "**Batch {}:** {} delegations queued\n{}",
+        batch_id,
+        ids.len(),
+        ids.join("\n")
+    ))
 }
 
 fn exec_chain(state: &AppState, project: &str, steps: &[String]) -> Option<String> {
     let valid_name = state.validate_project_name_from_llm(project)?;
-    let batch_id = format!("chain-{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+    let batch_id = format!(
+        "chain-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    );
 
     // Create all delegations, only first one as Pending, rest as Scheduled (wait for previous)
     let mut ids = Vec::new();
     for (i, step) in steps.iter().enumerate() {
         let context = if i > 0 {
-            format!("[CHAIN step {}/{}] Previous steps will execute first.\n{}", i + 1, steps.len(), step)
+            format!(
+                "[CHAIN step {}/{}] Previous steps will execute first.\n{}",
+                i + 1,
+                steps.len(),
+                step
+            )
         } else {
             format!("[CHAIN step 1/{}] {}", steps.len(), step)
         };
         let did = super::delegation::queue_delegation_internal(state, &valid_name, &context);
-        if did.is_empty() { continue; }
+        if did.is_empty() {
+            continue;
+        }
         if let Ok(mut delegations) = state.delegations.lock() {
             if let Some(del) = delegations.get_mut(&did) {
                 del.batch_id = Some(batch_id.clone());
@@ -72,8 +100,18 @@ fn exec_chain(state: &AppState, project: &str, steps: &[String]) -> Option<Strin
         ids.push(did);
     }
     state.save_delegations();
-    crate::log_info!("[deleg_ext] chain '{}' created: {} steps for {}", batch_id, ids.len(), valid_name);
-    Some(format!("**Chain {}:** {} steps for {}\nFirst step pending approval, rest scheduled.", batch_id, ids.len(), valid_name))
+    crate::log_info!(
+        "[deleg_ext] chain '{}' created: {} steps for {}",
+        batch_id,
+        ids.len(),
+        valid_name
+    );
+    Some(format!(
+        "**Chain {}:** {} steps for {}\nFirst step pending approval, rest scheduled.",
+        batch_id,
+        ids.len(),
+        valid_name
+    ))
 }
 
 fn exec_retry(state: &AppState, id: &str, context: &str) -> Option<String> {
@@ -82,21 +120,37 @@ fn exec_retry(state: &AppState, id: &str, context: &str) -> Option<String> {
         let delegations = state.delegations.lock().ok()?;
         let del = delegations.get(&resolved_id)?;
         if !del.status.is_terminal() {
-            return Some(format!("Cannot retry: delegation {} is {}", resolved_id, del.status));
+            return Some(format!(
+                "Cannot retry: delegation {} is {}",
+                resolved_id, del.status
+            ));
         }
         let err = del.response.as_deref().unwrap_or("no response");
-        (del.project.clone(), del.task.clone(), err.chars().take(300).collect::<String>())
+        (
+            del.project.clone(),
+            del.task.clone(),
+            err.chars().take(300).collect::<String>(),
+        )
     };
 
     let retry_task = if context.is_empty() {
-        format!("{}\n\n[PREVIOUS ATTEMPT FAILED]\n{}", original_task, error_info)
+        format!(
+            "{}\n\n[PREVIOUS ATTEMPT FAILED]\n{}",
+            original_task, error_info
+        )
     } else {
-        format!("{}\n\n[PREVIOUS ATTEMPT FAILED]\n{}\n\n[ADDITIONAL CONTEXT]\n{}", original_task, error_info, context)
+        format!(
+            "{}\n\n[PREVIOUS ATTEMPT FAILED]\n{}\n\n[ADDITIONAL CONTEXT]\n{}",
+            original_task, error_info, context
+        )
     };
 
     let new_id = super::delegation::queue_delegation_internal(state, &project, &retry_task);
     // Copy priority from original delegation
-    let orig_priority = state.delegations.lock().ok()
+    let orig_priority = state
+        .delegations
+        .lock()
+        .ok()
         .and_then(|d| d.get(&resolved_id).map(|del| del.priority));
     if let Some(pri) = orig_priority {
         if let Ok(mut delegations) = state.delegations.lock() {
@@ -116,8 +170,9 @@ fn exec_cancel(state: &AppState, id: &str) -> Option<String> {
     if let Ok(mut delegations) = state.delegations.lock() {
         let del = delegations.get_mut(&resolved_id)?;
         status_before = del.status.to_string();
-        if del.status == crate::commands::status::DelegationStatus::Running ||
-           del.status == crate::commands::status::DelegationStatus::Escalated {
+        if del.status == crate::commands::status::DelegationStatus::Running
+            || del.status == crate::commands::status::DelegationStatus::Escalated
+        {
             // Try to kill the running process
             let chat_key = format!("deleg-{}", resolved_id);
             super::process_manager::kill_existing(state, &chat_key);
@@ -125,8 +180,15 @@ fn exec_cancel(state: &AppState, id: &str) -> Option<String> {
         del.status = crate::commands::status::DelegationStatus::Cancelled;
     }
     state.save_delegations();
-    crate::log_info!("[deleg_ext] cancelled {} (was {})", resolved_id, status_before);
-    Some(format!("**Cancelled:** {} (was {})", resolved_id, status_before))
+    crate::log_info!(
+        "[deleg_ext] cancelled {} (was {})",
+        resolved_id,
+        status_before
+    );
+    Some(format!(
+        "**Cancelled:** {} (was {})",
+        resolved_id, status_before
+    ))
 }
 
 fn exec_status(state: &AppState, filter: &str) -> Option<String> {
@@ -136,21 +198,36 @@ fn exec_status(state: &AppState, filter: &str) -> Option<String> {
     for (id, d) in delegations.iter() {
         let matches = filter.is_empty()
             || filter.eq_ignore_ascii_case(&d.project)
-            || (filter == "?failed" && d.status == crate::commands::status::DelegationStatus::Failed)
-            || (filter == "?pending" && d.status == crate::commands::status::DelegationStatus::Pending)
-            || (filter == "?running" && d.status == crate::commands::status::DelegationStatus::Running)
-            || (filter == "?stale" && d.status == crate::commands::status::DelegationStatus::Pending)
+            || (filter == "?failed"
+                && d.status == crate::commands::status::DelegationStatus::Failed)
+            || (filter == "?pending"
+                && d.status == crate::commands::status::DelegationStatus::Pending)
+            || (filter == "?running"
+                && d.status == crate::commands::status::DelegationStatus::Running)
+            || (filter == "?stale"
+                && d.status == crate::commands::status::DelegationStatus::Pending)
             || d.batch_id.as_deref() == Some(filter)
             || id == filter
             || (!filter.is_empty() && id.starts_with(filter));
-        if !matches { continue; }
+        if !matches {
+            continue;
+        }
         let task_short: String = d.task.chars().take(50).collect();
         let pri = d.priority.map(|p| format!(" [{}]", p)).unwrap_or_default();
-        lines.push(format!("  {} {} {}{}: {}", d.status, d.project, id, pri, task_short));
+        lines.push(format!(
+            "  {} {} {}{}: {}",
+            d.status, d.project, id, pri, task_short
+        ));
     }
 
-    if lines.is_empty() { return Some("No matching delegations.".to_string()); }
-    Some(format!("**Delegations ({}):**\n{}", lines.len(), lines.join("\n")))
+    if lines.is_empty() {
+        return Some("No matching delegations.".to_string());
+    }
+    Some(format!(
+        "**Delegations ({}):**\n{}",
+        lines.len(),
+        lines.join("\n")
+    ))
 }
 
 fn exec_cleanup(state: &AppState, hours: u64) -> Option<String> {
@@ -192,7 +269,11 @@ fn exec_template_save(state: &AppState, name: &str, task: &str) -> Option<String
     }
     super::delegation_models::save_templates(&state.root, &templates);
     crate::log_info!("[deleg_ext] template saved: {}", name);
-    Some(format!("**Template saved:** {} ({} chars)", name, task.len()))
+    Some(format!(
+        "**Template saved:** {} ({} chars)",
+        name,
+        task.len()
+    ))
 }
 
 fn exec_template_use(state: &AppState, name: &str, projects: &[String]) -> Option<String> {
@@ -203,14 +284,22 @@ fn exec_template_use(state: &AppState, name: &str, projects: &[String]) -> Optio
     super::delegation_models::save_templates(&state.root, &templates);
 
     // Create delegations for each project using template task
-    let batch_id = format!("tmpl-{}-{}", name, std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+    let batch_id = format!(
+        "tmpl-{}-{}",
+        name,
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    );
     let mut created = 0;
     for project in projects {
         let valid = state.validate_project_name_from_llm(project);
         let pname = valid.as_deref().unwrap_or(project);
         let did = super::delegation::queue_delegation_internal(state, pname, &task);
-        if did.is_empty() { continue; }
+        if did.is_empty() {
+            continue;
+        }
         if let Ok(mut delegations) = state.delegations.lock() {
             if let Some(del) = delegations.get_mut(&did) {
                 del.batch_id = Some(batch_id.clone());
@@ -219,7 +308,10 @@ fn exec_template_use(state: &AppState, name: &str, projects: &[String]) -> Optio
         created += 1;
     }
     state.save_delegations();
-    Some(format!("**Template '{}' applied:** {} delegations queued (batch {})", name, created, batch_id))
+    Some(format!(
+        "**Template '{}' applied:** {} delegations queued (batch {})",
+        name, created, batch_id
+    ))
 }
 
 fn exec_log(state: &AppState, filter: &str) -> Option<String> {
@@ -254,7 +346,11 @@ fn resolve_delegation_id(state: &AppState, id_or_prefix: &str) -> Result<String,
     match matches.len() {
         1 => Ok(matches[0].clone()),
         0 => Err(format!("delegation not found: {}", query)),
-        _ => Err(format!("ambiguous delegation id prefix '{}': {} matches", query, matches.len())),
+        _ => Err(format!(
+            "ambiguous delegation id prefix '{}': {} matches",
+            query,
+            matches.len()
+        )),
     }
 }
 
@@ -305,7 +401,11 @@ mod tests {
             gate_result: None,
             review_verdict: None,
         };
-        state.delegations.lock().unwrap().insert(id.to_string(), delegation);
+        state
+            .delegations
+            .lock()
+            .unwrap()
+            .insert(id.to_string(), delegation);
     }
 
     #[test]

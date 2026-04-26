@@ -1,8 +1,8 @@
 //! JSONL append utility — single shared function replacing 19 duplicate sites.
 //! All chat saves, delegation logs, audit entries go through here.
 
-use std::path::Path;
 use serde_json::Value;
+use std::path::Path;
 
 /// Append a JSON value as a line to a JSONL file. Returns io::Result for explicit error handling.
 pub fn append_jsonl(path: &Path, value: &Value) -> std::io::Result<()> {

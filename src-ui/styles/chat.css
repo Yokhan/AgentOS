@@ -80,6 +80,21 @@
     min-height: 0;
     overscroll-behavior: contain;
 }
+.chat-load-older {
+    align-self: center;
+    height: 28px !important;
+    padding: 0 var(--sp-m) !important;
+    border-radius: 999px !important;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s) !important;
+    color: var(--t2);
+    background: color-mix(in srgb, var(--sf) 76%, transparent) !important;
+    border-style: dashed !important;
+}
+.chat-load-older:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--accent) !important;
+}
 .scroll-catchup {
     width: auto !important;
     min-width: 86px;

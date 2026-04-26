@@ -14,8 +14,13 @@ pub fn get_chats(state: State<Arc<AppState>>) -> Value {
 }
 
 #[tauri::command]
-pub fn get_chat_history(state: State<Arc<AppState>>, project: String) -> Value {
-    super::chat_core::get_chat_history_core(&state, &project)
+pub fn get_chat_history(
+    state: State<Arc<AppState>>,
+    project: String,
+    before: Option<usize>,
+    limit: Option<usize>,
+) -> Value {
+    super::chat_core::get_chat_history_page_core(&state, &project, before, limit)
 }
 
 #[tauri::command]

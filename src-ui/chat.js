@@ -13,6 +13,8 @@ import {
   currentProject,
   sideMessages,
   sideTitle,
+  chatPageInfo,
+  chatHistoryLoading,
   streamText,
   isStreaming,
   streamChain,
@@ -69,6 +71,7 @@ import {
   execSlash,
   handlePaste,
   loadChat,
+  loadOlderChat,
   loadModules,
   loadProjectPlan,
   sendMessage,
@@ -1001,6 +1004,20 @@ function ChatSidebar() {
       showScrollBtn.value = false;
     }
   };
+  const loadOlder = async () => {
+    const el = msgsRef.current;
+    const beforeHeight = el?.scrollHeight || 0;
+    const ok = await loadOlderChat();
+    if (!ok) return;
+    requestAnimationFrame(() => {
+      const current = msgsRef.current;
+      if (!current) return;
+      current.scrollTop =
+        current.scrollHeight - beforeHeight + current.scrollTop;
+      stickToBottom.current = false;
+      showScrollBtn.value = true;
+    });
+  };
   const send = async () => {
     const v = inputRef.current?.value;
     if (!v?.trim()) return;
@@ -1456,6 +1473,17 @@ function ChatSidebar() {
               </button>
             </div>
           </div>`
+        : null}
+      ${chatPageInfo.value.hasMore
+        ? html`<button
+            class="chat-load-older"
+            disabled=${chatHistoryLoading.value}
+            onClick=${loadOlder}
+          >
+            ${chatHistoryLoading.value
+              ? "loading history..."
+              : `load older (${sideMessages.value.length}/${chatPageInfo.value.total})`}
+          </button>`
         : null}
       ${sideMessages.value.map((m, i) => html`<${ChatMsg} key=${i} m=${m} />`)}
       ${duoCollaborateMode

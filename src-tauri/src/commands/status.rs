@@ -42,7 +42,10 @@ impl fmt::Display for DelegationStatus {
 
 impl DelegationStatus {
     pub fn is_terminal(&self) -> bool {
-        matches!(self, Self::Done | Self::Failed | Self::Rejected | Self::Cancelled)
+        matches!(
+            self,
+            Self::Done | Self::Failed | Self::Rejected | Self::Cancelled
+        )
     }
 }
 

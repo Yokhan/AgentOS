@@ -6,6 +6,14 @@ const agents = signal([]);
 const currentProject = signal(null);
 const sideMessages = signal([]);
 const sideTitle = signal("orchestrator");
+const chatPageInfo = signal({
+  project: "",
+  total: 0,
+  loaded: 0,
+  nextBefore: null,
+  hasMore: false,
+});
+const chatHistoryLoading = signal(false);
 const streamText = signal("");
 const isStreaming = signal(false);
 const streamChain = signal([]);
@@ -167,6 +175,8 @@ export {
   currentProject,
   sideMessages,
   sideTitle,
+  chatPageInfo,
+  chatHistoryLoading,
   streamText,
   isStreaming,
   streamChain,

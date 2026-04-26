@@ -54,5 +54,8 @@ pub fn load_templates(root: &Path) -> Vec<DelegationTemplate> {
 
 pub fn save_templates(root: &Path, templates: &[DelegationTemplate]) {
     let path = templates_path(root);
-    let _ = std::fs::write(&path, serde_json::to_string_pretty(templates).unwrap_or_default());
+    let _ = std::fs::write(
+        &path,
+        serde_json::to_string_pretty(templates).unwrap_or_default(),
+    );
 }

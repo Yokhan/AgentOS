@@ -1,9 +1,9 @@
 //! Operations commands: deploy template, health check
+use crate::state::AppState;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::State;
-use crate::state::AppState;
 
 fn resolve_template_root(root: &Path, docs_dir: &Path) -> PathBuf {
     let managed_template = docs_dir.join("agent-project-template");
@@ -15,7 +15,10 @@ fn resolve_template_root(root: &Path, docs_dir: &Path) -> PathBuf {
 
 /// Deploy template to a project via sync-template.sh
 #[tauri::command]
-pub async fn deploy_template(state: State<'_, Arc<AppState>>, project: String) -> Result<Value, String> {
+pub async fn deploy_template(
+    state: State<'_, Arc<AppState>>,
+    project: String,
+) -> Result<Value, String> {
     let project_dir = state.validate_project(&project).map_err(|e| e)?;
     let template_root = resolve_template_root(&state.root, &state.docs_dir);
     let script = template_root.join("scripts").join("sync-template.sh");
@@ -44,18 +47,24 @@ pub async fn deploy_template(state: State<'_, Arc<AppState>>, project: String) -
             }
             Err(e) => json!({"status": "error", "error": format!("{}", e)}),
         }
-    }).await.map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Run health check (check-drift.sh) on one project or all
 #[tauri::command]
-pub async fn health_check(state: State<'_, Arc<AppState>>, project: String) -> Result<Value, String> {
+pub async fn health_check(
+    state: State<'_, Arc<AppState>>,
+    project: String,
+) -> Result<Value, String> {
     let docs_dir = state.docs_dir.clone();
     tokio::task::spawn_blocking(move || {
         let projects: Vec<String> = if project == "all" {
             std::fs::read_dir(&docs_dir)
                 .map(|entries| {
-                    entries.flatten()
+                    entries
+                        .flatten()
                         .filter(|e| e.path().join("scripts").join("check-drift.sh").exists())
                         .filter_map(|e| e.file_name().into_string().ok())
                         .collect()
@@ -70,13 +79,20 @@ pub async fn health_check(state: State<'_, Arc<AppState>>, project: String) -> R
             let project_dir = docs_dir.join(proj);
             let script = project_dir.join("scripts").join("check-drift.sh");
             if !script.exists() {
-                results.push(json!({"project": proj, "status": "skip", "message": "no check-drift.sh"}));
+                results.push(
+                    json!({"project": proj, "status": "skip", "message": "no check-drift.sh"}),
+                );
                 continue;
             }
-            match super::claude_runner::silent_cmd(&super::claude_runner::find_bash()).arg(&script).current_dir(&project_dir).output() {
+            match super::claude_runner::silent_cmd(&super::claude_runner::find_bash())
+                .arg(&script)
+                .current_dir(&project_dir)
+                .output()
+            {
                 Ok(out) => {
                     let stdout = String::from_utf8_lossy(&out.stdout);
-                    let warnings = stdout.lines()
+                    let warnings = stdout
+                        .lines()
                         .find(|l| l.contains("warnings"))
                         .unwrap_or("0 warnings, 0 errors")
                         .trim()
@@ -87,16 +103,23 @@ pub async fn health_check(state: State<'_, Arc<AppState>>, project: String) -> R
                         "summary": warnings,
                     }));
                 }
-                Err(e) => results.push(json!({"project": proj, "status": "error", "message": format!("{}", e)})),
+                Err(e) => results
+                    .push(json!({"project": proj, "status": "error", "message": format!("{}", e)})),
             }
         }
         json!({"results": results, "checked": results.len()})
-    }).await.map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Create new project from template
 #[tauri::command]
-pub async fn create_project(state: State<'_, Arc<AppState>>, name: String, orchestrator: bool) -> Result<Value, String> {
+pub async fn create_project(
+    state: State<'_, Arc<AppState>>,
+    name: String,
+    orchestrator: bool,
+) -> Result<Value, String> {
     let template_root = resolve_template_root(&state.root, &state.docs_dir);
     let setup = template_root.join("setup.sh");
     if !setup.exists() {
@@ -108,11 +131,17 @@ pub async fn create_project(state: State<'_, Arc<AppState>>, name: String, orche
     }
 
     let docs_dir = state.docs_dir.clone();
-    crate::log_info!("Creating project '{}' (orchestrator={})", name, orchestrator);
+    crate::log_info!(
+        "Creating project '{}' (orchestrator={})",
+        name,
+        orchestrator
+    );
 
     tokio::task::spawn_blocking(move || {
         let mut args = vec![setup.as_os_str().to_os_string()];
-        if orchestrator { args.push(std::ffi::OsString::from("--orchestrator")); }
+        if orchestrator {
+            args.push(std::ffi::OsString::from("--orchestrator"));
+        }
         args.push(std::ffi::OsString::from(&name));
 
         match super::claude_runner::silent_cmd(&super::claude_runner::find_bash())
@@ -123,8 +152,11 @@ pub async fn create_project(state: State<'_, Arc<AppState>>, name: String, orche
             Ok(out) => {
                 let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 let ok = out.status.success();
-                if ok { crate::log_info!("Project '{}' created", name); }
-                else { crate::log_error!("Project '{}' creation failed: {}", name, stdout); }
+                if ok {
+                    crate::log_info!("Project '{}' created", name);
+                } else {
+                    crate::log_error!("Project '{}' creation failed: {}", name, stdout);
+                }
                 json!({
                     "status": if ok { "ok" } else { "error" },
                     "project": name,
@@ -135,16 +167,26 @@ pub async fn create_project(state: State<'_, Arc<AppState>>, name: String, orche
             }
             Err(e) => json!({"status": "error", "error": format!("{}", e)}),
         }
-    }).await.map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Inline deploy for use from chat.rs (not a tauri command)
-pub fn execute_deploy_inline(root: &std::path::Path, docs_dir: &std::path::Path, project: &str) -> String {
+pub fn execute_deploy_inline(
+    root: &std::path::Path,
+    docs_dir: &std::path::Path,
+    project: &str,
+) -> String {
     let template_root = resolve_template_root(root, docs_dir);
     let script = template_root.join("scripts").join("sync-template.sh");
-    if !script.exists() { return "sync-template.sh not found".to_string(); }
+    if !script.exists() {
+        return "sync-template.sh not found".to_string();
+    }
     let project_dir = docs_dir.join(project);
-    if !project_dir.exists() { return format!("Project dir not found: {}", project); }
+    if !project_dir.exists() {
+        return format!("Project dir not found: {}", project);
+    }
     match super::claude_runner::silent_cmd(&super::claude_runner::find_bash())
         .arg(&script)
         .arg(&template_root)
@@ -154,8 +196,11 @@ pub fn execute_deploy_inline(root: &std::path::Path, docs_dir: &std::path::Path,
     {
         Ok(out) => {
             let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if out.status.success() { format!("OK: {}", &s[..s.len().min(200)]) }
-            else { format!("Failed: {}", &s[..s.len().min(200)]) }
+            if out.status.success() {
+                format!("OK: {}", &s[..s.len().min(200)])
+            } else {
+                format!("Failed: {}", &s[..s.len().min(200)])
+            }
         }
         Err(e) => format!("Error: {}", e),
     }
@@ -164,12 +209,15 @@ pub fn execute_deploy_inline(root: &std::path::Path, docs_dir: &std::path::Path,
 /// Inline health check for use from chat.rs
 pub fn execute_health_inline(docs_dir: &std::path::Path, project: &str) -> String {
     let projects: Vec<String> = if project == "all" {
-        std::fs::read_dir(docs_dir).map(|entries| {
-            entries.flatten()
-                .filter(|e| e.path().join("scripts").join("check-drift.sh").exists())
-                .filter_map(|e| e.file_name().into_string().ok())
-                .collect()
-        }).unwrap_or_default()
+        std::fs::read_dir(docs_dir)
+            .map(|entries| {
+                entries
+                    .flatten()
+                    .filter(|e| e.path().join("scripts").join("check-drift.sh").exists())
+                    .filter_map(|e| e.file_name().into_string().ok())
+                    .collect()
+            })
+            .unwrap_or_default()
     } else {
         vec![project.to_string()]
     };
@@ -177,12 +225,22 @@ pub fn execute_health_inline(docs_dir: &std::path::Path, project: &str) -> Strin
     for proj in &projects {
         let pd = docs_dir.join(proj);
         let script = pd.join("scripts").join("check-drift.sh");
-        if !script.exists() { results.push(format!("{}: skip", proj)); continue; }
-        match super::claude_runner::silent_cmd(&super::claude_runner::find_bash()).arg(&script).current_dir(&pd).output() {
+        if !script.exists() {
+            results.push(format!("{}: skip", proj));
+            continue;
+        }
+        match super::claude_runner::silent_cmd(&super::claude_runner::find_bash())
+            .arg(&script)
+            .current_dir(&pd)
+            .output()
+        {
             Ok(out) => {
                 let s = String::from_utf8_lossy(&out.stdout);
-                let summary = s.lines().find(|l| l.contains("warnings") || l.contains("errors"))
-                    .unwrap_or("OK").trim();
+                let summary = s
+                    .lines()
+                    .find(|l| l.contains("warnings") || l.contains("errors"))
+                    .unwrap_or("OK")
+                    .trim();
                 results.push(format!("{}: {}", proj, summary));
             }
             Err(e) => results.push(format!("{}: {}", proj, e)),
@@ -225,16 +283,22 @@ pub async fn send_telegram(state: State<'_, Arc<AppState>>, text: String) -> Res
         .and_then(|c| serde_json::from_str(&c).ok())
         .unwrap_or(json!({}));
 
-    let token = cfg.get("tg_bot_token").and_then(|v| v.as_str()).unwrap_or("");
+    let token = cfg
+        .get("tg_bot_token")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let chat_id = cfg.get("tg_chat_id").and_then(|v| v.as_str()).unwrap_or("");
 
     if token.is_empty() || chat_id.is_empty() {
-        return Ok(json!({"status": "error", "error": "Telegram not configured. Set tg_bot_token and tg_chat_id in settings."}));
+        return Ok(
+            json!({"status": "error", "error": "Telegram not configured. Set tg_bot_token and tg_chat_id in settings."}),
+        );
     }
 
     let url = format!("https://api.telegram.org/bot{}/sendMessage", token);
     let client = reqwest::Client::new();
-    let res = client.post(&url)
+    let res = client
+        .post(&url)
         .json(&json!({
             "chat_id": chat_id,
             "text": text,
@@ -258,7 +322,9 @@ pub fn save_attachment(state: State<Arc<AppState>>, name: String, data: Vec<u8>)
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let safe_name = name.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_").replace("..", "_");
+    let safe_name = name
+        .replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_")
+        .replace("..", "_");
     let filename = format!("{}-{}", nanos, safe_name);
     let path = att_dir.join(&filename);
 
@@ -275,7 +341,9 @@ pub fn add_to_queue(state: State<Arc<AppState>>, task: String) -> Value {
     let entry = format!("- [ ] {}\n", task);
 
     match std::fs::OpenOptions::new()
-        .create(true).append(true).open(&queue_path)
+        .create(true)
+        .append(true)
+        .open(&queue_path)
         .and_then(|mut f| {
             use std::io::Write;
             write!(f, "{}", entry)

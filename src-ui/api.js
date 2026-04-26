@@ -6,6 +6,8 @@ import {
   agents,
   currentProject,
   sideMessages,
+  chatPageInfo,
+  chatHistoryLoading,
   streamText,
   isStreaming,
   streamChain,
@@ -392,7 +394,7 @@ function appendPaFeedbackTo(prev, type, text, command = "") {
 async function loadChat(p) {
   const myId = ++_chatLoadId;
   try {
-    const r = await fetch("/api/chat/" + encodeURIComponent(p));
+    const r = await fetch("/api/chat/" + encodeURIComponent(p) + "?limit=200");
     if (myId !== _chatLoadId) return; // stale — another loadChat started
     const d = await r.json();
     const rawMsgs = (d.messages || []).map((m) => {
@@ -442,6 +444,16 @@ async function loadChat(p) {
       msgs.push(m);
     }
     sideMessages.value = msgs;
+    chatPageInfo.value = {
+      project: p,
+      total: Number(d.total || 0),
+      loaded: msgs.length,
+      nextBefore:
+        d.next_before === null || d.next_before === undefined
+          ? null
+          : Number(d.next_before),
+      hasMore: !!d.has_more,
+    };
     const newDel = { ...delegations.value };
     for (const m of msgs) {
       const dms = [
@@ -463,6 +475,88 @@ async function loadChat(p) {
     if (myId === _chatLoadId) {
       console.warn("loadChat:", e);
     }
+  }
+}
+
+async function loadOlderChat() {
+  const page = chatPageInfo.value || {};
+  const project = page.project || currentProject.value || "_orchestrator";
+  if (!page.hasMore || page.nextBefore === null || chatHistoryLoading.value) {
+    return false;
+  }
+  chatHistoryLoading.value = true;
+  try {
+    const r = await fetch(
+      "/api/chat/" +
+        encodeURIComponent(project) +
+        "?limit=200&before=" +
+        encodeURIComponent(String(page.nextBefore)),
+    );
+    const d = await r.json();
+    const rawMsgs = (d.messages || []).map((m) => {
+      if (m.tools && m.tools.length && !m.chain) {
+        const chain = [];
+        for (const t of m.tools) {
+          chain.push({
+            type: "tool",
+            tool: t.tool,
+            input: t.input || {},
+            status: "complete",
+          });
+        }
+        if (m.msg) chain.push({ type: "text", text: m.msg });
+        m.chain = chain;
+      }
+      return m;
+    });
+    const older = [];
+    for (const m of rawMsgs) {
+      if (m.kind === "pa_feedback") {
+        const prev = older[older.length - 1];
+        if (prev && prev.role === "assistant") {
+          appendPaFeedbackTo(
+            prev,
+            m.pa_type || "pa_result",
+            m.msg || "",
+            m.pa_command || "",
+          );
+          continue;
+        }
+      }
+      if (m.role === "system") {
+        const prev = older[older.length - 1];
+        const prevIsPaTurn =
+          prev &&
+          prev.role === "assistant" &&
+          (messageContainsPaCommand(prev.msg) ||
+            (prev.chain || []).some((b) =>
+              ["pa_status", "pa_result", "warning"].includes(b.type),
+            ));
+        if (prevIsPaTurn) {
+          appendPaFeedbackTo(prev, legacyPaFeedbackType(m.msg), m.msg || "");
+          continue;
+        }
+      }
+      older.push(m);
+    }
+    sideMessages.value = [...older, ...sideMessages.value];
+    chatPageInfo.value = {
+      project,
+      total: Number(d.total || 0),
+      loaded: sideMessages.value.length,
+      nextBefore:
+        d.next_before === null || d.next_before === undefined
+          ? null
+          : Number(d.next_before),
+      hasMore: !!d.has_more,
+    };
+    return true;
+  } catch (e) {
+    console.warn("loadOlderChat:", e);
+    showToast("Could not load older chat history", "error", 3000);
+    return false;
+  } finally {
+    chatHistoryLoading.value = false;
   }
 }
 async function loadModules(p) {
@@ -1850,6 +1944,7 @@ export {
   loadFeed,
   loadActivity,
   sendMessage,
+  loadOlderChat,
   approveDel,
   rejectDel,
   createDualSession,

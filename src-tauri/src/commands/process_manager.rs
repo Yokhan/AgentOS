@@ -56,6 +56,14 @@ pub fn untrack_pid(state: &AppState, chat_key: &str) {
     }
 }
 
+pub fn untrack_pid_if_match(state: &AppState, chat_key: &str, pid: u32) {
+    if let Ok(mut pids) = state.running_pids.lock() {
+        if pids.get(chat_key).copied() == Some(pid) {
+            pids.remove(chat_key);
+        }
+    }
+}
+
 pub fn clear_cancel(state: &AppState, chat_key: &str) {
     if let Ok(mut cancellations) = state.chat_cancellations.lock() {
         cancellations.remove(chat_key);
