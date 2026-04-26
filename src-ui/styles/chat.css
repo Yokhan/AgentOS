@@ -102,7 +102,87 @@
     color: var(--text);
     border-color: var(--accent) !important;
 }
+.transcript-bar {
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 82%, var(--sf));
+    padding: 6px var(--sp-m);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-s);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    color: var(--t3);
+}
+.transcript-bar.live {
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--cyan) 8%, var(--bg)),
+        color-mix(in srgb, var(--sf) 88%, var(--bg))
+    );
+}
+.transcript-bar.reading {
+    border-left: 2px solid var(--yellow);
+}
+.transcript-main,
+.transcript-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-xs);
+    min-width: 0;
+    flex-wrap: wrap;
+}
+.transcript-main {
+    flex: 1;
+}
+.transcript-state {
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.transcript-meta {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--sf) 78%, transparent);
+    padding: 2px 7px;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.transcript-unread {
+    color: var(--yellow);
+    border: 1px solid color-mix(in srgb, var(--yellow) 45%, var(--border));
+    padding: 2px 7px;
+}
+.transcript-actions button {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 3px 8px;
+    cursor: pointer;
+}
+.transcript-actions button.primary {
+    border-color: var(--yellow);
+    color: var(--yellow);
+}
+.transcript-actions button:hover:not(:disabled) {
+    border-color: var(--cyan);
+    color: var(--text);
+}
 .scroll-catchup {
+    position: absolute;
+    bottom: 80px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    background: var(--sf) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--t2) !important;
+    cursor: pointer;
     width: auto !important;
     min-width: 86px;
     height: 28px !important;
@@ -112,25 +192,10 @@
     box-shadow: 0 8px 24px color-mix(in srgb, var(--bg) 50%, transparent);
 }
 .scroll-catchup::after {
-    content: "new output";
+    content: "latest";
     font-size: var(--fs-s);
     font-family: var(--font-mono);
     white-space: nowrap;
-}
-.solo-compose-route {
-    display: none;
-    align-items: center;
-    gap: var(--sp-xs);
-    flex-wrap: wrap;
-    padding: var(--sp-xs) var(--sp-s);
-    border-top: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
-    background: color-mix(in srgb, var(--sf) 78%, transparent);
-    font-family: var(--font-mono);
-    font-size: var(--fs-s);
-    color: var(--t3);
-}
-.duo-compose-route {
-    display: none !important;
 }
 .route-card {
     border-bottom: 1px solid var(--border);
@@ -240,38 +305,6 @@
 .route-delegations button:hover {
     color: var(--text);
     border-color: var(--cyan);
-}
-.solo-compose-route span {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-xs);
-    min-width: 0;
-    flex: 1;
-    overflow: hidden;
-}
-.solo-compose-route strong {
-    color: var(--t2);
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.solo-compose-route b {
-    color: var(--t3);
-    font-weight: 400;
-}
-.solo-compose-route button {
-    border: 1px solid var(--border);
-    background: var(--bg);
-    color: var(--t2);
-    font-family: var(--font-mono);
-    font-size: var(--fs-s);
-    padding: 3px 7px;
-    cursor: pointer;
-}
-.solo-compose-route button:hover {
-    border-color: var(--cyan);
-    color: var(--text);
 }
 .m {
     max-width: 88%;
@@ -653,31 +686,6 @@
     color: var(--text);
     line-height: 1.35;
 }
-.duo-compose-route {
-    border-top: 1px solid var(--border);
-    background: var(--sf);
-    padding: var(--sp-xs) var(--sp-m);
-    display: flex;
-    align-items: center;
-    gap: var(--sp-s);
-    flex-wrap: wrap;
-    font-family: var(--font-mono);
-    font-size: var(--fs-s);
-    color: var(--t3);
-}
-.duo-compose-route strong {
-    color: var(--text);
-    font-weight: 600;
-}
-.duo-compose-route select {
-    background: var(--bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    font-size: var(--fs-s);
-    padding: 4px 8px;
-    font-family: var(--font-mono);
-}
-
 /* === TOASTS === */
 .toasts {
     position: fixed;

@@ -1,3 +1,12 @@
+# Agent OS 0.2.35
+
+- Added a committed `v0.2.35` live transcript plan focused on scroll stability, visible runtime state, and output durability.
+- Added a transcript status bar showing whether chat is following live output or the user is reading history, plus history depth, live run detail, and new-output count.
+- Added explicit `latest` / `older` transcript actions so the user controls when to jump to the newest output.
+- Preserved already-rendered live output when final chat history reload does not contain the assistant response yet, including cancelled/failed/done edge cases.
+- Removed obsolete hidden solo/duo route strips from the chat DOM; the Route Card is now the single route surface.
+- Moved floating latest-button styling into CSS instead of inline JSX.
+
 # Agent OS 0.2.34
 
 - Added a committed `v0.2.34` product UX/orchestration plan with 20 top-level improvements and 50 concrete implementation items.

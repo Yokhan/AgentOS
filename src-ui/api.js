@@ -1570,12 +1570,27 @@ async function sendMessage(msg) {
           probe &&
           (m.msg.trim() === liveText.trim() || m.msg.includes(probe)),
       );
-    if (persisted || finalOutcome === "done") {
+    if (persisted || !hasLive) {
       streamText.value = "";
       streamChain.value = [];
     } else {
       streamText.value = liveText;
-      streamChain.value = liveChain;
+      const recoveredChain = liveChain.length
+        ? liveChain
+        : [{ type: "text", text: liveText }];
+      streamChain.value = [
+        {
+          type: "system",
+          label:
+            "Recovered live output: backend history did not contain this assistant response yet.",
+        },
+        ...recoveredChain,
+      ];
+      showToast(
+        "Live output preserved; history did not contain it yet.",
+        "info",
+        5000,
+      );
     }
     loadFeed();
   } catch (e) {

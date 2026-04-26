@@ -815,6 +815,66 @@ function LiveRunHud() {
   </div>`;
 }
 
+function TranscriptStatusBar({
+  route,
+  viewportMode,
+  unreadLive,
+  onFollow,
+  onLoadOlder,
+}) {
+  const page = chatPageInfo.value || {};
+  const run = route?.run || null;
+  const terminal =
+    run && ["done", "failed", "cancelled"].includes(run.status || "");
+  const liveLabel = isStreaming.value
+    ? run?.phase
+      ? `${run.phase}: ${run.detail || "working"}`
+      : "streaming"
+    : terminal
+      ? `${run.status}: ${run.detail || run.outcome || "finished"}`
+      : "idle";
+  return html`<div
+    class="transcript-bar ${viewportMode === "reading"
+      ? "reading"
+      : "follow"} ${isStreaming.value ? "live" : ""}"
+  >
+    <div class="transcript-main">
+      <span class="transcript-state">
+        ${viewportMode === "reading" ? "reading history" : "following live"}
+      </span>
+      <span class="transcript-meta">
+        history
+        ${page.loaded || route?.historyLoaded || 0}/${page.total ||
+        route?.historyTotal ||
+        0}
+      </span>
+      <span class="transcript-meta">${liveLabel}</span>
+      ${unreadLive > 0
+        ? html`<span class="transcript-unread"
+            >${unreadLive} new update${unreadLive === 1 ? "" : "s"}</span
+          >`
+        : null}
+    </div>
+    <div class="transcript-actions">
+      ${page.hasMore
+        ? html`<button
+            disabled=${chatHistoryLoading.value}
+            onClick=${onLoadOlder}
+            title="Load older messages without losing the current scroll position"
+          >
+            ${chatHistoryLoading.value ? "loading" : "older"}
+          </button>`
+        : null}
+      <button
+        class=${viewportMode === "reading" || unreadLive > 0 ? "primary" : ""}
+        onClick=${onFollow}
+      >
+        latest
+      </button>
+    </div>
+  </div>`;
+}
+
 function ChatSidebar() {
   const inputRef = useRef();
   const msgsRef = useRef();
@@ -826,6 +886,9 @@ function ChatSidebar() {
     return saved > 0 ? saved : null;
   });
   const showScrollBtn = signal(false);
+  const [viewportMode, setViewportMode] = useState("following");
+  const [unreadLive, setUnreadLive] = useState(0);
+  const lastLiveMarker = useRef("");
   const duoEnabled = chatCollabMode.value === "duo";
   const duoView = duoEnabled ? normalizeDuoView(activeRoomTab.value) : "chat";
   const duoCollaborateMode = duoEnabled && duoView === "collaborate";
@@ -1093,21 +1156,36 @@ function ChatSidebar() {
         current.scrollTop = current.scrollHeight;
         stickToBottom.current = true;
         showScrollBtn.value = false;
+        setViewportMode("following");
+        setUnreadLive(0);
       });
     } else {
       showScrollBtn.value = true;
+      setViewportMode("reading");
     }
   };
+  const liveMarker = [
+    sideMessages.value.length,
+    streamText.value.length,
+    streamChain.value.length,
+    activeRun.value?.updatedAt || 0,
+    curActivity.value || "",
+  ].join(":");
   useEffect(() => {
-    const cnt = sideMessages.value.length;
-    if (cnt !== prevCount.current) {
-      prevCount.current = cnt;
+    const changed =
+      lastLiveMarker.current && lastLiveMarker.current !== liveMarker;
+    lastLiveMarker.current = liveMarker;
+    if (changed && !stickToBottom.current) {
+      setUnreadLive((count) => Math.min(999, count + 1));
     }
     maybeScrollToBottom(false);
-  });
+    prevCount.current = sideMessages.value.length;
+  }, [liveMarker]);
   useEffect(() => {
     loadDr();
     stickToBottom.current = true;
+    setViewportMode("following");
+    setUnreadLive(0);
     setTimeout(() => {
       maybeScrollToBottom(true);
     }, 100);
@@ -1184,6 +1262,8 @@ function ChatSidebar() {
       const near = isNearBottom(el);
       stickToBottom.current = near;
       showScrollBtn.value = !near;
+      setViewportMode(near ? "following" : "reading");
+      if (near) setUnreadLive(0);
     }
   };
   const scrollToBottom = () => {
@@ -1191,6 +1271,8 @@ function ChatSidebar() {
       msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
       stickToBottom.current = true;
       showScrollBtn.value = false;
+      setViewportMode("following");
+      setUnreadLive(0);
     }
   };
   const loadOlder = async () => {
@@ -1675,6 +1757,13 @@ function ChatSidebar() {
       onMakePlan=${draftPlanFromDuo}
       onLeadExecute=${openExecutionWithLead}
     />
+    <${TranscriptStatusBar}
+      route=${route}
+      viewportMode=${viewportMode}
+      unreadLive=${unreadLive}
+      onFollow=${scrollToBottom}
+      onLoadOlder=${loadOlder}
+    />
     ${duoEnabled
       ? html`<div class="duo-brief">
           <div class="scope-strip">
@@ -1905,7 +1994,6 @@ function ChatSidebar() {
           onClick=${scrollToBottom}
           class="scroll-catchup"
           title="Jump to latest output"
-          style="position:absolute;bottom:80px;right:20px;width:32px;height:32px;border-radius:50%;background:var(--sf);border:1px solid var(--border);color:var(--t2);cursor:pointer;font-size:var(--fs-m);display:flex;align-items:center;justify-content:center;z-index:10"
         >
           ↓
         </button>`
@@ -1934,121 +2022,6 @@ function ChatSidebar() {
             }}
             >discard</span
           >
-        </div>`
-      : null}
-    ${!duoWorkspaceInCanvas
-      ? html`<div class="solo-compose-route">
-          <span>
-            Route
-            <strong>${currentProject.value || "orchestrator"}</strong>
-            <b>-></b>
-            <strong
-              >${soloProvider}${selectedModelValue
-                ? " / " + selectedModelValue
-                : ""}</strong
-            >
-            <b>-></b>
-            <strong
-              >${chatRunMode.value === "plan"
-                ? "plan / read"
-                : "act / " + (chatAccessLevel.value || "write")}</strong
-            >
-          </span>
-          <button
-            onClick=${() => {
-              chatRunMode.value = chatRunMode.value === "plan" ? "act" : "plan";
-            }}
-          >
-            ${chatRunMode.value === "plan" ? "switch to act" : "plan mode"}
-          </button>
-          <button
-            onClick=${() =>
-              insertPrompt(
-                currentProject.value
-                  ? `[GRAPH_CONTEXT:${currentProject.value}]\nReview architecture and dependency risks before changing this project.`
-                  : "[DASHBOARD_FULL]\n[HEALTH_CHECK:all]\nSummarize blockers and choose the next safe execution target.",
-              )}
-          >
-            add context
-          </button>
-          <button
-            onClick=${() =>
-              insertPrompt(
-                currentProject.value
-                  ? "Review current project state, then propose exact next steps. Do not execute until the plan is clear."
-                  : "Review all project states and propose a rollout plan. Use AgentOS commands only when execution is needed.",
-              )}
-          >
-            review
-          </button>
-        </div>`
-      : null}
-    ${duoWorkspaceInCanvas
-      ? html`<div class="duo-compose-route">
-          <span>
-            Input goes to
-            <strong>
-              ${duoComposerAction === "send"
-                ? `${activeOrchestrator?.label || "selected lead"} (execute)`
-                : duoComposerAction === "challenge"
-                  ? "challenge target"
-                  : duoComposerAction === "mention"
-                    ? roomTarget?.label || "selected agent"
-                    : duoComposerAction === "rebuttal"
-                      ? roomTarget?.label || "selected agent"
-                      : duoComposerAction === "promote_plan"
-                        ? "new plan"
-                        : duoComposerAction === "promote_strategy"
-                          ? "strategy"
-                          : duoComposerAction === "child_session"
-                            ? "project room"
-                            : "both agents (review)"}
-            </strong>
-          </span>
-          <details class="duo-small-controls compact">
-            <summary>change</summary>
-            <div class="duo-control-grid">
-              ${[
-                ["ask_both", "ask both"],
-                ["send", "lead"],
-                ["challenge", "challenge"],
-              ].map(
-                ([id, label]) =>
-                  html`<button
-                    class=${duoComposerAction === id ? "selected" : ""}
-                    onClick=${() => {
-                      setDuoComposerAction(id);
-                      if (id !== "challenge") setDuoComposerTarget("");
-                      if (id === "send") setDuoView("execute");
-                      if (id === "ask_both") setDuoView("collaborate");
-                      setDuoAdvancedOpen(false);
-                    }}
-                  >
-                    ${label}
-                  </button>`,
-              )}
-              <button
-                class=${duoAdvancedOpen ? "selected-warn" : ""}
-                onClick=${() => {
-                  setDuoView("collaborate");
-                  setDuoAdvancedOpen(!duoAdvancedOpen);
-                }}
-              >
-                more routes
-              </button>
-            </div>
-          </details>
-          ${duoComposerAction === "challenge"
-            ? html`<select
-                value=${duoComposerTarget}
-                onInput=${(e) => setDuoComposerTarget(e.currentTarget.value)}
-              >
-                <option value="">pick target</option>
-                ${participants.map(
-                  (p) => html`<option value=${p.id}>${p.label}</option>`,
-                )}
-              </select>`
-            : null}
         </div>`
       : null}
     ${duoCollaborateMode && duoAdvancedOpen
