@@ -873,10 +873,38 @@
     color: var(--yellow);
     border-color: color-mix(in srgb, var(--yellow) 45%, var(--border));
 }
+.route-pending-note {
+    color: var(--cyan);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
 .route-disabled-reason {
     color: var(--yellow);
     font-family: var(--font-mono);
     font-size: var(--fs-s);
+}
+.duo-flow-card {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+}
+.duo-flow-card span {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    text-align: center;
+    padding: 3px 5px;
+    text-transform: uppercase;
+}
+.duo-flow-card span.current {
+    border-color: var(--cyan);
+    color: var(--cyan);
+}
+.duo-flow-card span.ready {
+    border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+    color: var(--green);
 }
 .route-details {
     border-top: 1px dashed var(--border);
@@ -889,6 +917,20 @@
     font-size: var(--fs-s);
     text-transform: uppercase;
     letter-spacing: 1px;
+}
+.route-diagnostics {
+    margin-top: var(--sp-xs);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 4px;
+}
+.route-diagnostics code {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--t3);
+    padding: 3px 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .route-run.running,
 .route-run.starting,

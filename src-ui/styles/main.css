@@ -587,6 +587,15 @@ body.chat-resizing {
     background: color-mix(in srgb, var(--sf2) 72%, transparent) !important;
     border-color: var(--border) !important;
 }
+.project-rail-row.selected {
+    border-color: var(--cyan) !important;
+    box-shadow: inset 3px 0 0 var(--cyan);
+    background: color-mix(in srgb, var(--cyan) 10%, var(--sf2)) !important;
+}
+.project-rail-list:focus {
+    outline: 1px solid color-mix(in srgb, var(--cyan) 55%, var(--border));
+    outline-offset: 2px;
+}
 .project-rail-name {
     font-weight: 600;
     color: var(--text);
@@ -626,6 +635,15 @@ body.chat-resizing {
 .project-rail-blocked {
     color: var(--accent);
 }
+.project-rail-live {
+    color: var(--green);
+}
+.project-rail-deleg {
+    color: var(--cyan);
+}
+.project-rail-plan {
+    color: var(--yellow);
+}
 .project-rail-empty {
     border: 1px dashed var(--border);
     padding: var(--sp-l);
@@ -645,6 +663,58 @@ body.chat-resizing {
     height: 100%;
     padding: 0;
     overflow-y: auto;
+}
+.project-detail {
+    padding: var(--sp-l);
+}
+.project-detail-title {
+    font-size: var(--fs-xl);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-s);
+}
+.project-detail-meta {
+    font-size: var(--fs-s);
+    color: var(--t2);
+    margin: var(--sp-s) 0;
+    display: flex;
+    gap: var(--sp-l);
+    flex-wrap: wrap;
+}
+.project-next-action {
+    margin: var(--sp-m) 0;
+    padding: var(--sp-m);
+    border: 1px solid color-mix(in srgb, var(--cyan) 45%, var(--border));
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--cyan) 10%, transparent),
+        color-mix(in srgb, var(--sf) 88%, transparent)
+    );
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-m);
+}
+.project-next-action b {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    color: var(--cyan);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.project-next-action span {
+    color: var(--t2);
+    font-size: var(--fs-s);
+}
+.project-action-status {
+    margin-bottom: var(--sp-s);
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--cyan);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 5px 8px;
 }
 @media (max-width: 1200px) {
     .workbench-content {

@@ -190,6 +190,23 @@ effect(() => {
   }
   localStorage.setItem("agentos_active_room_tab", normalized);
 });
+effect(() => {
+  try {
+    localStorage.setItem(
+      "agentos_route_state",
+      JSON.stringify({
+        project: currentProject.value || "",
+        collabMode: chatCollabMode.value || "solo",
+        roomTab: activeRoomTab.value || "chat",
+        runMode: chatRunMode.value || "act",
+        access: chatAccessLevel.value || "write",
+        soloProvider: selectedSoloProvider.value || "",
+        claudeModel: selectedClaudeModel.value || "",
+        codexModel: selectedCodexModel.value || "",
+      }),
+    );
+  } catch {}
+});
 const activeDualSession = signal(null);
 const dualSessionData = signal(null);
 const dualHistories = signal({});

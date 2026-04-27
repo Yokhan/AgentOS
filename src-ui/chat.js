@@ -234,6 +234,31 @@ function ContextChips({ items, onRemove, onClear }) {
   </div>`;
 }
 
+function DuoFlowCard({ route }) {
+  if (!route.duo) return null;
+  const steps = [
+    ["compare", "compare"],
+    ["lead", "choose lead"],
+    ["execute", "execute"],
+    ["review", "review result"],
+  ];
+  const current = route.mode === "execute" ? "execute" : "compare";
+  return html`<div class="duo-flow-card">
+    ${steps.map(
+      ([id, label]) =>
+        html`<span
+          class=${id === current
+            ? "current"
+            : id === "lead" && route.canLeadExecute
+              ? "ready"
+              : ""}
+        >
+          ${label}
+        </span>`,
+    )}
+  </div>`;
+}
+
 function RouteCard({
   route,
   providerOptions,
@@ -291,6 +316,9 @@ function RouteCard({
       ? html`<div class="route-warnings">
           ${warnings.map((warning) => html`<span>${warning}</span>`)}
         </div>`
+      : null}
+    ${route.pendingNote
+      ? html`<div class="route-pending-note">${route.pendingNote}</div>`
       : null}
     <div class="route-controls">
       ${route.duo
@@ -354,6 +382,7 @@ function RouteCard({
           "Pick a write-enabled lead to execute."}
         </div>`
       : null}
+    <${DuoFlowCard} route=${route} />
     <details class="route-details">
       <summary>route details</summary>
       <div class="route-meta">
@@ -365,6 +394,13 @@ function RouteCard({
               >${run.detail || run.phase || run.status || "running"}</span
             >`
           : null}
+      </div>
+      <div class="route-diagnostics">
+        <code>route key: ${route.diagnostics.routeKey}</code>
+        <code>chat key: ${route.diagnostics.chatKey}</code>
+        <code>run: ${route.diagnostics.runProject || "none"}</code>
+        <code>duo session: ${route.diagnostics.sessionProject || "none"}</code>
+        <code>scope: ${route.diagnostics.scopeProject || route.scope}</code>
       </div>
     </details>
     ${route.delegations.entries.length
@@ -479,23 +515,43 @@ function Tile({ a }) {
   </div>`;
 }
 
+function projectNextSafePrompt(name, ag, pp) {
+  const task = pp?.context?.task_title || ag.task || "current project work";
+  const blockers = (pp?.blockers || []).slice(0, 3).join("; ");
+  return [
+    `[PROJECT_CONTEXT:${name}]`,
+    `Task: ${task}`,
+    blockers
+      ? `Known blockers: ${blockers}`
+      : "Known blockers: none in project plan",
+    "Review the current project state and propose the next safe action. If execution is safe, state the exact command/route; if not, state the blocker and the minimum unblock step.",
+  ].join("\n");
+}
+
+const projectActionStatus = signal({});
+
+function setProjectActionStatus(project, status) {
+  projectActionStatus.value = {
+    ...projectActionStatus.value,
+    [project]: status,
+  };
+}
+
 function DetailView() {
   const name = currentProject.value;
   const ag = agents.value.find((a) => a.name === name) || {};
   const act = activities.value[name];
   const pp = projectPlan.value;
-  return html`<div class="content">
+  const safePrompt = projectNextSafePrompt(name, ag, pp);
+  const actionStatus = projectActionStatus.value[name] || "";
+  return html`<div class="content project-detail">
     <div class="back" onClick=${() => (currentProject.value = null)}>
       ← back to dashboard
     </div>
-    <h2
-      style="font-size:var(--fs-xl);display:flex;align-items:center;gap:var(--sp-s)"
-    >
+    <h2 class="project-detail-title">
       <span class="dot ${act ? "working" : ag.status}"></span>${name}
     </h2>
-    <div
-      style="font-size:var(--fs-s);color:var(--t2);margin:var(--sp-s) 0;display:flex;gap:var(--sp-l);flex-wrap:wrap"
-    >
+    <div class="project-detail-meta">
       <span style="color:${SC[act ? "working" : ag.status] || "var(--t3)"}"
         >${act ? "executing" : ag.status || ""}</span
       >
@@ -530,6 +586,37 @@ function DetailView() {
             <span dangerouslySetInnerHTML=${{ __html: md(ag.task) }}></span>
           </div>`
         : ""}
+    <div class="project-next-action">
+      <div>
+        <b>next safe action</b>
+        <span
+          >Attach project context and ask the selected agent for the safest next
+          route.</span
+        >
+      </div>
+      <button
+        class="action-btn primary"
+        onClick=${() => {
+          contextAttachments.value = [
+            ...(contextAttachments.value || []).filter(
+              (item) => item?.key !== "project-safe:" + name,
+            ),
+            {
+              key: "project-safe:" + name,
+              kind: "project",
+              label: name + " safe action",
+              prompt: safePrompt,
+              ts: Date.now(),
+            },
+          ].slice(-8);
+          composerDraftText.value =
+            "Определи следующий безопасный шаг по проекту и не выполняй запись без явной необходимости.";
+          showToast("Project context attached", "success", 1400);
+        }}
+      >
+        ask next safe step
+      </button>
+    </div>
     ${pp && pp.blockers?.length
       ? html`<div
           style="padding:var(--sp-s) var(--sp-m);margin:var(--sp-s) 0;background:var(--sf);border-left:2px solid var(--accent);font-size:var(--fs-s)"
@@ -620,13 +707,29 @@ function DetailView() {
     <div class="panels" style="margin-top:var(--sp-m)">
       <div class="panel">
         <h3>actions</h3>
+        ${actionStatus
+          ? html`<div class="project-action-status">${actionStatus}</div>`
+          : null}
         <div style="display:flex;flex-wrap:wrap;gap:var(--sp-s)">
           <button
             class="action-btn"
             onClick=${() => {
+              if (
+                !confirm(
+                  `Sync template for ${name}? This can change project files.`,
+                )
+              )
+                return;
+              setProjectActionStatus(name, "sync template: running");
               showToast("Deploying template...", "info", 3000);
               __invoke("deploy_template", { project: name })
                 .then((r) => {
+                  setProjectActionStatus(
+                    name,
+                    r.status === "ok"
+                      ? "sync template: done"
+                      : "sync template: failed",
+                  );
                   showToast(
                     r.status === "ok"
                       ? "Deploy complete"
@@ -635,7 +738,10 @@ function DetailView() {
                     5000,
                   );
                 })
-                .catch((e) => showToast("Deploy error: " + e, "error"));
+                .catch((e) => {
+                  setProjectActionStatus(name, "sync template: error");
+                  showToast("Deploy error: " + e, "error");
+                });
             }}
           >
             sync template
@@ -643,12 +749,17 @@ function DetailView() {
           <button
             class="action-btn"
             onClick=${() => {
+              setProjectActionStatus(name, "health check: running");
               showToast("Running health check...", "info", 3000);
               __invoke("health_check", { project: name })
                 .then((r) => {
+                  setProjectActionStatus(name, "health check: done");
                   showToast(r.result || "No result", "info", 8000);
                 })
-                .catch((e) => showToast("Error: " + e, "error"));
+                .catch((e) => {
+                  setProjectActionStatus(name, "health check: error");
+                  showToast("Error: " + e, "error");
+                });
             }}
           >
             health check
@@ -656,10 +767,16 @@ function DetailView() {
           <button
             class="action-btn"
             onClick=${() => {
+              setProjectActionStatus(name, "open in Zed: requested");
               if (__IS_TAURI)
                 __invoke("plugin:shell|open", {
                   path: "zed://" + ag.path,
-                }).catch(() => showToast("Cannot open Zed", "error"));
+                })
+                  .then(() => setProjectActionStatus(name, "open in Zed: done"))
+                  .catch(() => {
+                    setProjectActionStatus(name, "open in Zed: failed");
+                    showToast("Cannot open Zed", "error");
+                  });
             }}
           >
             open in Zed
@@ -869,6 +986,161 @@ function LiveRunHud() {
           )}
         </div>`
       : null}
+  </div>`;
+}
+
+function copyLiveOutput() {
+  const textParts = [];
+  if (streamText.value) textParts.push(streamText.value);
+  for (const block of streamChain.value || []) {
+    if (block?.type === "text" && block.text) textParts.push(block.text);
+    if (block?.type === "thinking" && block.text)
+      textParts.push("[thinking]\n" + block.text);
+    if (block?.type === "tool" && block.tool)
+      textParts.push(`[tool:${block.status || "event"}] ${block.tool}`);
+    if (block?.type === "tool_result" && block.content)
+      textParts.push("[tool result]\n" + block.content);
+    if (
+      (block?.type === "pa_result" || block?.type === "warning") &&
+      block.text
+    ) {
+      textParts.push(`[${block.type}] ${block.command || ""}\n${block.text}`);
+    }
+  }
+  const text = textParts.join("\n\n").trim();
+  if (!text) {
+    showToast("No live output to copy yet", "info", 1500);
+    return;
+  }
+  navigator.clipboard
+    ?.writeText(text)
+    .then(() => showToast("Live output copied", "success", 1200))
+    .catch(() => showToast("Copy failed", "error", 2000));
+}
+
+function LiveStatusStrip() {
+  clock.value;
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const projectKey = normalizeProjectKey(currentProject.value || "");
+  const act = activities.value[projectKey];
+  const run = activeRun.value;
+  const runMatches =
+    run && normalizeProjectKey(run.project || "") === projectKey;
+  const terminal =
+    runMatches && ["done", "failed", "cancelled"].includes(run.status || "");
+  const recentTerminal =
+    terminal && run.updatedAt && Date.now() - run.updatedAt < 12000;
+  if (
+    !act &&
+    (!runMatches || (terminal && !recentTerminal && !isStreaming.value))
+  ) {
+    return null;
+  }
+  const startedAt = runMatches
+    ? run.startedAt
+    : act?.started
+      ? Number(act.started) * 1000
+      : 0;
+  const elapsed = startedAt
+    ? Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+    : 0;
+  const events = runMatches ? (run.events || []).slice(-6) : [];
+  const statusLabel =
+    runMatches && run.status === "done"
+      ? "done"
+      : runMatches && run.status === "failed"
+        ? "failed"
+        : runMatches && run.status === "cancelled"
+          ? "cancelled"
+          : runMatches
+            ? run.status || "running"
+            : "backend";
+  const phase = runMatches ? run.phase || "run" : act?.action || "backend";
+  const detail = runMatches
+    ? run.detail || "working"
+    : act?.detail || "working";
+  const provider = runMatches ? run.provider || "agent" : "agentos";
+  const model = runMatches ? run.model || "" : "";
+  const hasLiveOutput = !!(
+    streamText.value ||
+    (streamChain.value || []).some((block) => block?.text || block?.content)
+  );
+  const canStop = isStreaming.value || (runMatches && !terminal);
+  return html`<div
+    class="live-run ${terminal ? "terminal" : "running"} ${run?.status || ""}"
+  >
+    <div class="live-run-head">
+      <div class="live-run-pulse"></div>
+      <div class="live-run-main">
+        <div class="live-run-title">
+          <span>${provider}</span>
+          ${model ? html`<em>${model}</em>` : null}
+          <b>${statusLabel}</b>
+        </div>
+        <div class="live-run-detail">${phase}: ${detail}</div>
+      </div>
+      <div class="live-run-badges">
+        <span>${runMatches ? run.mode || "act" : "activity"}</span>
+        <span>${runMatches ? run.access || "write" : projectKey}</span>
+        <span>${elapsed}s</span>
+      </div>
+      <div class="live-run-actions">
+        <button
+          type="button"
+          disabled=${!canStop}
+          title="Stop current agent run"
+          onClick=${() => {
+            if (!__invoke || !canStop) return;
+            __invoke("stop_chat", {
+              project: projectParam(currentProject.value || "") || null,
+            })
+              .then((res) =>
+                showToast(
+                  res?.killed ? "Stop requested" : "No running process",
+                  res?.killed ? "success" : "info",
+                  1800,
+                ),
+              )
+              .catch((e) => showToast("Stop failed: " + e, "error"));
+          }}
+        >
+          stop
+        </button>
+        <button
+          type="button"
+          disabled=${!hasLiveOutput}
+          title="Copy live output"
+          onClick=${copyLiveOutput}
+        >
+          copy
+        </button>
+        <button
+          type="button"
+          title="Show run events"
+          onClick=${() => setDetailsOpen(!detailsOpen)}
+        >
+          ${detailsOpen ? "hide" : "details"}
+        </button>
+      </div>
+    </div>
+    ${detailsOpen && events.length
+      ? html`<div class="live-run-events">
+          ${events.map(
+            (evt) =>
+              html`<span class=${evt.type === "run_done" ? "final" : ""}>
+                ${evt.phase || evt.type}: ${evt.detail || evt.outcome || ""}
+              </span>`,
+          )}
+        </div>`
+      : detailsOpen
+        ? html`<div class="live-run-events">
+            <span
+              >${act
+                ? `${act.action || "activity"}: ${act.detail || ""}`
+                : "no event rows yet"}</span
+            >
+          </div>`
+        : null}
   </div>`;
 }
 
@@ -1357,6 +1629,7 @@ function ChatSidebar() {
   const showScrollBtn = signal(false);
   const [viewportMode, setViewportMode] = useState("following");
   const [unreadLive, setUnreadLive] = useState(0);
+  const [routeChangeNote, setRouteChangeNote] = useState("");
   const lastLiveMarker = useRef("");
   const duoEnabled = chatCollabMode.value === "duo";
   const duoView = duoEnabled ? normalizeDuoView(activeRoomTab.value) : "chat";
@@ -2038,10 +2311,21 @@ function ChatSidebar() {
     delegations: routeDelegations,
     run: routeRun,
     warnings: routeWarnings,
+    pendingNote: routeChangeNote,
     canLeadExecute: !!activeOrchestrator?.write_enabled,
     disableExecuteReason: activeOrchestrator
       ? `${activeOrchestrator.label || activeOrchestrator.provider || "lead"} has no write access`
       : "Choose a write-enabled lead first",
+    diagnostics: {
+      routeKey: routeState.key,
+      chatKey: chatPageInfo.value?.project || routeState.key,
+      runProject: activeRun.value?.project || "",
+      sessionProject:
+        dualSessionData.value?.session?.project ||
+        dualSessionData.value?.project ||
+        "",
+      scopeProject: scope.project || scope.target_project || "",
+    },
   };
   return html`<div
     class="chat-side"
@@ -2237,8 +2521,7 @@ function ChatSidebar() {
       </span>
     </div>
     ${isDrag.value ? html`<div class="drop-zone">Drop files here</div>` : null}
-    <${RunningBanner} />
-    <${LiveRunHud} />
+    <${LiveStatusStrip} />
     <${RouteCard}
       route=${route}
       providerOptions=${soloProviderOptions}
@@ -2247,13 +2530,21 @@ function ChatSidebar() {
       accessOptions=${accessOptions}
       onToggleMode=${() => {
         chatRunMode.value = chatRunMode.value === "plan" ? "act" : "plan";
+        setRouteChangeNote(`mode changed to ${chatRunMode.value}`);
+        setTimeout(() => setRouteChangeNote(""), 1600);
       }}
       onAccess=${(value) => {
         chatAccessLevel.value = value;
+        setRouteChangeNote(`access changed to ${value}`);
+        setTimeout(() => setRouteChangeNote(""), 1600);
         showToast("access: " + value, "success", 1200);
       }}
       onProvider=${(value) => {
         selectedSoloProvider.value = value;
+        setRouteChangeNote(
+          `provider changed to ${value || configuredSoloProvider}`,
+        );
+        setTimeout(() => setRouteChangeNote(""), 1600);
         showToast(
           "provider: " + (value || configuredSoloProvider),
           "success",
@@ -2263,11 +2554,15 @@ function ChatSidebar() {
       onModel=${(value) => {
         if (soloProvider === "codex") selectedCodexModel.value = value;
         else selectedClaudeModel.value = value;
+        setRouteChangeNote(`model changed to ${value || "auto"}`);
+        setTimeout(() => setRouteChangeNote(""), 1600);
         showToast("model: " + (value || "auto"), "success", 1200);
       }}
       onEffort=${(value) => {
         if (soloProvider === "codex") selectedCodexEffort.value = value;
         else selectedClaudeEffort.value = value;
+        setRouteChangeNote(`effort changed to ${value || "default"}`);
+        setTimeout(() => setRouteChangeNote(""), 1600);
         showToast("effort: " + (value || "default"), "success", 1200);
       }}
       onProjectContext=${() =>
@@ -4006,7 +4301,7 @@ export {
   DetailView,
   InboxPanel,
   DelegationPanel,
-  RunningBanner,
+  LiveStatusStrip,
   ChatSidebar,
   ToolCard,
   ThinkBlock,

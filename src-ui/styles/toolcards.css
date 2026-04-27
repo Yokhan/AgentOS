@@ -288,6 +288,29 @@
     padding: 1px 5px;
     text-transform: uppercase;
 }
+.live-run-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.live-run-actions button {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 2px 6px;
+    cursor: pointer;
+}
+.live-run-actions button:hover:not(:disabled) {
+    border-color: var(--cyan);
+    color: var(--text);
+}
+.live-run-actions button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
 .live-run-events {
     display: flex;
     gap: 4px;

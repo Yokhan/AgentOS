@@ -192,3 +192,23 @@ Verified:
 
 1. `npm.cmd run check:ui` passes.
 2. `npm.cmd test` passes: 41 Rust/Tauri tests.
+
+## Completion Checkpoint 2026-04-27
+
+Completed in the full-plan finish pass:
+
+1. Replaced visible dual live banners with one `LiveStatusStrip` rendering stream runs and backend activities.
+2. Added live stop, copy live output, and details controls.
+3. Added Duo flow state: compare, choose lead, execute, review result.
+4. Added inline route change feedback for mode/access/provider/model/effort changes.
+5. Added route diagnostics under details: route key, chat key, active run, Duo session, and scope.
+6. Added rail filters for dirty, delegation, and plan, plus live/deleg/plan badges.
+7. Added project rail scroll persistence and keyboard navigation with Up/Down/Escape.
+8. Added project-detail next-safe-action control that attaches project context to chat.
+9. Added action-local statuses and confirmation for template sync.
+10. Added `scripts/check-mojibake.mjs`, `scripts/check-click-wiring.mjs`, and UX release checklist.
+
+Verified:
+
+1. `npm.cmd run check:ui` passes, including mojibake and 11 critical wiring checks.
+2. `npm.cmd test` passes: 41 Rust/Tauri tests.

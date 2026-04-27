@@ -3058,7 +3058,7 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
                           <div
                             style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
                           >
-                            ${item.executor_provider || "reviewer"} В·
+                            ${item.executor_provider || "reviewer"} |
                             ${item.status}
                           </div>
                           ${item.review_verdict?.status
@@ -3067,7 +3067,7 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
                               >
                                 ${item.review_verdict.status}${item
                                   .review_verdict.summary
-                                  ? " В· " + item.review_verdict.summary
+                                  ? " | " + item.review_verdict.summary
                                   : ""}
                               </div>`
                             : null}
@@ -3092,7 +3092,7 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
                           style="padding:var(--sp-xs);border:1px solid var(--border);background:var(--bg-soft)"
                         >
                           <div style="font-size:var(--fs-s);color:var(--text)">
-                            ${delegation.project} В· ${delegation.status}
+                            ${delegation.project} | ${delegation.status}
                           </div>
                           <div
                             style="font-size:var(--fs-s);color:var(--t3);font-family:var(--font-mono)"
@@ -3100,7 +3100,7 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
                             ${delegation.gate_result
                               ? "gate " + delegation.gate_result
                               : "no gate"}${delegation.review_verdict?.status
-                              ? " В· review " + delegation.review_verdict.status
+                              ? " | review " + delegation.review_verdict.status
                               : ""}
                           </div>
                         </div>`,
@@ -3128,8 +3128,7 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
                       style="padding:var(--sp-xs);border:1px solid var(--border);background:var(--bg-soft)"
                     >
                       <div style="font-size:var(--fs-s);color:var(--text)">
-                        ${signal.level || "info"} В·
-                        ${signal.source || "signal"}
+                        ${signal.level || "info"} | ${signal.source || "signal"}
                       </div>
                       <div style="font-size:var(--fs-s);color:var(--t3)">
                         ${signal.message ||

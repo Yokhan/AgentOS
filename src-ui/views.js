@@ -42,6 +42,7 @@ import {
   showPlan,
   orchOk,
   signalsData,
+  activities,
   composerDraftText,
   showToast,
 } from "/store.js";
@@ -807,10 +808,67 @@ function WorkbenchFocus({ all }) {
   </div>`;
 }
 
+function projectHasDelegation(project) {
+  return Object.values(delegations.value || {}).some(
+    (item) =>
+      item?.project === project &&
+      !["done", "failed", "cancelled", "rejected", "error"].includes(
+        item?.status || "",
+      ),
+  );
+}
+
+function projectHasPlan(project) {
+  return (plansData.value || []).some(
+    (plan) =>
+      plan?.project === project ||
+      (plan?.steps || []).some((step) => step?.project === project),
+  );
+}
+
+function applyRailFilter(items) {
+  const af = activeFilter.value;
+  if (af === "attention") {
+    return items.filter((x) => x.blockers || (x.uncommitted || 0) > 20);
+  }
+  if (af === "active") return items.filter((x) => x.task);
+  if (af === "stale") return items.filter((x) => (x.days || 999) > 7);
+  if (af === "dirty") return items.filter((x) => (x.uncommitted || 0) > 0);
+  if (af === "delegation")
+    return items.filter((x) => projectHasDelegation(x.name));
+  if (af === "plan") return items.filter((x) => projectHasPlan(x.name));
+  return items;
+}
+
 function ProjectRail({ items, segMap, useFlat, flatItems }) {
   const groups = useFlat
     ? [["all", flatItems]]
     : Object.entries(segMap).filter(([_, list]) => list.length);
+  const railRef = useRef(null);
+  const navItems = (useFlat ? flatItems : groups.flatMap(([, list]) => list))
+    .filter(Boolean)
+    .map((item) => item.name);
+  useEffect(() => {
+    const el = railRef.current;
+    if (!el) return;
+    const saved = Number(
+      localStorage.getItem("agentos.projectRail.scroll") || 0,
+    );
+    if (saved > 0) requestAnimationFrame(() => (el.scrollTop = saved));
+  }, []);
+  const openProject = (project) => {
+    const el = railRef.current;
+    if (el)
+      localStorage.setItem("agentos.projectRail.scroll", String(el.scrollTop));
+    currentProject.value = project;
+  };
+  const moveSelection = (delta) => {
+    if (!navItems.length) return;
+    const current = currentProject.value;
+    const idx = Math.max(0, navItems.indexOf(current));
+    const next = navItems[(idx + delta + navItems.length) % navItems.length];
+    openProject(next);
+  };
   if (!items.length) {
     return html`<div class="project-rail-empty">
       <b>No projects match</b>
@@ -824,7 +882,29 @@ function ProjectRail({ items, segMap, useFlat, flatItems }) {
       </button>
     </div>`;
   }
-  return html`<div class="project-rail-list">
+  return html`<div
+    class="project-rail-list"
+    ref=${railRef}
+    tabindex="0"
+    onScroll=${(e) =>
+      localStorage.setItem(
+        "agentos.projectRail.scroll",
+        String(e.currentTarget.scrollTop),
+      )}
+    onKeyDown=${(e) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        moveSelection(1);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        moveSelection(-1);
+      } else if (e.key === "Escape") {
+        currentProject.value = null;
+      } else if (e.key === "Enter" && !currentProject.value && navItems[0]) {
+        openProject(navItems[0]);
+      }
+    }}
+  >
     ${groups.map(
       ([name, list]) =>
         html`<section class="project-rail-group">
@@ -838,7 +918,7 @@ function ProjectRail({ items, segMap, useFlat, flatItems }) {
                 class="project-rail-row ${currentProject.value === ag.name
                   ? "selected"
                   : ""}"
-                onClick=${() => (currentProject.value = ag.name)}
+                onClick=${() => openProject(ag.name)}
                 title=${`${ag.name}: ${ag.task || ag.status || "sleeping"}`}
               >
                 <span class="dot ${ag.status || "sleeping"}"></span>
@@ -861,6 +941,15 @@ function ProjectRail({ items, segMap, useFlat, flatItems }) {
                   ${ag.blockers
                     ? html`<span class="project-rail-blocked">block</span>`
                     : null}
+                  ${activities.value?.[ag.name]
+                    ? html`<span class="project-rail-live">live</span>`
+                    : null}
+                  ${projectHasDelegation(ag.name)
+                    ? html`<span class="project-rail-deleg">deleg</span>`
+                    : null}
+                  ${projectHasPlan(ag.name)
+                    ? html`<span class="project-rail-plan">plan</span>`
+                    : null}
                 </span>
               </button>`,
           )}
@@ -875,6 +964,9 @@ function RailQuickFilters({ all, visible }) {
       .length,
     active: all.filter((x) => x.task).length,
     stale: all.filter((x) => (x.days || 999) > 7).length,
+    dirty: all.filter((x) => (x.uncommitted || 0) > 0).length,
+    delegation: all.filter((x) => projectHasDelegation(x.name)).length,
+    plan: all.filter((x) => projectHasPlan(x.name)).length,
   };
   const filterButton = (id, label, count) =>
     html`<button
@@ -890,6 +982,9 @@ function RailQuickFilters({ all, visible }) {
       ${filterButton("attention", "attention", counts.attention)}
       ${filterButton("active", "active", counts.active)}
       ${filterButton("stale", "stale", counts.stale)}
+      ${filterButton("dirty", "dirty", counts.dirty)}
+      ${filterButton("delegation", "deleg", counts.delegation)}
+      ${filterButton("plan", "plan", counts.plan)}
     </div>
     <span>${visible.length}/${all.length}</span>
   </div>`;
@@ -1404,15 +1499,7 @@ function DashboardWorkbenchView() {
     );
   }
   const af = activeFilter.value;
-  if (af === "attention") {
-    visibleAgents = visibleAgents.filter(
-      (x) => x.blockers || (x.uncommitted || 0) > 20,
-    );
-  }
-  if (af === "active") visibleAgents = visibleAgents.filter((x) => x.task);
-  if (af === "stale") {
-    visibleAgents = visibleAgents.filter((x) => (x.days || 999) > 7);
-  }
+  visibleAgents = applyRailFilter(visibleAgents);
 
   const sb = sortBy.value;
   if (sb === "name") {
@@ -1525,15 +1612,7 @@ function ProjectWorkbenchView() {
     );
   }
   const af = activeFilter.value;
-  if (af === "attention") {
-    visibleAgents = visibleAgents.filter(
-      (x) => x.blockers || (x.uncommitted || 0) > 20,
-    );
-  }
-  if (af === "active") visibleAgents = visibleAgents.filter((x) => x.task);
-  if (af === "stale") {
-    visibleAgents = visibleAgents.filter((x) => (x.days || 999) > 7);
-  }
+  visibleAgents = applyRailFilter(visibleAgents);
   const sb = sortBy.value;
   if (sb === "name") {
     visibleAgents = [...visibleAgents].sort((x, y) =>
