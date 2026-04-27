@@ -1,3 +1,11 @@
+# Agent OS 0.3.5
+
+- Fixed delegation approval UX so fresh pending delegations are no longer reported as stale blockers.
+- Made pending delegation status explicit in agent-facing responses: queued delegations now say they are waiting for user approval instead of looking stuck.
+- Fixed approve-button visibility by syncing active delegations from the backend queue instead of relying on fragile chat-text parsing.
+- Added support for richer `<delegation ... status/action/>` tags and live insertion of approval cards while the agent is still streaming.
+- Included all non-terminal delegation states (`pending`, `needs_permission`, `scheduled`, `running`, `escalated`, `deciding`, `verifying`) in the visible chat tracker.
+
 # Agent OS 0.3.4
 
 - Fixed Strategy startup crash by importing `useRef` in `pages.js` and extended the UI gate so `pages.js` syntax plus missing hook imports are checked before release.
