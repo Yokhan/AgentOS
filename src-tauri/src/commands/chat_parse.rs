@@ -132,6 +132,7 @@ fn build_identity_context(state: &AppState) -> String {
          You manage {} projects across {} categories.\n\n\
          YOUR CAPABILITIES (50 commands):\n\n\
          Delegation:\n\
+         Pending delegations are approval requests, not running work. Report the approval need once, then wait; only [DELEGATE_STATUS:?stale] means the queue is actually stuck.\n\
          [DELEGATE:Project]task[/DELEGATE] — send task to agent (user approves → L1→L2→L3)\n\
          [DELEGATE_BATCH:p1,p2]task[/DELEGATE_BATCH] — batch to multiple projects\n\
          [DELEGATE_CHAIN:Project]step1\\nstep2[/DELEGATE_CHAIN] — sequential chain\n\

@@ -191,6 +191,25 @@ fn exec_cancel(state: &AppState, id: &str) -> Option<String> {
     ))
 }
 
+const STALE_PENDING_SECS: u64 = 15 * 60;
+
+fn pending_age_secs(d: &crate::state::Delegation) -> u64 {
+    chrono::DateTime::parse_from_rfc3339(&d.ts)
+        .or_else(|_| chrono::DateTime::parse_from_str(&d.ts, "%Y-%m-%dT%H:%M:%SZ"))
+        .map(|dt| {
+            chrono::Utc::now()
+                .signed_duration_since(dt)
+                .num_seconds()
+                .max(0) as u64
+        })
+        .unwrap_or(0)
+}
+
+fn is_stale_pending(d: &crate::state::Delegation) -> bool {
+    d.status == crate::commands::status::DelegationStatus::Pending
+        && pending_age_secs(d) >= STALE_PENDING_SECS
+}
+
 fn exec_status(state: &AppState, filter: &str) -> Option<String> {
     let delegations = state.delegations.lock().ok()?;
     let mut lines = Vec::new();
@@ -204,8 +223,7 @@ fn exec_status(state: &AppState, filter: &str) -> Option<String> {
                 && d.status == crate::commands::status::DelegationStatus::Pending)
             || (filter == "?running"
                 && d.status == crate::commands::status::DelegationStatus::Running)
-            || (filter == "?stale"
-                && d.status == crate::commands::status::DelegationStatus::Pending)
+            || (filter == "?stale" && is_stale_pending(d))
             || d.batch_id.as_deref() == Some(filter)
             || id == filter
             || (!filter.is_empty() && id.starts_with(filter));
@@ -214,9 +232,19 @@ fn exec_status(state: &AppState, filter: &str) -> Option<String> {
         }
         let task_short: String = d.task.chars().take(50).collect();
         let pri = d.priority.map(|p| format!(" [{}]", p)).unwrap_or_default();
+        let pending_note = if d.status == crate::commands::status::DelegationStatus::Pending {
+            let age_min = pending_age_secs(d) / 60;
+            if age_min >= STALE_PENDING_SECS / 60 {
+                format!(" (pending {}m, stale: needs approval or cancel)", age_min)
+            } else {
+                format!(" (pending {}m, waiting for user approval)", age_min)
+            }
+        } else {
+            String::new()
+        };
         lines.push(format!(
-            "  {} {} {}{}: {}",
-            d.status, d.project, id, pri, task_short
+            "  {} {} {}{}{}: {}",
+            d.status, d.project, id, pri, pending_note, task_short
         ));
     }
 
@@ -373,12 +401,12 @@ mod tests {
         AppState::new(root)
     }
 
-    fn insert_pending(state: &AppState, id: &str) {
+    fn insert_pending_at(state: &AppState, id: &str, ts: &str) {
         let delegation = Delegation {
             id: id.to_string(),
             project: "AgentOS".to_string(),
             task: "test task".to_string(),
-            ts: "2026-04-25T00:00:00Z".to_string(),
+            ts: ts.to_string(),
             status: DelegationStatus::Pending,
             response: None,
             retries: 0,
@@ -406,6 +434,10 @@ mod tests {
             .lock()
             .unwrap()
             .insert(id.to_string(), delegation);
+    }
+
+    fn insert_pending(state: &AppState, id: &str) {
+        insert_pending_at(state, id, "2026-04-25T00:00:00Z");
     }
 
     #[test]
@@ -437,5 +469,39 @@ mod tests {
             delegations.get(full_id).unwrap().status,
             DelegationStatus::Cancelled
         );
+    }
+
+    #[test]
+    fn stale_status_excludes_fresh_pending_approvals() {
+        let state = test_state("stale-filter");
+        let fresh_id = "fresh-approval";
+        let stale_id = "stale-approval";
+        let fresh_ts = chrono::Utc::now().to_rfc3339();
+        let stale_ts = (chrono::Utc::now() - chrono::Duration::minutes(20)).to_rfc3339();
+
+        insert_pending_at(&state, fresh_id, &fresh_ts);
+        insert_pending_at(&state, stale_id, &stale_ts);
+
+        let pending = execute_deleg_command(
+            &state,
+            &DelegPaCommand::Status {
+                filter: "?pending".to_string(),
+            },
+        )
+        .unwrap();
+        assert!(pending.contains(fresh_id));
+        assert!(pending.contains(stale_id));
+        assert!(pending.contains("waiting for user approval"));
+
+        let stale = execute_deleg_command(
+            &state,
+            &DelegPaCommand::Status {
+                filter: "?stale".to_string(),
+            },
+        )
+        .unwrap();
+        assert!(!stale.contains(fresh_id));
+        assert!(stale.contains(stale_id));
+        assert!(stale.contains("needs approval or cancel"));
     }
 }

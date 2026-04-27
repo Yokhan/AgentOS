@@ -1210,6 +1210,7 @@ fn build_agent_prompt(
             .push_str("The user selected you as the execution lead/orchestrator for this room.\n");
         prompt.push_str("If the user approved execution or asks to proceed, do not only propose a plan. Act through structured PA commands.\n");
         prompt.push_str("Executable PA command tags must be on their own lines outside fenced code blocks. Tags inside fenced code blocks are examples only and will be ignored.\n");
+        prompt.push_str("When you create a delegation, pending means it is waiting for user approval, not that it is running or stuck. Report the approval need once and do not poll status repeatedly unless the system reports stale.\n");
         prompt.push_str("Common commands:\n");
         prompt.push_str("- [DASHBOARD_FULL]\n");
         prompt.push_str("- [DELEGATE_STATUS:?failed]\n");

@@ -502,8 +502,10 @@ pub fn execute_pa_command(state: &AppState, cmd: &PaCommand) -> Option<String> {
                 let did = super::delegation::queue_delegation_internal(state, &valid_name, task);
                 if !did.is_empty() {
                     return Some(format!(
-                        "<delegation id=\"{}\" project=\"{}\"/>",
-                        did, valid_name
+                        "<delegation id=\"{}\" project=\"{}\" status=\"pending\" action=\"approve_required\"/>\nDelegation queued for {} and is waiting for user approval. Pending is expected until the user approves it in the UI; do not poll status repeatedly or treat it as stale before 15 minutes.",
+                        did,
+                        valid_name,
+                        valid_name
                     ));
                 }
             }
