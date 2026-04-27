@@ -14,6 +14,7 @@ const files = [
   "chat.js",
   "pages.js",
   "provider-caps.js",
+  "route-state.js",
   "store.js",
   "utils.js",
   "views.js",

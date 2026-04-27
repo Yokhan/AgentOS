@@ -47,9 +47,10 @@ import {
   loadActiveScope,
 } from "/api.js";
 import { App } from "/views.js";
+import { normalizeProjectKey, projectParam } from "/route-state.js";
 
 function syncRecoveredActiveRun() {
-  const projectKey = currentProject.value || "_orchestrator";
+  const projectKey = normalizeProjectKey(currentProject.value || "");
   const act = activities.value?.[projectKey];
   if (!act) return;
   const detail = [act.action, act.detail].filter(Boolean).join(": ");
@@ -107,7 +108,8 @@ function syncRecoveredActiveRun() {
 }
 
 async function refreshCurrentRoute() {
-  const p = currentProject.value || "";
+  const p = projectParam(currentProject.value || "");
+  const chatKey = normalizeProjectKey(currentProject.value || "");
   await Promise.allSettled([
     loadAgents(),
     loadActivity(),
@@ -116,7 +118,7 @@ async function refreshCurrentRoute() {
     loadFeed(),
     loadSignals(),
     loadInbox(),
-    loadChat(p || "_orchestrator"),
+    loadChat(chatKey),
     p ? loadModules(p) : Promise.resolve(),
     p ? loadProjectPlan(p) : Promise.resolve(),
     loadActiveScope(p, activeDualSession.value || null),
@@ -126,9 +128,10 @@ async function refreshCurrentRoute() {
 
 // Project change effect
 effect(() => {
-  const p = currentProject.value;
+  const p = projectParam(currentProject.value || "");
+  const chatKey = normalizeProjectKey(currentProject.value || "");
   sideTitle.value = p ? p + " agent" : "orchestrator";
-  loadChat(p || "_orchestrator");
+  loadChat(chatKey);
   if (p) {
     loadModules(p);
     loadProjectPlan(p);
@@ -239,7 +242,7 @@ try {
     loadPerms(),
   ]);
   syncRecoveredActiveRun();
-  await loadChat(currentProject.value || "_orchestrator");
+  await loadChat(normalizeProjectKey(currentProject.value || ""));
 } catch (e) {
   console.error("AgentOS init failed:", e);
   showDualAgents.value = false;

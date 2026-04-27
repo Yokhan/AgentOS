@@ -7,7 +7,7 @@
     "tauri": "npx @tauri-apps/cli",
     "dev": "npx @tauri-apps/cli dev",
     "build": "npx @tauri-apps/cli build",
-    "check:ui": "node --check src-ui/app.js && node --check src-ui/chat.js && node --check src-ui/views.js && node --check src-ui/pages.js && node scripts/check-store-imports.mjs && node scripts/smoke-chat-render.mjs",
+    "check:ui": "node --check src-ui/app.js && node --check src-ui/chat.js && node --check src-ui/views.js && node --check src-ui/pages.js && node --check src-ui/route-state.js && node scripts/check-store-imports.mjs && node scripts/smoke-chat-render.mjs",
     "build:updater": "powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1",
     "test": "cargo test --manifest-path src-tauri/Cargo.toml"
   },

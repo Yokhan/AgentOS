@@ -865,9 +865,30 @@
 .route-meta span {
     color: var(--t3);
 }
+.route-meta.compact span {
+    background: transparent;
+    border-color: color-mix(in srgb, var(--border) 70%, transparent);
+}
 .route-warnings span {
     color: var(--yellow);
     border-color: color-mix(in srgb, var(--yellow) 45%, var(--border));
+}
+.route-disabled-reason {
+    color: var(--yellow);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.route-details {
+    border-top: 1px dashed var(--border);
+    padding-top: var(--sp-xs);
+}
+.route-details summary {
+    cursor: pointer;
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 .route-run.running,
 .route-run.starting,
@@ -905,6 +926,42 @@
 .route-delegations button:hover {
     color: var(--text);
     border-color: var(--cyan);
+}
+.context-chips {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+    padding: var(--sp-xs) var(--sp-m);
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--cyan) 8%, transparent);
+}
+.context-chips-label,
+.context-clear,
+.context-chip {
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.context-chips-label {
+    color: var(--t3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.context-chip,
+.context-clear {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--t2);
+    padding: 3px 7px;
+    cursor: pointer;
+}
+.context-chip b {
+    margin-left: var(--sp-xs);
+    color: var(--accent);
+    font-weight: 500;
+}
+.context-clear {
+    color: var(--t3);
 }
 .m {
     max-width: 88%;

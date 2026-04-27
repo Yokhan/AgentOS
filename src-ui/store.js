@@ -9,6 +9,18 @@ const currentProject = signal(
 const sideMessages = signal([]);
 const sideTitle = signal("orchestrator");
 const composerDraftText = signal("");
+const contextAttachments = signal(
+  (() => {
+    try {
+      const raw = JSON.parse(
+        localStorage.getItem("agentos_context_attachments") || "[]",
+      );
+      return Array.isArray(raw) ? raw.slice(0, 8) : [];
+    } catch {
+      return [];
+    }
+  })(),
+);
 const chatPageInfo = signal({
   project: "",
   total: 0,
@@ -77,6 +89,14 @@ effect(() => localStorage.setItem("agentos_chat_run_mode", chatRunMode.value));
 effect(() =>
   localStorage.setItem("agentos_chat_access_level", chatAccessLevel.value),
 );
+effect(() => {
+  try {
+    localStorage.setItem(
+      "agentos_context_attachments",
+      JSON.stringify((contextAttachments.value || []).slice(0, 8)),
+    );
+  } catch {}
+});
 const subModel = signal("sonnet"); // model for orchestrator's sub-project calls
 const isRec = signal(false);
 const attFiles = signal([]);
@@ -189,6 +209,7 @@ export {
   sideMessages,
   sideTitle,
   composerDraftText,
+  contextAttachments,
   chatPageInfo,
   chatHistoryLoading,
   streamText,

@@ -156,15 +156,6 @@ function App() {
   const SettingsPage = pagesMod?.SettingsPage || null;
   const PlansView = pagesMod?.PlansView || null;
   const StrategyView = pagesMod?.StrategyView || null;
-  const EmbeddedDualAgentsPanel = pagesMod?.EmbeddedDualAgentsPanel || null;
-  const duoWorkspaceTab =
-    activeRoomTab.value === "execute" ||
-    activeRoomTab.value === "work" ||
-    activeRoomTab.value === "reviews"
-      ? "execute"
-      : "collaborate";
-  const duoWorkspaceActive =
-    chatCollabMode.value === "duo" && activeRoomTab.value !== "chat";
   const pagesFallback = pagesErr
     ? html`<div class="content">
         <div class="panel" style="margin:var(--sp-l)">
@@ -181,11 +172,6 @@ ${pagesErr}</pre
           Loading UI modules...
         </div>
       </div>`;
-  const duoWorkspace = EmbeddedDualAgentsPanel
-    ? html`<div class="content" style="padding:var(--sp-l)">
-        <${EmbeddedDualAgentsPanel} tab=${duoWorkspaceTab} />
-      </div>`
-    : pagesFallback;
   return html`<div class="app">
     <${Toasts} /><${KeyboardHelp} /><${OrchWarning} /><${NewProjectModal} /><${Header} /><${Breadcrumb} />
     <div class="main">
@@ -199,11 +185,9 @@ ${pagesErr}</pre
               ? pagesFallback
               : showGraph.value
                 ? html`<${GraphView} />`
-                : duoWorkspaceActive
-                  ? duoWorkspace
-                  : currentProject.value
-                    ? html`<${ProjectWorkbenchView} />`
-                    : html`<${DashboardWorkbenchView} />`}<${ChatSidebar} />
+                : currentProject.value
+                  ? html`<${ProjectWorkbenchView} />`
+                  : html`<${DashboardWorkbenchView} />`}<${ChatSidebar} />
     </div>
     <${AnalyticsBar} />
   </div>`;
@@ -257,10 +241,11 @@ function Header() {
           const next = chatCollabMode.value !== "duo";
           chatCollabMode.value = next ? "duo" : "solo";
           activeRoomTab.value = next ? "collaborate" : "chat";
+          showDualAgents.value = false;
           if (next) ensureDualSession(currentProject.value || "");
         }}
       >
-        duo
+        ${chatCollabMode.value === "duo" ? "duo on" : "duo"}
       </button>
       <button
         class=${isGraph ? "hdr-active" : ""}
@@ -854,23 +839,59 @@ function ProjectRail({ items, segMap, useFlat, flatItems }) {
                   ? "selected"
                   : ""}"
                 onClick=${() => (currentProject.value = ag.name)}
+                title=${`${ag.name}: ${ag.task || ag.status || "sleeping"}`}
               >
                 <span class="dot ${ag.status || "sleeping"}"></span>
                 <span class="project-rail-name">${ag.name}</span>
                 <span class="project-rail-state">
                   ${ag.task || ag.status || "sleeping"}
                 </span>
-                <span
-                  class="project-rail-dirty ${(ag.uncommitted || 0) > 20
-                    ? "hot"
-                    : ""}"
-                >
-                  ${ag.uncommitted || 0}
+                <span class="project-rail-badges">
+                  ${(ag.uncommitted || 0) > 0
+                    ? html`<span
+                        class="project-rail-dirty ${(ag.uncommitted || 0) > 20
+                          ? "hot"
+                          : ""}"
+                        >${ag.uncommitted}</span
+                      >`
+                    : null}
+                  ${(ag.days || 0) > 7
+                    ? html`<span class="project-rail-age">${ag.days}d</span>`
+                    : null}
+                  ${ag.blockers
+                    ? html`<span class="project-rail-blocked">block</span>`
+                    : null}
                 </span>
               </button>`,
           )}
         </section>`,
     )}
+  </div>`;
+}
+
+function RailQuickFilters({ all, visible }) {
+  const counts = {
+    attention: all.filter((x) => x.blockers || (x.uncommitted || 0) > 20)
+      .length,
+    active: all.filter((x) => x.task).length,
+    stale: all.filter((x) => (x.days || 999) > 7).length,
+  };
+  const filterButton = (id, label, count) =>
+    html`<button
+      class=${activeFilter.value === id ? "active" : ""}
+      onClick=${() => {
+        activeFilter.value = activeFilter.value === id ? "" : id;
+      }}
+    >
+      ${label}<b>${count}</b>
+    </button>`;
+  return html`<div class="project-rail-quick">
+    <div>
+      ${filterButton("attention", "attention", counts.attention)}
+      ${filterButton("active", "active", counts.active)}
+      ${filterButton("stale", "stale", counts.stale)}
+    </div>
+    <span>${visible.length}/${all.length}</span>
   </div>`;
 }
 
@@ -1468,6 +1489,7 @@ function DashboardWorkbenchView() {
         </button>
       </div>
       <${SearchBar} />
+      <${RailQuickFilters} all=${allAgents} visible=${visibleAgents} />
       ${filterBar}
       <${ProjectRail}
         items=${visibleAgents}
@@ -1563,6 +1585,7 @@ function ProjectWorkbenchView() {
         </button>
       </div>
       <${SearchBar} />
+      <${RailQuickFilters} all=${allAgents} visible=${visibleAgents} />
       ${filterBar}
       <${ProjectRail}
         items=${visibleAgents}

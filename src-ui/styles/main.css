@@ -520,6 +520,35 @@ body.chat-resizing {
     color: var(--accent);
     margin-left: var(--sp-xs);
 }
+.project-rail-quick {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--sp-xs);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    color: var(--t3);
+}
+.project-rail-quick > div {
+    display: flex;
+    gap: var(--sp-2xs);
+    min-width: 0;
+}
+.project-rail-quick button {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2xs);
+    min-width: 0;
+    padding: 3px 6px;
+}
+.project-rail-quick button.active {
+    border-color: var(--cyan);
+    color: var(--cyan);
+}
+.project-rail-quick b {
+    color: var(--t3);
+    font-weight: 500;
+}
 .project-rail-list {
     min-height: 0;
     overflow-y: auto;
@@ -576,6 +605,25 @@ body.chat-resizing {
     color: var(--t3);
 }
 .project-rail-dirty.hot {
+    color: var(--accent);
+}
+.project-rail-badges {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--sp-2xs);
+    min-width: 0;
+}
+.project-rail-badges span {
+    border: 1px solid var(--border);
+    padding: 1px 4px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    line-height: 1.2;
+}
+.project-rail-age {
+    color: var(--yellow);
+}
+.project-rail-blocked {
     color: var(--accent);
 }
 .project-rail-empty {

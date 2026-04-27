@@ -14,6 +14,7 @@ import {
   sideMessages,
   sideTitle,
   composerDraftText,
+  contextAttachments,
   chatPageInfo,
   chatHistoryLoading,
   streamText,
@@ -65,6 +66,11 @@ import {
   eventContract,
   permData,
 } from "/store.js";
+import {
+  buildRouteState,
+  normalizeProjectKey,
+  projectParam,
+} from "/route-state.js";
 import {
   togVoice,
   hdlFiles,
@@ -207,6 +213,27 @@ function duoInputLabel(action, lead, target) {
   return "both agents review";
 }
 
+function ContextChips({ items, onRemove, onClear }) {
+  if (!items?.length) return null;
+  return html`<div class="context-chips">
+    <span class="context-chips-label">attached context</span>
+    ${items.map(
+      (item, index) =>
+        html`<button
+          type="button"
+          class="context-chip"
+          title=${item.prompt || item.label || "context"}
+          onClick=${() => onRemove(index)}
+        >
+          <span>${item.label || item.kind || "context"}</span><b>x</b>
+        </button>`,
+    )}
+    <button type="button" class="context-clear" onClick=${onClear}>
+      clear
+    </button>
+  </div>`;
+}
+
 function RouteCard({
   route,
   providerOptions,
@@ -242,22 +269,21 @@ function RouteCard({
         <span>${route.providerState}</span>
       </div>
     </div>
-    <div class="route-meta">
-      <span>models: ${route.modelCount} ${route.modelSource}</span>
+    <div class="route-meta compact">
+      <span>${route.scope}</span>
       <span
-        >history:
+        >history
         ${route.historyLoaded}/${route.historyTotal ||
         route.historyLoaded}</span
       >
-      <span>scope: ${route.scope}</span>
       <span>
-        delegations: ${route.delegations.pending} pending,
-        ${route.delegations.running} running, ${route.delegations.failed}
-        failed, ${route.delegations.done} done
+        delegations
+        ${route.delegations.pending}P/${route.delegations.running}R/${route
+          .delegations.failed}F
       </span>
       ${run
         ? html`<span class="route-run ${run.status || "running"}">
-            ${run.status || "running"} ${run.phase || "run"} ${run.detail || ""}
+            ${run.status || "running"} ${run.phase || "run"}
           </span>`
         : null}
     </div>
@@ -273,12 +299,13 @@ function RouteCard({
             <button
               class="primary"
               disabled=${!route.canLeadExecute}
+              title=${route.disableExecuteReason || "Selected lead can execute"}
               onClick=${onLeadExecute}
             >
               lead executes
             </button>`
         : html`<button class="primary" onClick=${onToggleMode}>
-              ${route.mode === "plan" ? "switch to act" : "plan first"}
+              ${route.mode === "plan" ? "switch to act" : "plan/read-only"}
             </button>
             <select
               value=${route.accessRaw}
@@ -317,10 +344,29 @@ function RouteCard({
                   html`<option value=${value}>${label}</option>`,
               )}
             </select>`}
-      <button onClick=${onProjectContext}>project context</button>
-      <button onClick=${onGraphContext}>graph context</button>
+      <button onClick=${onProjectContext}>attach project context</button>
+      <button onClick=${onGraphContext}>attach graph context</button>
       <button onClick=${onReview}>review route</button>
     </div>
+    ${route.duo && !route.canLeadExecute
+      ? html`<div class="route-disabled-reason">
+          ${route.disableExecuteReason ||
+          "Pick a write-enabled lead to execute."}
+        </div>`
+      : null}
+    <details class="route-details">
+      <summary>route details</summary>
+      <div class="route-meta">
+        <span>models: ${route.modelCount} ${route.modelSource}</span>
+        <span>scope: ${route.scope}</span>
+        <span>provider: ${route.providerState}</span>
+        ${run
+          ? html`<span
+              >${run.detail || run.phase || run.status || "running"}</span
+            >`
+          : null}
+      </div>
+    </details>
     ${route.delegations.entries.length
       ? html`<div class="route-delegations">
           ${route.delegations.entries.map(
@@ -752,7 +798,7 @@ function DelegationPanel() {
 
 function RunningBanner() {
   clock.value;
-  const proj = currentProject.value || "_orchestrator";
+  const proj = normalizeProjectKey(currentProject.value || "");
   const act = activities.value[proj];
   if (!act) return null;
   const elapsed = Math.round(Date.now() / 1000 - act.started);
@@ -769,7 +815,8 @@ function LiveRunHud() {
   const run = activeRun.value;
   if (
     !run ||
-    run.project !== (currentProject.value || "_orchestrator") ||
+    normalizeProjectKey(run.project) !==
+      normalizeProjectKey(currentProject.value || "") ||
     (!isStreaming.value &&
       !["done", "failed", "cancelled"].includes(run.status))
   ) {
@@ -1385,6 +1432,26 @@ function ChatSidebar() {
     target.dispatchEvent(new Event("input", { bubbles: true }));
     target.focus();
   };
+  const attachContext = (item) => {
+    const next = [
+      ...(contextAttachments.value || []).filter(
+        (existing) => existing?.key !== item.key,
+      ),
+      { ...item, ts: Date.now() },
+    ].slice(-8);
+    contextAttachments.value = next;
+    showToast(
+      "context attached: " + (item.label || item.kind),
+      "success",
+      1400,
+    );
+    inputRef.current?.focus();
+  };
+  const removeContextAttachment = (index) => {
+    contextAttachments.value = (contextAttachments.value || []).filter(
+      (_, i) => i !== index,
+    );
+  };
   const latestDuoRound = (() => {
     if (!duoCollaborateMode || isStreaming.value) {
       return null;
@@ -1721,6 +1788,13 @@ function ChatSidebar() {
       if (near) setUnreadLive(0);
     }
   };
+  const markReading = () => {
+    const el = msgsRef.current;
+    if (!el || isNearBottom(el, 48)) return;
+    stickToBottom.current = false;
+    showScrollBtn.value = true;
+    setViewportMode("reading");
+  };
   const scrollToBottom = () => {
     if (msgsRef.current) {
       msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
@@ -1896,16 +1970,24 @@ function ChatSidebar() {
         (codexStatus.models || []).length ||
         Math.max(0, modelOptions.length - 1)
       : Math.max(0, modelOptions.length - 1);
+  const routeState = buildRouteState({
+    currentProject: currentProject.value || "",
+    activeScope: scope,
+    activeRun: activeRun.value,
+    chatPageInfo: chatPageInfo.value,
+    activeDualSession: activeDualSession.value,
+    dualSessionData: dualSessionData.value,
+  });
   const routeRun =
     activeRun.value &&
-    activeRun.value.project === (currentProject.value || "_orchestrator")
+    normalizeProjectKey(activeRun.value.project) === routeState.key
       ? activeRun.value
       : null;
   const routeDelegations = summarizeDelegationsForRoute(
     delegations.value,
     currentProject.value || "",
   );
-  const routeWarnings = [];
+  const routeWarnings = [...routeState.mismatches];
   if (providerState === "offline") {
     routeWarnings.push(`${soloProvider} runtime is offline`);
   }
@@ -1921,8 +2003,8 @@ function ChatSidebar() {
   }
   const route = {
     duo: duoEnabled,
-    target: currentProject.value || "orchestrator",
-    scope: `${scope.kind || "global"}:${scope.title || currentProject.value || "orchestrator"}`,
+    target: routeState.label,
+    scope: routeState.scopeLabel,
     inputLabel: duoEnabled
       ? duoInputLabel(duoComposerAction, activeOrchestrator, roomTarget)
       : `${soloProvider} ${chatRunMode.value}`,
@@ -1957,6 +2039,9 @@ function ChatSidebar() {
     run: routeRun,
     warnings: routeWarnings,
     canLeadExecute: !!activeOrchestrator?.write_enabled,
+    disableExecuteReason: activeOrchestrator
+      ? `${activeOrchestrator.label || activeOrchestrator.provider || "lead"} has no write access`
+      : "Choose a write-enabled lead first",
   };
   return html`<div
     class="chat-side"
@@ -2025,7 +2110,7 @@ function ChatSidebar() {
           title="Export chat"
           onClick=${() => {
             if (__IS_TAURI) {
-              const p = currentProject.value || "_orchestrator";
+              const p = normalizeProjectKey(currentProject.value || "");
               __invoke("export_chat", { project: p })
                 .then((r) => {
                   const blob = new Blob([r.markdown], {
@@ -2186,17 +2271,27 @@ function ChatSidebar() {
         showToast("effort: " + (value || "default"), "success", 1200);
       }}
       onProjectContext=${() =>
-        insertPrompt(
-          currentProject.value
-            ? `[PROJECT_CONTEXT:${currentProject.value}]\nSummarize current state, blockers, dirty files, and safest next action.`
-            : "[DASHBOARD_FULL]\nSummarize the global project state, blockers, and safest next route.",
-        )}
+        attachContext({
+          key: "project:" + routeState.key,
+          kind: "project",
+          label: routeState.isGlobal
+            ? "global dashboard"
+            : routeState.label + " state",
+          prompt: routeState.isGlobal
+            ? "[DASHBOARD_FULL]\nSummarize the global project state, blockers, and safest next route."
+            : `[PROJECT_CONTEXT:${routeState.label}]\nSummarize current state, blockers, dirty files, and safest next action.`,
+        })}
       onGraphContext=${() =>
-        insertPrompt(
-          currentProject.value
-            ? `[GRAPH_CONTEXT:${currentProject.value}]\nUse code graph context to identify dependency risks before making changes.`
-            : "[GRAPH_CONTEXT:overview]\nUse the project graph to choose the safest orchestration target.",
-        )}
+        attachContext({
+          key: "graph:" + routeState.key,
+          kind: "graph",
+          label: routeState.isGlobal
+            ? "global graph"
+            : routeState.label + " graph",
+          prompt: routeState.isGlobal
+            ? "[GRAPH_CONTEXT:overview]\nUse the project graph to choose the safest orchestration target."
+            : `[GRAPH_CONTEXT:${routeState.label}]\nUse code graph context to identify dependency risks before making changes.`,
+        })}
       onReview=${() =>
         insertPrompt(
           currentProject.value
@@ -2211,6 +2306,11 @@ function ChatSidebar() {
       }}
       onMakePlan=${draftPlanFromDuo}
       onLeadExecute=${openExecutionWithLead}
+    />
+    <${ContextChips}
+      items=${contextAttachments.value || []}
+      onRemove=${removeContextAttachment}
+      onClear=${() => (contextAttachments.value = [])}
     />
     <${TranscriptStatusBar}
       route=${route}
@@ -2231,11 +2331,16 @@ function ChatSidebar() {
       <${OrchestrationMapCard}
         map=${orchestrationMap.value}
         onAttachGraph=${() =>
-          insertPrompt(
-            currentProject.value
-              ? `[GRAPH_CONTEXT:${currentProject.value}]\nUse this code context when planning and executing. Call out dependency risks before edits.`
-              : "[GRAPH_CONTEXT:overview]\nUse the project graph to choose the safest orchestration route.",
-          )}
+          attachContext({
+            key: "graph-route:" + routeState.key,
+            kind: "graph",
+            label: routeState.isGlobal
+              ? "global graph"
+              : routeState.label + " graph",
+            prompt: routeState.isGlobal
+              ? "[GRAPH_CONTEXT:overview]\nUse the project graph to choose the safest orchestration route."
+              : `[GRAPH_CONTEXT:${routeState.label}]\nUse this code context when planning and executing. Call out dependency risks before edits.`,
+          })}
         onOpenGraph=${() => loadGraph(currentProject.value || "overview")}
         onVerifyGraph=${() =>
           insertPrompt(
@@ -2277,7 +2382,7 @@ function ChatSidebar() {
           }
           insertPrompt(
             [
-              `[PROJECT_AGENT_ROUTE:${route.project || currentProject.value || "_orchestrator"}]`,
+              `[PROJECT_AGENT_ROUTE:${route.project || routeState.label}]`,
               `Фаза: ${routePhaseLabel(phase)} (${phase})`,
               `Исполнитель: ${route.executor_provider || "auto"}`,
               route.reviewer_provider
@@ -2413,6 +2518,8 @@ function ChatSidebar() {
       class="ch-msgs"
       ref=${msgsRef}
       onScroll=${onScroll}
+      onWheel=${markReading}
+      onPointerDown=${markReading}
       style="position:relative"
     >
       ${!sideMessages.value.length && !isStreaming.value
@@ -2440,11 +2547,16 @@ function ChatSidebar() {
               </button>
               <button
                 onClick=${() =>
-                  insertPrompt(
-                    currentProject.value
-                      ? `[GRAPH_CONTEXT:${currentProject.value}]\nMap the code structure, risks, and safest implementation path.`
-                      : "[GRAPH_CONTEXT:overview]\nMap project dependencies and identify the safest next orchestration target.",
-                  )}
+                  attachContext({
+                    key: "graph-map:" + routeState.key,
+                    kind: "graph",
+                    label: routeState.isGlobal
+                      ? "global graph map"
+                      : routeState.label + " graph map",
+                    prompt: routeState.isGlobal
+                      ? "[GRAPH_CONTEXT:overview]\nMap project dependencies and identify the safest next orchestration target."
+                      : `[GRAPH_CONTEXT:${routeState.label}]\nMap the code structure, risks, and safest implementation path.`,
+                  })}
               >
                 graph context
               </button>
@@ -2710,7 +2822,7 @@ function ChatSidebar() {
             onClick=${() => {
               __invoke &&
                 __invoke("stop_chat", {
-                  project: currentProject.value || null,
+                  project: projectParam(currentProject.value || "") || null,
                 })
                   .then((res) => {
                     showToast(
@@ -3517,7 +3629,8 @@ function StreamBubble() {
   const run = activeRun.value;
   const runningRun =
     run &&
-    run.project === (currentProject.value || "_orchestrator") &&
+    normalizeProjectKey(run.project) ===
+      normalizeProjectKey(currentProject.value || "") &&
     !["done", "failed", "cancelled"].includes(run.status || "");
   if (
     !isStreaming.value &&

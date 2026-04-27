@@ -6,6 +6,7 @@ import {
   agents,
   currentProject,
   sideMessages,
+  contextAttachments,
   chatPageInfo,
   chatHistoryLoading,
   streamText,
@@ -65,6 +66,7 @@ import {
   showToast,
 } from "/store.js";
 import { normalizeSoloSelection } from "/provider-caps.js";
+import { normalizeProjectKey, projectParam } from "/route-state.js";
 // ===== API =====
 
 let recog = null;
@@ -1295,7 +1297,8 @@ async function sendMessage(msg) {
     showToast("Wait for current response to complete", "error", 2000);
     return;
   }
-  const proj = currentProject.value || "";
+  const proj = projectParam(currentProject.value || "");
+  const projectKey = normalizeProjectKey(currentProject.value || "");
   lastUserMsg.value = msg;
   // Apply chat mode prefix
   if (chatMode.value) {
@@ -1311,6 +1314,13 @@ async function sendMessage(msg) {
     if (prefix) msg = prefix + "\n\n" + msg;
     chatMode.value = "";
   }
+  const contextBlocks = (contextAttachments.value || [])
+    .map((item) => String(item?.prompt || "").trim())
+    .filter(Boolean);
+  if (contextBlocks.length) {
+    msg = contextBlocks.join("\n\n") + "\n\n[USER_TASK]\n" + msg;
+    contextAttachments.value = [];
+  }
   if (attFiles.value.length) {
     const paths = attFiles.value
       .filter((f) => f.path)
@@ -1322,7 +1332,7 @@ async function sendMessage(msg) {
   clrDr();
   sideMessages.value = [
     ...sideMessages.value,
-    { ts: new Date().toISOString(), role: "user", msg },
+    { ts: new Date().toISOString(), role: "user", msg: lastUserMsg.value },
   ];
   isStreaming.value = true;
   streamText.value = "";
@@ -1334,7 +1344,6 @@ async function sendMessage(msg) {
     const tools = [];
     if (__IS_TAURI) {
       const normalizedSelection = normalizedSoloProviderSelection();
-      const projectKey = proj || "_orchestrator";
       activeRun.value = {
         id: "local-" + Date.now(),
         project: projectKey,
@@ -1705,7 +1714,7 @@ async function sendMessage(msg) {
     const liveText = streamText.value || full || "";
     const liveChain = [...streamChain.value];
     // Reload chat from JSONL (single source of truth) — prevents duplicates
-    await loadChat(currentProject.value || "_orchestrator");
+    await loadChat(normalizeProjectKey(currentProject.value || ""));
     const probe = liveText.trim().slice(0, 160);
     const hasLive = !!probe || liveChain.length > 0;
     const persisted =
@@ -1792,7 +1801,7 @@ async function approveDel(id) {
       4000,
     );
     // Reload current chat from JSONL (source of truth) — don't append to sideMessages directly
-    const active = currentProject.value || "_orchestrator";
+    const active = normalizeProjectKey(currentProject.value || "");
     await loadChat(active);
   } catch (e) {
     clearInterval(timer);

@@ -172,3 +172,23 @@ This pass is not about adding new orchestration capability. It is a product poli
 5. Reload preserves the active route and does not make the app look idle while backend work is running.
 6. Strategy, Plans, Graph, Project, and Orchestrator contexts are visible in chat before sending.
 7. UI source cannot ship obvious mojibake or missing hook imports again.
+
+## Implementation Checkpoint 2026-04-27
+
+Completed in this pass:
+
+1. Added `src-ui/route-state.js` and routed app/chat/api through normalized project keys.
+2. Removed Duo as a center-canvas replacement; header Duo now toggles unified chat Duo mode.
+3. Replaced the legacy Duo page with a compatibility redirect back to main chat Duo.
+4. Split route card into compact summary plus expandable route details and disabled reasons.
+5. Added context attachment chips for project/graph context and consumed them on send.
+6. Kept user-visible chat text clean when hidden context blocks are attached.
+7. Added route mismatch warnings for chat history, active run, scope, and Duo session drift.
+8. Improved scroll/read mode protection during live output.
+9. Added project rail quick filters and badges for dirty/stale/blocker state.
+10. Extended UI smoke coverage to include `route-state.js`.
+
+Verified:
+
+1. `npm.cmd run check:ui` passes.
+2. `npm.cmd test` passes: 41 Rust/Tauri tests.

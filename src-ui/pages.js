@@ -17,6 +17,7 @@ import {
   dualSessionData,
   dualBusy,
   sideMessages,
+  showDualAgents,
   chatCollabMode,
   activeRoomTab,
   activeScope,
@@ -866,7 +867,7 @@ function PlansView() {
       summary: `Duo actions apply to plan: ${plan.title}`,
     };
     showPlans.value = false;
-    chatCollabMode.value = true;
+    chatCollabMode.value = "duo";
     activeRoomTab.value = "execute";
     try {
       const session = await ensureDualSession(project);
@@ -3324,10 +3325,31 @@ function DualAgentsView() {
       <div
         style="font-size:var(--fs-s);color:var(--t3);margin-bottom:var(--sp-s)"
       >
-        This compatibility view is deprecated. Use the main chat with the
-        Solo/Duo toggle instead.
+        This compatibility view is deprecated. Duo now lives in the main chat
+        route so the project workbench stays visible.
       </div>
-      <${EmbeddedDualAgentsPanel} tab="collaborate" />
+      <div style="display:flex;gap:var(--sp-s);flex-wrap:wrap">
+        <button
+          class="action-btn primary"
+          onClick=${() => {
+            chatCollabMode.value = "duo";
+            activeRoomTab.value = "collaborate";
+            showDualAgents.value = false;
+          }}
+        >
+          use main chat duo
+        </button>
+        <button
+          class="action-btn"
+          onClick=${() => {
+            chatCollabMode.value = "solo";
+            activeRoomTab.value = "chat";
+            showDualAgents.value = false;
+          }}
+        >
+          back to solo chat
+        </button>
+      </div>
     </div>
   </div>`;
 }
