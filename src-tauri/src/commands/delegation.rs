@@ -94,7 +94,7 @@ pub fn get_delegations(state: State<Arc<AppState>>) -> Value {
     let delegations = match state.delegations.lock() {
         Ok(d) => d
             .values()
-            .filter(|d| d.status == crate::commands::status::DelegationStatus::Pending)
+            .filter(|d| !d.status.is_terminal())
             .map(|d| serde_json::to_value(d).unwrap_or_default())
             .collect::<Vec<_>>(),
         Err(_) => Vec::new(),

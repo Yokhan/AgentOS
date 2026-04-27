@@ -70,6 +70,80 @@ import { normalizeProjectKey, projectParam } from "/route-state.js";
 // ===== API =====
 
 let recog = null;
+const ACTIVE_DELEGATION_STATUSES = new Set([
+  "pending",
+  "needs_permission",
+  "scheduled",
+  "running",
+  "escalated",
+  "deciding",
+  "verifying",
+]);
+
+function extractDelegationTags(text) {
+  const out = [];
+  const tagRe = /<delegation\b([^>]*)\/>/g;
+  for (const tag of String(text || "").matchAll(tagRe)) {
+    const attrs = {};
+    for (const attr of tag[1].matchAll(/([a-zA-Z_:-]+)="([^"]*)"/g)) {
+      attrs[attr[1]] = attr[2];
+    }
+    if (attrs.id && attrs.project) {
+      out.push({
+        id: attrs.id,
+        project: attrs.project,
+        status: attrs.status || "",
+      });
+    }
+  }
+  return out;
+}
+
+function mergeDelegationItems(items, { pruneActive = false } = {}) {
+  if (!items?.length && !pruneActive) return;
+  items = items || [];
+  const activeIds = new Set(items.map((item) => item?.id).filter(Boolean));
+  const next = {};
+  for (const [id, existing] of Object.entries(delegations.value || {})) {
+    const status = existing?.status || "";
+    if (
+      !pruneActive ||
+      !ACTIVE_DELEGATION_STATUSES.has(status) ||
+      activeIds.has(id)
+    ) {
+      next[id] = existing;
+    }
+  }
+  for (const item of items) {
+    if (!item?.id) continue;
+    next[item.id] = {
+      ...(next[item.id] || {}),
+      project: item.project || next[item.id]?.project || "?",
+      status: item.status || next[item.id]?.status || "pending",
+      task: item.task || next[item.id]?.task,
+      ts: item.ts || next[item.id]?.ts,
+    };
+  }
+  delegations.value = next;
+}
+
+async function loadDelegations() {
+  try {
+    const r = await fetch("/api/delegations", { method: "POST" });
+    const d = await r.json();
+    const items = (d.delegations || []).map((item) => ({
+      id: item.id,
+      project: item.project,
+      status: item.status || "pending",
+      task: item.task,
+      ts: item.ts,
+    }));
+    mergeDelegationItems(items, { pruneActive: true });
+  } catch (e) {
+    console.warn("loadDelegations:", e);
+  }
+}
+
 function togVoice() {
   if (
     !("webkitSpeechRecognition" in window) &&
@@ -481,21 +555,19 @@ async function loadChat(p) {
     };
     const newDel = { ...delegations.value };
     for (const m of msgs) {
-      const dms = [
-        ...(m.msg || "").matchAll(
-          /<delegation id="([^"]+)" project="([^"]+)"\/>/g,
-        ),
-      ];
+      const dms = extractDelegationTags(m.msg || "");
       for (const dm of dms) {
-        if (!newDel[dm[1]]) {
-          newDel[dm[1]] = {
-            project: dm[2],
+        if (!newDel[dm.id]) {
+          newDel[dm.id] = {
+            project: dm.project,
             status: m.msg.includes("✓") ? "done" : "pending",
           };
+          if (dm.status) newDel[dm.id].status = dm.status;
         }
       }
     }
     delegations.value = newDel;
+    await loadDelegations();
   } catch (e) {
     if (myId === _chatLoadId) {
       console.warn("loadChat:", e);
@@ -970,6 +1042,7 @@ async function queueRoomAgentTask(
     const updated = { ...delegations.value };
     updated[res.delegation_id] = { project, status: "pending" };
     delegations.value = updated;
+    await loadDelegations();
     await loadInbox();
     await loadSignals();
     showToast("Agent task queued", "success");
@@ -1075,6 +1148,7 @@ async function queueWorkItemExecution(workItemId) {
     const updated = { ...delegations.value };
     updated[res.delegation_id] = { project: res.project, status: "pending" };
     delegations.value = updated;
+    await loadDelegations();
     await loadPlansData();
     await loadInbox();
     await loadSignals();
@@ -1585,13 +1659,22 @@ async function sendMessage(msg) {
                   evt.id +
                   '" project="' +
                   evt.project +
-                  '"/>';
+                  '" status="pending" action="approve_required"/>';
                 chain.push({
                   type: "delegation",
                   id: evt.id,
                   project: evt.project,
                   task: evt.task,
                 });
+                mergeDelegationItems([
+                  {
+                    id: evt.id,
+                    project: evt.project,
+                    status: "pending",
+                    task: evt.task,
+                  },
+                ]);
+                loadDelegations().catch(() => {});
               }
               // Done
               if (evt.type === "done") {
@@ -1687,13 +1770,11 @@ async function sendMessage(msg) {
       }
     }
     isStreaming.value = false;
-    const dms = [
-      ...full.matchAll(/<delegation id="([^"]+)" project="([^"]+)"\/>/g),
-    ];
+    const dms = extractDelegationTags(full);
     if (dms.length) {
       const nd = { ...delegations.value };
       for (const dm of dms) {
-        nd[dm[1]] = { project: dm[2], status: "pending" };
+        nd[dm.id] = { project: dm.project, status: dm.status || "pending" };
       }
       delegations.value = nd;
     }
@@ -1803,6 +1884,7 @@ async function approveDel(id) {
     // Reload current chat from JSONL (source of truth) — don't append to sideMessages directly
     const active = normalizeProjectKey(currentProject.value || "");
     await loadChat(active);
+    await loadDelegations();
   } catch (e) {
     clearInterval(timer);
     const d2 = { ...delegations.value };
@@ -1815,11 +1897,12 @@ async function rejectDel(id) {
   const d = { ...delegations.value };
   d[id] = { ...d[id], status: "rejected" };
   delegations.value = d;
-  fetch("/api/reject/" + id, {
+  await fetch("/api/reject/" + id, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: "{}",
   });
+  await loadDelegations();
 }
 
 async function loadDualSession(sessionId) {
@@ -2084,6 +2167,7 @@ export {
   checkOrch,
   loadSegments,
   loadChat,
+  loadDelegations,
   loadModules,
   loadPlan,
   loadQueue,

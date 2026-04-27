@@ -37,6 +37,7 @@ import {
   loadInbox,
   loadPlansData,
   loadChat,
+  loadDelegations,
   loadModules,
   loadProjectPlan,
   loadGraph,
@@ -240,6 +241,7 @@ try {
     loadPlansData(),
     loadSignals(),
     loadPerms(),
+    loadDelegations(),
   ]);
   syncRecoveredActiveRun();
   await loadChat(normalizeProjectKey(currentProject.value || ""));
@@ -285,6 +287,7 @@ setInterval(async () => {
   loadPlan();
   loadFeed();
   loadSignals();
+  loadDelegations();
   await loadInbox();
   const { inboxData } = await import("/store.js");
   if (inboxData.value.count > 0 && !inboxData.value.needs_user) {
@@ -316,5 +319,6 @@ setInterval(() => {
     loadAgents().catch(() => {});
     loadFeed().catch(() => {});
     loadSignals().catch(() => {});
+    loadDelegations().catch(() => {});
   }
 }, 1000);

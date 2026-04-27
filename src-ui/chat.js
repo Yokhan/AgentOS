@@ -116,6 +116,35 @@ import {
 const inpHist = [];
 let hIdx = -1;
 let draftT = null;
+const APPROVAL_DELEGATION_STATUSES = new Set(["pending", "needs_permission"]);
+const ACTIVE_DELEGATION_STATUSES = new Set([
+  "pending",
+  "needs_permission",
+  "scheduled",
+  "running",
+  "escalated",
+  "deciding",
+  "verifying",
+]);
+
+function extractDelegationTags(text) {
+  const out = [];
+  const tagRe = /<delegation\b([^>]*)\/>/g;
+  for (const tag of String(text || "").matchAll(tagRe)) {
+    const attrs = {};
+    for (const attr of tag[1].matchAll(/([a-zA-Z_:-]+)="([^"]*)"/g)) {
+      attrs[attr[1]] = attr[2];
+    }
+    if (attrs.id && attrs.project) {
+      out.push({
+        id: attrs.id,
+        project: attrs.project,
+        status: attrs.status || "",
+      });
+    }
+  }
+  return out;
+}
 
 function normalizeDuoView(value) {
   const next = String(value || "chat")
@@ -820,12 +849,13 @@ function InboxPanel() {
 
 function DelegationPanel() {
   const all = Object.entries(delegations.value);
-  const active = all.filter(
-    ([_, d]) =>
-      d.status !== "done" && d.status !== "rejected" && d.status !== "error",
+  const active = all.filter(([_, d]) =>
+    ACTIVE_DELEGATION_STATUSES.has(d?.status),
   );
-  const pending = all.filter(([_, d]) => d.status === "pending");
-  if (!active.length && !pending.length) return null;
+  const pending = all.filter(([_, d]) =>
+    APPROVAL_DELEGATION_STATUSES.has(d?.status),
+  );
+  if (!active.length) return null;
   return html`<div class="deleg-panel">
     <div class="deleg-panel-hdr">
       <span
@@ -879,7 +909,7 @@ function DelegationPanel() {
         <span class="dc-proj">${d.project || "?"}</span>
         <span
           class="dc-status"
-          style="color:${d.status === "pending"
+          style="color:${APPROVAL_DELEGATION_STATUSES.has(d.status)
             ? "var(--yellow)"
             : d.status === "running"
               ? "var(--cyan)"
@@ -888,7 +918,7 @@ function DelegationPanel() {
                 : "var(--accent)"}"
           >${d.status}${el > 2 ? " " + el + "s" : ""}</span
         >
-        ${d.status === "pending"
+        ${APPROVAL_DELEGATION_STATUSES.has(d.status)
           ? html`<span class="dc-actions"
               ><button
                 class="dc-btn"
@@ -3781,9 +3811,7 @@ function ChatMsg({ m }) {
     (m.msg || "").startsWith("Error:") || (m.msg || "").includes("timed out");
   const canCopy = m.role === "assistant";
   const cls = m.role === "user" ? (isViaPA ? "a" : "u") : "a";
-  const dms = [
-    ...(m.msg || "").matchAll(/<delegation id="([^"]+)" project="([^"]+)"\/>/g),
-  ];
+  const dms = extractDelegationTags(m.msg || "");
   const clean = (m.msg || "").replace(/<delegation[^>]*\/>/g, "");
   const chain = m.chain || [];
   const groupedChain = groupChainBlocks(chain);
@@ -3919,7 +3947,7 @@ function ChatMsg({ m }) {
           copy
         </button>`
       : ""}
-    ${dms.map((dm) => html`<${DelegBtn} id=${dm[1]} project=${dm[2]} />`)}
+    ${dms.map((dm) => html`<${DelegBtn} id=${dm.id} project=${dm.project} />`)}
     <div class="ts" title=${m.ts || ""}>
       ${ft(m.ts)}${m.meta || ""}${isError && m.role === "assistant"
         ? html` <button
@@ -4024,10 +4052,12 @@ function DelegBtn({ id, project }) {
   const el = d?._start ? Math.round((Date.now() - d._start) / 1000) : 0;
   const SI = {
     pending: "○",
+    needs_permission: "!",
     scheduled: "◷",
     running: "⏳",
     escalated: "⚡",
     deciding: "?",
+    verifying: "...",
     done: "✓",
     failed: "✗",
     rejected: "✗",
@@ -4080,7 +4110,7 @@ function DelegBtn({ id, project }) {
           @ ${ft(d.scheduled_at)}
         </div>`
       : null}
-    ${s === "pending"
+    ${APPROVAL_DELEGATION_STATUSES.has(s)
       ? html`<div class="dc2-actions">
           <button class="dc2-approve" onClick=${() => approveDel(id)}>
             approve
@@ -4191,9 +4221,7 @@ ${d.git_diff}</pre
 
 function DelegTracker() {
   const active = Object.entries(delegations.value).filter(([_, d]) =>
-    ["pending", "running", "escalated", "scheduled", "deciding"].includes(
-      d?.status,
-    ),
+    ACTIVE_DELEGATION_STATUSES.has(d?.status),
   );
   if (!active.length) return null;
   return html`<div class="deleg-tracker">
