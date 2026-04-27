@@ -65,6 +65,17 @@ const checks = [
       views.includes('e.key === "Escape"'),
   },
   {
+    name: "risky bulk actions require confirmation",
+    ok:
+      chat.includes("Approve ${pending.length} pending delegation") &&
+      chat.includes("Queue next work item") &&
+      pages.includes(
+        "Queue ${selectedParallelItems.length} work items in parallel",
+      ) &&
+      pages.includes("Execute next approved step") &&
+      pages.includes("Approve all ${allIds.length} step"),
+  },
+  {
     name: "release checklist covers manual UX smoke",
     ok:
       checklist.includes("Route persistence") &&

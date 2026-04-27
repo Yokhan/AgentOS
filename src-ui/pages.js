@@ -1181,7 +1181,15 @@ function StrategyView() {
                   ? html`<button
                       class="action-btn"
                       style="margin-top:var(--sp-s);border-color:var(--green);color:var(--green)"
-                      onClick=${() => executeNextStep(s.id)}
+                      onClick=${() => {
+                        if (
+                          confirm(
+                            `Execute next approved step for "${s.title || s.goal || s.id}"?`,
+                          )
+                        ) {
+                          executeNextStep(s.id);
+                        }
+                      }}
                     >
                       execute next step
                     </button>`
@@ -1194,7 +1202,13 @@ function StrategyView() {
                         const allIds = s.plans.flatMap((p) =>
                           p.steps.map((st) => st.id),
                         );
-                        approveSteps(s.id, allIds);
+                        if (
+                          confirm(
+                            `Approve all ${allIds.length} step(s) for "${s.title || s.goal || s.id}"?`,
+                          )
+                        ) {
+                          approveSteps(s.id, allIds);
+                        }
                       }}
                     >
                       approve all steps
@@ -1687,6 +1701,9 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
     }
   };
   const queueExistingWorkItem = async (item) => {
+    if (!confirm(`Queue work item "${item.title || item.id}" for execution?`)) {
+      return;
+    }
     dualBusy.value = "work-item:queue:" + item.id;
     try {
       await queueWorkItemExecution(item.id);
@@ -1727,6 +1744,11 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
       showToast("Select at least two queueable work items", "error");
       return;
     }
+    if (
+      !confirm(`Queue ${selectedParallelItems.length} work items in parallel?`)
+    ) {
+      return;
+    }
     dualBusy.value = "parallel:queue";
     try {
       await queueParallelWorkItems(
@@ -1744,6 +1766,7 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
   };
   const queueProviderRound = async (provider) => {
     if (!activeDualSession.value) return;
+    if (!confirm(`Queue all safe ${provider} tasks for this room?`)) return;
     dualBusy.value = "parallel:provider:" + provider;
     try {
       await queueProviderParallelRound(activeDualSession.value, provider);
@@ -3262,7 +3285,15 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
                         <button
                           class="action-btn"
                           disabled=${!!dualBusy.value}
-                          onClick=${() => approveDel(delegation.id)}
+                          onClick=${() => {
+                            if (
+                              confirm(
+                                `Approve delegation ${delegation.id} for ${delegation.project}?`,
+                              )
+                            ) {
+                              approveDel(delegation.id);
+                            }
+                          }}
                         >
                           approve
                         </button>

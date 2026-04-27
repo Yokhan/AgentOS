@@ -839,6 +839,12 @@ function DelegationPanel() {
               class="dc-btn"
               style="background:var(--green);color:var(--bg)"
               onClick=${async () => {
+                if (
+                  !confirm(
+                    `Approve ${pending.length} pending delegation(s)? This can start project agents.`,
+                  )
+                )
+                  return;
                 for (let i = 0; i < pending.length; i++) {
                   showToast(
                     i +
@@ -2657,6 +2663,13 @@ function ChatSidebar() {
           const progress = route.progress || {};
           const phase = progress.phase || route.route_state || "idle";
           if (route.can_queue_next && next.id) {
+            if (
+              !confirm(
+                `Queue next work item for ${route.project || routeState.label}?`,
+              )
+            ) {
+              return;
+            }
             try {
               await queueWorkItemExecution(next.id);
               await Promise.allSettled([

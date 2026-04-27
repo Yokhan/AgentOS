@@ -193,6 +193,17 @@ Verified:
 1. `npm.cmd run check:ui` passes.
 2. `npm.cmd test` passes: 41 Rust/Tauri tests.
 
+## Final Hardening Checkpoint 2026-04-27
+
+Completed after final audit:
+
+1. Added explicit confirmations for bulk delegation approval, route queue, plan step execution, approve-all steps, single work-item queue, parallel queue, provider-wide queue, and linked delegation approval.
+2. Extended critical click-wiring regression checks to require risky-action confirmations.
+
+Verified:
+
+1. Pending in this checkpoint: run `npm.cmd run check:ui` and `npm.cmd test` before push.
+
 ## Completion Checkpoint 2026-04-27
 
 Completed in the full-plan finish pass:
