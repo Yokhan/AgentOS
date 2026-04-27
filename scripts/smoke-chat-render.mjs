@@ -12,6 +12,7 @@ const files = [
   "api.js",
   "bridge.js",
   "chat.js",
+  "pages.js",
   "provider-caps.js",
   "store.js",
   "utils.js",
@@ -68,6 +69,15 @@ globalThis.setInterval = (...args) => {
 const storeModuleUrl = pathToFileURL(path.join(tempDir, "store.js")).href;
 const chatModuleUrl = pathToFileURL(path.join(tempDir, "chat.js")).href;
 const viewsModuleUrl = pathToFileURL(path.join(tempDir, "views.js")).href;
+const pagesSource = fs.readFileSync(path.join(srcDir, "pages.js"), "utf8");
+if (
+  pagesSource.includes("useRef(") &&
+  !/import\s*\{[^}]*\buseRef\b[^}]*\}\s*from\s+["']\/vendor\/preact-bundle\.mjs["']/.test(
+    pagesSource,
+  )
+) {
+  throw new Error("pages.js uses useRef but does not import it");
+}
 const {
   agents,
   isLoading,

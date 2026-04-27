@@ -256,6 +256,26 @@ function reconcilePolledActivity(projectKey, poll) {
       ...activities.value,
       [projectKey]: poll.activity,
     };
+    const detail = [poll.activity.action, poll.activity.detail]
+      .filter(Boolean)
+      .join(": ");
+    if (
+      activeRun.value?.project === projectKey &&
+      !["done", "failed", "cancelled"].includes(activeRun.value.status || "") &&
+      detail &&
+      detail !== activeRun.value.detail
+    ) {
+      appendActiveRunEvent({
+        type: "activity",
+        phase: poll.activity.action || "backend",
+        detail,
+      });
+      updateActiveRun({
+        status: "running",
+        phase: poll.activity.action || "backend",
+        detail,
+      });
+    }
     return;
   }
   if (!poll.running && activities.value[projectKey]) {

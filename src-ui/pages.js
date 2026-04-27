@@ -1,5 +1,5 @@
 // AgentOS page views — Settings, Plans, Strategy
-import { html, useEffect, useState } from "/vendor/preact-bundle.mjs";
+import { html, useEffect, useRef, useState } from "/vendor/preact-bundle.mjs";
 import { ft, md } from "/utils.js";
 import { __IS_TAURI, __invoke } from "/bridge.js";
 import {

@@ -318,7 +318,7 @@ body.chat-resizing {
 /* === WORKBENCH DASHBOARD === */
 .workbench-content {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
     gap: var(--sp-m);
     padding: var(--sp-m);
     overflow: hidden;
@@ -486,6 +486,7 @@ body.chat-resizing {
 }
 .project-rail {
     min-height: 0;
+    max-height: calc(100vh - 86px);
     overflow: hidden;
     border: 1px solid var(--border);
     background: color-mix(in srgb, var(--sf) 72%, var(--bg));
@@ -584,6 +585,18 @@ body.chat-resizing {
     gap: var(--sp-s);
     place-items: center;
     color: var(--t3);
+}
+.project-workbench-content {
+    align-items: stretch;
+}
+.project-workbench-primary {
+    min-height: 0;
+    overflow: hidden;
+}
+.project-workbench-primary > .content {
+    height: 100%;
+    padding: 0;
+    overflow-y: auto;
 }
 @media (max-width: 1200px) {
     .workbench-content {

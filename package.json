@@ -1,13 +1,13 @@
 {
   "name": "agent-os",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Agent OS - Desktop command center for AI agents",
   "private": true,
   "scripts": {
     "tauri": "npx @tauri-apps/cli",
     "dev": "npx @tauri-apps/cli dev",
     "build": "npx @tauri-apps/cli build",
-    "check:ui": "node --check src-ui/chat.js && node scripts/check-store-imports.mjs && node scripts/smoke-chat-render.mjs",
+    "check:ui": "node --check src-ui/app.js && node --check src-ui/chat.js && node --check src-ui/views.js && node --check src-ui/pages.js && node scripts/check-store-imports.mjs && node scripts/smoke-chat-render.mjs",
     "build:updater": "powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1",
     "test": "cargo test --manifest-path src-tauri/Cargo.toml"
   },

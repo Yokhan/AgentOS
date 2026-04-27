@@ -202,7 +202,7 @@ ${pagesErr}</pre
                 : duoWorkspaceActive
                   ? duoWorkspace
                   : currentProject.value
-                    ? html`<${DetailView} />`
+                    ? html`<${ProjectWorkbenchView} />`
                     : html`<${DashboardWorkbenchView} />`}<${ChatSidebar} />
     </div>
     <${AnalyticsBar} />
@@ -1451,16 +1451,6 @@ function DashboardWorkbenchView() {
   }
 
   return html`<div class="content workbench-content">
-    <section class="workbench-primary">
-      <${StatsRow} />
-      <${WorkbenchFocus} all=${allAgents} />
-      <div class="workbench-panels">
-        <${ActivePlanCard} />
-        <${PlanPanel} />
-        <${QueuePanel} />
-        <${SignalsPanel} />
-      </div>
-    </section>
     <aside class="project-rail">
       <div class="project-rail-head">
         <div>
@@ -1486,6 +1476,104 @@ function DashboardWorkbenchView() {
         flatItems=${flatItems}
       />
     </aside>
+    <section class="workbench-primary">
+      <${StatsRow} />
+      <${WorkbenchFocus} all=${allAgents} />
+      <div class="workbench-panels">
+        <${ActivePlanCard} />
+        <${PlanPanel} />
+        <${QueuePanel} />
+        <${SignalsPanel} />
+      </div>
+    </section>
+  </div>`;
+}
+
+function ProjectWorkbenchView() {
+  const seg = segments.value;
+  const allAgents = agents.value;
+  let visibleAgents = allAgents;
+  const sq = searchQuery.value.toLowerCase();
+  if (sq) {
+    visibleAgents = visibleAgents.filter(
+      (x) =>
+        x.name.toLowerCase().includes(sq) ||
+        x.task?.toLowerCase().includes(sq) ||
+        (x.segment || "").toLowerCase().includes(sq),
+    );
+  }
+  const af = activeFilter.value;
+  if (af === "attention") {
+    visibleAgents = visibleAgents.filter(
+      (x) => x.blockers || (x.uncommitted || 0) > 20,
+    );
+  }
+  if (af === "active") visibleAgents = visibleAgents.filter((x) => x.task);
+  if (af === "stale") {
+    visibleAgents = visibleAgents.filter((x) => (x.days || 999) > 7);
+  }
+  const sb = sortBy.value;
+  if (sb === "name") {
+    visibleAgents = [...visibleAgents].sort((x, y) =>
+      x.name.localeCompare(y.name),
+    );
+  } else if (sb === "uncommitted") {
+    visibleAgents = [...visibleAgents].sort(
+      (x, y) => (y.uncommitted || 0) - (x.uncommitted || 0),
+    );
+  } else if (sb === "days") {
+    visibleAgents = [...visibleAgents].sort(
+      (x, y) => (x.days || 999) - (y.days || 999),
+    );
+  } else if (sb === "status") {
+    const o = { blocked: 0, working: 1, idle: 2, sleeping: 3 };
+    visibleAgents = [...visibleAgents].sort(
+      (x, y) => (o[x.status] ?? 4) - (o[y.status] ?? 4),
+    );
+  }
+  const segMap = {};
+  const assigned = new Set();
+  const otherItems = [];
+  for (const [name, projects] of Object.entries(seg)) {
+    const items = visibleAgents.filter((x) => projects.includes(x.name));
+    if (items.length > 2) segMap[name] = items;
+    else otherItems.push(...items);
+    projects.forEach((p) => assigned.add(p));
+  }
+  const unassigned = visibleAgents.filter((x) => !assigned.has(x.name));
+  otherItems.push(...unassigned);
+  if (otherItems.length) segMap["Other"] = otherItems;
+  const useFlat = sb !== "";
+  const flatItems = useFlat ? visibleAgents : [];
+  const filterBar = af
+    ? html`<div class="project-rail-filter">
+        Filter: ${af}
+        <span onClick=${() => (activeFilter.value = "")}>clear</span>
+      </div>`
+    : null;
+  return html`<div class="content workbench-content project-workbench-content">
+    <aside class="project-rail">
+      <div class="project-rail-head">
+        <div>
+          <div class="workbench-eyebrow">project navigation</div>
+          <b>${visibleAgents.length}/${allAgents.length} visible</b>
+        </div>
+        <button onClick=${() => (currentProject.value = null)}>
+          dashboard
+        </button>
+      </div>
+      <${SearchBar} />
+      ${filterBar}
+      <${ProjectRail}
+        items=${visibleAgents}
+        segMap=${segMap}
+        useFlat=${useFlat}
+        flatItems=${flatItems}
+      />
+    </aside>
+    <section class="workbench-primary project-workbench-primary">
+      <${DetailView} />
+    </section>
   </div>`;
 }
 
@@ -1504,4 +1592,5 @@ export {
   AnalyticsBar,
   DashboardView,
   DashboardWorkbenchView,
+  ProjectWorkbenchView,
 };

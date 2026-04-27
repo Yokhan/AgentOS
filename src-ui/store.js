@@ -3,7 +3,9 @@ import { signal, effect } from "/vendor/preact-bundle.mjs";
 
 // ===== STATE (signals — reactive, global) =====
 const agents = signal([]);
-const currentProject = signal(null);
+const currentProject = signal(
+  localStorage.getItem("agentos_current_project") || null,
+);
 const sideMessages = signal([]);
 const sideTitle = signal("orchestrator");
 const composerDraftText = signal("");
@@ -49,6 +51,13 @@ const chatRunMode = signal(
 const chatAccessLevel = signal(
   localStorage.getItem("agentos_chat_access_level") || "write",
 );
+effect(() => {
+  if (currentProject.value) {
+    localStorage.setItem("agentos_current_project", currentProject.value);
+  } else {
+    localStorage.removeItem("agentos_current_project");
+  }
+});
 effect(() =>
   localStorage.setItem("agentos_claude_model", selectedClaudeModel.value),
 );

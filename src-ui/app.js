@@ -17,11 +17,13 @@ import {
   theme,
   isLoading,
   isStreaming,
+  activeRun,
   activities,
   delegations,
   sideMessages,
   projectPlan,
   permData,
+  showToast,
 } from "/store.js";
 import {
   loadAgents,
@@ -45,6 +47,82 @@ import {
   loadActiveScope,
 } from "/api.js";
 import { App } from "/views.js";
+
+function syncRecoveredActiveRun() {
+  const projectKey = currentProject.value || "_orchestrator";
+  const act = activities.value?.[projectKey];
+  if (!act) return;
+  const detail = [act.action, act.detail].filter(Boolean).join(": ");
+  const startedAt = act.started
+    ? Number(act.started) * 1000
+    : activeRun.value?.startedAt || Date.now();
+  const current = activeRun.value;
+  if (
+    current?.project === projectKey &&
+    !["done", "failed", "cancelled"].includes(current.status || "")
+  ) {
+    if (detail && detail !== current.detail) {
+      activeRun.value = {
+        ...current,
+        status: "running",
+        phase: act.action || current.phase || "backend",
+        detail,
+        updatedAt: Date.now(),
+        events: [
+          ...(current.events || []),
+          {
+            type: "activity",
+            phase: act.action || "backend",
+            detail,
+            receivedAt: Date.now(),
+          },
+        ].slice(-40),
+      };
+    }
+    return;
+  }
+  activeRun.value = {
+    id: "recovered-" + projectKey + "-" + Date.now(),
+    project: projectKey,
+    provider: "agent",
+    model: "",
+    effort: "",
+    mode: "act",
+    access: "write",
+    status: "running",
+    phase: act.action || "backend",
+    detail: detail || "recovered running task",
+    outcome: "",
+    startedAt,
+    updatedAt: Date.now(),
+    events: [
+      {
+        type: "activity",
+        phase: act.action || "backend",
+        detail: detail || "recovered running task",
+        receivedAt: Date.now(),
+      },
+    ],
+  };
+}
+
+async function refreshCurrentRoute() {
+  const p = currentProject.value || "";
+  await Promise.allSettled([
+    loadAgents(),
+    loadActivity(),
+    loadPlan(),
+    loadQueue(),
+    loadFeed(),
+    loadSignals(),
+    loadInbox(),
+    loadChat(p || "_orchestrator"),
+    p ? loadModules(p) : Promise.resolve(),
+    p ? loadProjectPlan(p) : Promise.resolve(),
+    loadActiveScope(p, activeDualSession.value || null),
+  ]);
+  showToast(p ? `refreshed ${p}` : "refreshed orchestrator", "success", 1200);
+}
 
 // Project change effect
 effect(() => {
@@ -73,6 +151,13 @@ effect(() => {
 
 // Keyboard shortcuts
 document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === "r" || e.key === "R")) {
+    e.preventDefault();
+    refreshCurrentRoute().catch((err) =>
+      console.warn("route refresh failed:", err),
+    );
+    return;
+  }
   if (
     e.target.tagName === "INPUT" ||
     e.target.tagName === "TEXTAREA" ||
@@ -121,9 +206,9 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "r" || e.key === "R") {
-    loadAgents();
-    loadPlan();
-    loadFeed();
+    refreshCurrentRoute().catch((err) =>
+      console.warn("route refresh failed:", err),
+    );
     return;
   }
   if (e.key === "p" || e.key === "P") {
@@ -153,7 +238,8 @@ try {
     loadSignals(),
     loadPerms(),
   ]);
-  await loadChat("_orchestrator");
+  syncRecoveredActiveRun();
+  await loadChat(currentProject.value || "_orchestrator");
 } catch (e) {
   console.error("AgentOS init failed:", e);
   showDualAgents.value = false;
@@ -218,7 +304,9 @@ setInterval(() => {
     ),
   );
   if (!isStreaming.value && !hasActivity && !hasDelegation) return;
-  loadActivity().catch(() => {});
+  loadActivity()
+    .then(syncRecoveredActiveRun)
+    .catch(() => {});
   const now = Date.now();
   if (now - _lastLiveProjectRefresh > 3000) {
     _lastLiveProjectRefresh = now;

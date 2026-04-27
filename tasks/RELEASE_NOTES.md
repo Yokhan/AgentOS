@@ -1,3 +1,10 @@
+# Agent OS 0.3.4
+
+- Fixed Strategy startup crash by importing `useRef` in `pages.js` and extended the UI gate so `pages.js` syntax plus missing hook imports are checked before release.
+- Moved project navigation into a persistent left rail for both dashboard and selected-project views, so the active project remains visible while the main canvas shows operational focus or project detail.
+- Persisted the selected project route across frontend reloads and made `Ctrl+R` refresh AgentOS state instead of dropping back to the orchestrator.
+- Recovered the live run HUD from backend activity after reload and update it from backend activity changes, so long runs show actual route/activity state instead of only a ticking timer.
+
 # Agent OS 0.3.3
 
 - Reworked the default dashboard into a workbench: operational focus, unblock actions, live delegation counters, and compact project navigation instead of a full-screen static project grid.
