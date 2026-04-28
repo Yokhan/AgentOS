@@ -148,20 +148,31 @@ pub fn normalize_chat_stream_event(
             project,
             ts,
         )),
-        "pa_status" | "pa_result" | "warning" => Some(EventRow::new(
-            "agentos",
-            "command",
-            if typ == "warning" { "warning" } else { "done" },
-            evt.get("command")
-                .and_then(|v| v.as_str())
-                .unwrap_or("AgentOS command"),
-            evt.get("text")
-                .and_then(|v| v.as_str())
-                .map(|v| short(v, 180))
-                .unwrap_or_default(),
-            project,
-            ts,
-        )),
+        "pa_status" | "pa_result" | "warning" => {
+            let text = evt.get("text").and_then(|v| v.as_str()).unwrap_or("");
+            let waiting = typ == "pa_status" && text.starts_with("Waiting coordinator:");
+            Some(EventRow::new(
+                "agentos",
+                if waiting { "coordination" } else { "command" },
+                if waiting {
+                    "waiting"
+                } else if typ == "warning" {
+                    "warning"
+                } else {
+                    "done"
+                },
+                if waiting {
+                    "Waiting coordinator"
+                } else {
+                    evt.get("command")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("AgentOS command")
+                },
+                short(text, 180),
+                project,
+                ts,
+            ))
+        }
         "delegation" => {
             let delegated_project = evt
                 .get("project")

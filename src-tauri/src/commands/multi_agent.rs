@@ -1210,12 +1210,13 @@ fn build_agent_prompt(
             .push_str("The user selected you as the execution lead/orchestrator for this room.\n");
         prompt.push_str("If the user approved execution or asks to proceed, do not only propose a plan. Act through structured PA commands.\n");
         prompt.push_str("Executable PA command tags must be on their own lines outside fenced code blocks. Tags inside fenced code blocks are examples only and will be ignored.\n");
-        prompt.push_str("When you create a delegation, pending means it is waiting for user approval, not that it is running or stuck. Report the approval need once and do not poll status repeatedly unless the system reports stale.\n");
+        prompt.push_str("When you create a delegation, pending means it is waiting for user approval, not that it is running or stuck. Report the approval need once, then continue independent route work if available; do not poll status repeatedly unless the system reports stale.\n");
         prompt.push_str("Common commands:\n");
         prompt.push_str("- [DASHBOARD_FULL]\n");
         prompt.push_str("- [DELEGATE_STATUS:?failed]\n");
         prompt.push_str("- [GIT_STATUS_ALL]\n");
         prompt.push_str("- [TEMPLATE_AUDIT]\n");
+        prompt.push_str("- [WORK_ITEM_QUEUE:id]\n");
         prompt.push_str("- [DELEGATE:Project]task[/DELEGATE]\n");
         prompt.push_str("- [DELEGATE_BATCH:p1,p2]task[/DELEGATE_BATCH]\n");
         prompt.push_str("- [DELEGATE_CHAIN:Project]step1\\nstep2[/DELEGATE_CHAIN]\n");
@@ -1281,6 +1282,20 @@ impl RoomPaFeedback {
     }
 }
 
+impl From<super::coordinator_wait::WaitCoordinatorSnapshot> for RoomPaFeedback {
+    fn from(snapshot: super::coordinator_wait::WaitCoordinatorSnapshot) -> Self {
+        Self {
+            fragments: vec![format!(
+                "Waiting coordinator:\n{}",
+                snapshot.items.join("\n")
+            )],
+            items: snapshot.items,
+            actionable: snapshot.actionable,
+            warnings: snapshot.warnings,
+        }
+    }
+}
+
 fn execute_room_pa_commands(state: &AppState, response: &str) -> RoomPaFeedback {
     let commands = super::pa_commands::parse_pa_commands(response, state);
     let warnings = super::pa_commands::detect_malformed_commands(response);
@@ -1327,9 +1342,10 @@ fn execute_room_pa_commands(state: &AppState, response: &str) -> RoomPaFeedback 
 fn build_room_auto_continue_message(turn: usize, feedback: &RoomPaFeedback) -> String {
     format!(
         "[AUTO-CONTINUE AFTER AGENTOS COMMANDS]\n\
-         AgentOS executed the PA commands from your previous response.\n\
-         Results:\n{}\n\n\
+         AgentOS executed the PA commands from your previous response or refreshed the coordination context.\n\
+         Results / context:\n{}\n\n\
          Continue the room task autonomously. Stop by returning a final status with no PA command tags when complete or blocked. \
+         If a ready route offers [WORK_ITEM_QUEUE:id] and it is still priority, emit that command instead of idling on running projects. \
          Emit the next PA command tags only when another AgentOS action is actually required. Do not ask the user to type continue. Continue in the same user-facing language as the conversation; if recent user messages are Russian/Cyrillic, reply in Russian.\n\
          Auto-continue turn: {}/{} safety ceiling. Actionable commands: {}. Warnings: {}.",
         feedback.items
@@ -2066,10 +2082,30 @@ fn run_session_agent_core(
     if participant_can_execute_pa_commands(state, session, participant, analysis_only) {
         let mut last_signature = String::new();
         let mut repeat_count = 0usize;
+        let mut wait_context_sent = false;
         for turn in 1..=ROOM_AUTO_CONTINUE_TURNS {
-            let feedback = execute_room_pa_commands(state, &loop_response);
+            let mut feedback = execute_room_pa_commands(state, &loop_response);
             if feedback.is_empty() {
-                break;
+                if wait_context_sent {
+                    break;
+                }
+                let project_filter = if session.project.trim().is_empty() {
+                    None
+                } else {
+                    Some(session.project.as_str())
+                };
+                let Some(wait_snapshot) = super::coordinator_wait::build_wait_coordinator_snapshot(
+                    state,
+                    project_filter,
+                    Some(session.id.as_str()),
+                    4,
+                ) else {
+                    break;
+                };
+                feedback = wait_snapshot.into();
+                wait_context_sent = true;
+            } else {
+                wait_context_sent = false;
             }
 
             let signature = feedback.signature();
@@ -3504,8 +3540,7 @@ pub fn queue_session_delegation(
     json!({"status": "ok", "delegation_id": delegation_id, "project": project, "work_item_id": work_item_id})
 }
 
-#[tauri::command]
-fn queue_work_item_execution_internal(
+pub(crate) fn queue_work_item_execution_internal(
     state: &AppState,
     work_item_id: &str,
     batch_id: Option<&str>,

@@ -11,6 +11,7 @@ pub mod chat_stream_poll;
 pub mod claude_runner;
 pub mod comms;
 pub mod config;
+pub mod coordinator_wait;
 pub mod cron;
 pub mod delegation;
 pub mod delegation_analytics;

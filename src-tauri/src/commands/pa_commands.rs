@@ -15,6 +15,8 @@ static RE_PLAN: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"(?s)\[PLAN:([^\]]+)\](.*?)\[/PLAN\]").unwrap());
 static RE_QUEUE: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"\[QUEUE:([^\]]+)\]").unwrap());
+static RE_WORK_ITEM_QUEUE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"\[WORK_ITEM_QUEUE:([^\]]+)\]").unwrap());
 static RE_NOTIFY: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"\[NOTIFY:([^\]]+)\]").unwrap());
 static RE_REMEMBER: LazyLock<regex::Regex> =
@@ -40,6 +42,9 @@ pub enum PaCommand {
     },
     Queue {
         task: String,
+    },
+    WorkItemQueue {
+        id: String,
     },
     Notify {
         message: String,
@@ -69,6 +74,7 @@ pub fn describe_pa_command(cmd: &PaCommand) -> String {
         PaCommand::HealthCheck { target } => format!("[HEALTH_CHECK:{}]", target),
         PaCommand::Plan { title, .. } => format!("[PLAN:{}]", title),
         PaCommand::Queue { .. } => "[QUEUE]".to_string(),
+        PaCommand::WorkItemQueue { id } => format!("[WORK_ITEM_QUEUE:{}]", id),
         PaCommand::Notify { .. } => "[NOTIFY]".to_string(),
         PaCommand::Remember { .. } => "[REMEMBER]".to_string(),
         PaCommand::Strategy { goal, .. } => format!("[STRATEGY:{}]", goal),
@@ -327,6 +333,20 @@ pub fn parse_pa_commands(response: &str, state: &AppState) -> Vec<ParsedCommand>
         });
     }
 
+    // Queue an existing project work item through the route-aware delegation pipeline
+    for caps in RE_WORK_ITEM_QUEUE.captures_iter(&response) {
+        let id = caps
+            .get(1)
+            .map(|m| m.as_str().trim().to_string())
+            .unwrap_or_default();
+        let (valid, error) = validate_work_item_ref(state, &id);
+        commands.push(ParsedCommand {
+            cmd: PaCommand::WorkItemQueue { id },
+            valid,
+            error,
+        });
+    }
+
     // Notify
     if let Some(caps) = RE_NOTIFY.captures(&response) {
         let message = caps
@@ -493,6 +513,17 @@ fn validate_project_ref(state: &AppState, project: &str) -> (bool, Option<String
     }
 }
 
+fn validate_work_item_ref(state: &AppState, id: &str) -> (bool, Option<String>) {
+    if id.trim().is_empty() {
+        return (false, Some("Empty work item id".to_string()));
+    }
+    match state.work_items.lock() {
+        Ok(items) if items.contains_key(id) => (true, None),
+        Ok(_) => (false, Some(format!("Unknown work item: {}", id))),
+        Err(_) => (false, Some("Work item lock error".to_string())),
+    }
+}
+
 /// Execute a single validated PA command. Returns optional text to append to response.
 /// Used by both chat.rs (sync) and chat_stream.rs (stream) to avoid duplication.
 pub fn execute_pa_command(state: &AppState, cmd: &PaCommand) -> Option<String> {
@@ -623,6 +654,10 @@ pub fn execute_pa_command(state: &AppState, cmd: &PaCommand) -> Option<String> {
                 });
             Some(format!("Queued: {}", task))
         }
+        PaCommand::WorkItemQueue { id } => {
+            let result = super::multi_agent::queue_work_item_execution_internal(state, id, None);
+            Some(format!("**Work Item Queue:** {}", result))
+        }
         PaCommand::Notify { message } => {
             crate::log_info!(
                 "[pa_cmd] notification: {}",
@@ -674,7 +709,9 @@ pub fn detect_malformed_commands(response: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::provider_runner::ProviderKind;
     use crate::state::AppState;
+    use crate::state::{WorkItem, WorkItemAssignee, WorkItemStatus, WorkItemWriteIntent};
 
     fn test_state(name: &str) -> AppState {
         let root = std::env::temp_dir().join(format!(
@@ -723,6 +760,46 @@ ERROR: {"type":"error","status":400}"#;
         assert_eq!(commands.len(), 1);
         assert!(commands[0].valid);
         assert!(matches!(commands[0].cmd, PaCommand::Queue { .. }));
+    }
+
+    #[test]
+    fn work_item_queue_command_validates_existing_work_item() {
+        let state = test_state("work-item-queue");
+        let ts = state.now_iso();
+        state.work_items.lock().unwrap().insert(
+            "wi-1".to_string(),
+            WorkItem {
+                id: "wi-1".to_string(),
+                parent_room_session_id: "room-1".to_string(),
+                project_session_id: None,
+                project: "AgentOS".to_string(),
+                title: "Ready task".to_string(),
+                task: "Run route-aware work".to_string(),
+                executor_provider: ProviderKind::Codex,
+                reviewer_provider: None,
+                assignee: WorkItemAssignee::Agent,
+                write_intent: WorkItemWriteIntent::ReadOnly,
+                declared_paths: Vec::new(),
+                verify: None,
+                status: WorkItemStatus::Ready,
+                delegation_id: None,
+                result: None,
+                review_verdict: None,
+                source_kind: None,
+                source_id: None,
+                created_at: ts.clone(),
+                updated_at: ts,
+            },
+        );
+
+        let commands = parse_pa_commands("[WORK_ITEM_QUEUE:wi-1]", &state);
+
+        assert_eq!(commands.len(), 1);
+        assert!(commands[0].valid);
+        assert!(matches!(
+            commands[0].cmd,
+            PaCommand::WorkItemQueue { ref id } if id == "wi-1"
+        ));
     }
 
     #[test]

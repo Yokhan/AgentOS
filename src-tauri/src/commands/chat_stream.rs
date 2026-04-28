@@ -806,6 +806,16 @@ impl PaLoopFeedback {
     }
 }
 
+impl From<super::coordinator_wait::WaitCoordinatorSnapshot> for PaLoopFeedback {
+    fn from(snapshot: super::coordinator_wait::WaitCoordinatorSnapshot) -> Self {
+        Self {
+            items: snapshot.items,
+            actionable: snapshot.actionable,
+            warnings: snapshot.warnings,
+        }
+    }
+}
+
 fn feedback_preview(text: &str) -> String {
     let clean = text.replace('\r', "").trim().to_string();
     let preview: String = clean.chars().take(900).collect();
@@ -908,9 +918,10 @@ fn execute_pa_commands_for_agent_loop(
 fn build_auto_continue_prompt(turn: usize, feedback: &PaLoopFeedback) -> String {
     format!(
         "[AUTO-CONTINUE AFTER AGENTOS COMMANDS]\n\
-         AgentOS executed the PA commands from your previous response.\n\
-         Results:\n{}\n\n\
+         AgentOS executed the PA commands from your previous response or refreshed the coordination context.\n\
+         Results / context:\n{}\n\n\
          Continue autonomously from these results. Stop by returning a final status with no PA command tags when the task is complete or blocked. \
+         If a ready route offers [WORK_ITEM_QUEUE:id] and it is still priority, emit that command instead of idling on running projects. \
          Emit the next PA command tags only when another AgentOS action is actually required. \
          Do not ask the user to type continue. Continue in the same user-facing language as the conversation; if recent user messages are Russian/Cyrillic, reply in Russian.\n\
          Auto-continue turn: {}/{} safety ceiling. Actionable commands: {}. Warnings: {}.",
@@ -944,6 +955,7 @@ fn run_pa_agent_loop(
     let mut final_response = response.clone();
     let mut last_signature = String::new();
     let mut repeat_count = 0usize;
+    let mut wait_context_sent = false;
 
     for turn in 1..=MAX_AUTO_CONTINUE_TURNS {
         if is_cancelled(state, chat_key) {
@@ -959,7 +971,7 @@ fn run_pa_agent_loop(
             break;
         }
 
-        let feedback = execute_pa_commands_for_agent_loop(
+        let mut feedback = execute_pa_commands_for_agent_loop(
             state,
             chat_file,
             stream_buf,
@@ -967,7 +979,27 @@ fn run_pa_agent_loop(
             label_prefix,
         );
         if feedback.is_empty() {
-            break;
+            if wait_context_sent {
+                break;
+            }
+            let Some(wait_snapshot) =
+                super::coordinator_wait::build_wait_coordinator_snapshot(state, None, None, 4)
+            else {
+                break;
+            };
+            append_pa_feedback(
+                state,
+                chat_file,
+                stream_buf,
+                "pa_status",
+                &format!("Waiting coordinator: {}", wait_snapshot.summary),
+                None,
+                &format!("{} wait coordinator", label_prefix),
+            );
+            feedback = wait_snapshot.into();
+            wait_context_sent = true;
+        } else {
+            wait_context_sent = false;
         }
 
         let signature = feedback.signature();
