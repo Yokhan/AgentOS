@@ -2,7 +2,9 @@
 //! Replaces 7 inline regex parsers in chat.rs with a single validated pipeline.
 
 use crate::state::AppState;
-use std::sync::LazyLock;
+use serde_json::{json, Value};
+use std::sync::{Arc, LazyLock};
+use tauri::State;
 
 static RE_DELEGATE: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(r"(?s)\[DELEGATE:([^\]]+)\]\s*\n?(.*?)\n?\[/DELEGATE\]").unwrap()
@@ -680,6 +682,37 @@ pub fn execute_pa_command(state: &AppState, cmd: &PaCommand) -> Option<String> {
             super::strategy::create_strategy_from_command(state, &goal, &context)
         }
     }
+}
+
+#[tauri::command]
+pub fn execute_pa_text(state: State<Arc<AppState>>, text: String) -> Value {
+    let warnings = detect_malformed_commands(&text);
+    let parsed = parse_pa_commands(&text, &state);
+    let mut results = Vec::new();
+    let mut errors = Vec::new();
+
+    for command in parsed {
+        let label = describe_pa_command(&command.cmd);
+        if !command.valid {
+            errors.push(json!({
+                "command": label,
+                "error": command.error.unwrap_or_else(|| "invalid command".to_string())
+            }));
+            continue;
+        }
+        let output = execute_pa_command(&state, &command.cmd).unwrap_or_default();
+        results.push(json!({
+            "command": label,
+            "output": output
+        }));
+    }
+
+    json!({
+        "status": if errors.is_empty() { "ok" } else { "partial" },
+        "commands": results,
+        "errors": errors,
+        "warnings": warnings
+    })
 }
 
 /// Check if response looks like it tried to use a command but failed parsing

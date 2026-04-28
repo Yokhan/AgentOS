@@ -173,7 +173,11 @@ fn waiting_delegations(state: &AppState, project: &str) -> Vec<Value> {
                     (project.is_empty() || delegation.project == project)
                         && matches!(
                             delegation.status.to_string().as_str(),
-                            "pending" | "needs_permission"
+                            "pending"
+                                | "needs_permission"
+                                | "failed"
+                                | "rejected"
+                                | "cancelled"
                         )
                 })
                 .cloned()
@@ -184,12 +188,19 @@ fn waiting_delegations(state: &AppState, project: &str) -> Vec<Value> {
     items
         .into_iter()
         .map(|delegation| {
+            let status = delegation.status.to_string();
+            let action = match status.as_str() {
+                "pending" | "needs_permission" => "approve",
+                "failed" => "retry_or_archive",
+                "rejected" | "cancelled" => "review_or_archive",
+                _ => "review",
+            };
             json!({
                 "id": delegation.id,
                 "project": delegation.project,
-                "status": delegation.status.to_string(),
+                "status": status,
                 "task": crate::commands::event_contract::short(&delegation.task, 220),
-                "action": "approve",
+                "action": action,
                 "ts": delegation.ts,
                 "started_at": delegation.started_at
             })
@@ -590,6 +601,25 @@ mod tests {
             .iter()
             .any(|edge| { edge.get("type").and_then(|v| v.as_str()) == Some("spawn") }));
         assert_eq!(result["waiting_for_user"].as_array().unwrap().len(), 1);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn failed_delegation_is_visible_as_user_decision() {
+        let root = test_root("failed-user-decision");
+        let state = AppState::new(root.clone());
+        state.delegations.lock().expect("delegations").insert(
+            "d-failed".to_string(),
+            delegation("d-failed", DelegationStatus::Failed),
+        );
+
+        let result = build_execution_map(&state, None, None, 50);
+        let waiting = result["waiting_for_user"].as_array().unwrap();
+        assert_eq!(waiting.len(), 1);
+        assert_eq!(waiting[0]["id"], "d-failed");
+        assert_eq!(waiting[0]["action"], "retry_or_archive");
+        assert_eq!(result["counts"]["waiting"], 1);
 
         let _ = std::fs::remove_dir_all(root);
     }

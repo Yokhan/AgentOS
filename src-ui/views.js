@@ -46,6 +46,8 @@ import {
   activities,
   composerDraftText,
   executionMap,
+  orchestrationMap,
+  activeDualSession,
   appInfo,
   showToast,
 } from "/store.js";
@@ -60,6 +62,8 @@ import {
   loadPerms,
   loadFeed,
   loadExecutionMap,
+  loadOrchestrationMap,
+  loadDelegations,
   ensureDualSession,
   sendMessage,
 } from "/api.js";
@@ -820,15 +824,200 @@ function WorkbenchFocus({ all }) {
   </div>`;
 }
 
+function routeNeedsDecision(route) {
+  const progress = route?.progress || {};
+  return (
+    route?.route_state === "needs_user" ||
+    route?.route_state === "blocked" ||
+    progress.needs_user ||
+    route?.has_blockers
+  );
+}
+
+function routeDelegationId(route) {
+  const progress = route?.progress || {};
+  return (
+    progress.active_delegation_id ||
+    route?.active_delegation_id ||
+    (route?.blocker_delegation_ids || [])[0] ||
+    (progress.blocker_delegation_ids || [])[0] ||
+    ""
+  );
+}
+
+async function executeRouteCommand(text, label = "command") {
+  if (!text?.trim()) return;
+  if (!__IS_TAURI || !__invoke) {
+    composerDraftText.value = text;
+    showToast("Команда положена в чат", "info", 1600);
+    return;
+  }
+  try {
+    const res = await __invoke("execute_pa_text", { text });
+    const errorCount = res?.errors?.length || 0;
+    const commandCount = res?.commands?.length || 0;
+    showToast(
+      errorCount
+        ? `${label}: ${commandCount} выполнено, ${errorCount} ошибок`
+        : `${label}: выполнено`,
+      errorCount ? "error" : "success",
+      2200,
+    );
+    await Promise.allSettled([
+      loadDelegations(),
+      loadFeed(),
+      loadExecutionMap("", activeDualSession.value || null, 180),
+      loadOrchestrationMap("", activeDualSession.value || null),
+    ]);
+  } catch (e) {
+    composerDraftText.value = text;
+    showToast(`Не удалось выполнить: ${e}`, "error", 2600);
+  }
+}
+
+function RouteDecisionPanel({ map, execution }) {
+  const routes = (map?.project_agent_routes || [])
+    .filter(routeNeedsDecision)
+    .slice(0, 5);
+  const waiting = (execution?.waiting_for_user || []).slice(0, 5);
+  const routeProgress = map?.route_progress || {};
+  const headline =
+    routeProgress.headline ||
+    (routes.length
+      ? `${routes.length} route ждут решения`
+      : waiting.length
+        ? `${waiting.length} делегаций ждут решения`
+        : "");
+  if (!routes.length && !waiting.length) return null;
+  const statusCommand = (id, fallback) =>
+    `[DELEGATE_STATUS:${id || fallback || "?failed"}]`;
+  const cleanupCommand = `[DELEGATE_CLEANUP:1]\n[DELEGATE_STATUS:?failed]\n[DASHBOARD_FULL]`;
+  const retryCommand = (id) =>
+    `[DELEGATE_RETRY:${id}]Повтори через текущий доступный provider. Если Claude недоступен, используй Codex. Сначала проверь diff/health, затем верни фактический результат и не создавай новые unrelated changes.[/DELEGATE_RETRY]`;
+
+  return html`<section class="route-decision-panel">
+    <div class="route-decision-head">
+      <div>
+        <span>нужен твой ход</span>
+        <b>${headline}</b>
+      </div>
+      <button
+        onClick=${() =>
+          Promise.allSettled([
+            loadExecutionMap("", activeDualSession.value || null, 180),
+            loadOrchestrationMap("", activeDualSession.value || null),
+          ])}
+      >
+        refresh
+      </button>
+    </div>
+    <div class="route-decision-grid">
+      ${routes.map((route) => {
+        const id = routeDelegationId(route);
+        const counts = route.counts || {};
+        return html`<article class="route-decision-card">
+          <div class="route-decision-title">
+            <b>${route.project || "project"}</b>
+            <span
+              >${route.route_state || route.progress?.phase || "blocked"}</span
+            >
+          </div>
+          <p>${route.title || route.progress?.label || "Route blocked"}</p>
+          <div class="route-decision-meta">
+            ${id
+              ? html`<code>${id}</code>`
+              : html`<code>no delegation id</code>`}
+            <span>${counts.blocked || 0} blockers</span>
+            <span>${route.executor_provider || "agent"}</span>
+          </div>
+          <div class="route-decision-actions">
+            <button
+              onClick=${() =>
+                executeRouteCommand(statusCommand(id, route.project), "status")}
+            >
+              статус
+            </button>
+            <button
+              disabled=${!id}
+              onClick=${() => executeRouteCommand(retryCommand(id), "retry")}
+            >
+              повторить
+            </button>
+            <button
+              onClick=${() => executeRouteCommand(cleanupCommand, "cleanup")}
+            >
+              архив terminal
+            </button>
+            <button
+              onClick=${() =>
+                executeRouteCommand(
+                  `[HEALTH_CHECK:${route.project || "all"}]`,
+                  "health",
+                )}
+            >
+              health
+            </button>
+          </div>
+        </article>`;
+      })}
+      ${!routes.length
+        ? waiting.map(
+            (item) =>
+              html`<article class="route-decision-card">
+                <div class="route-decision-title">
+                  <b>${item.project || "project"}</b>
+                  <span>${item.status || item.action || "waiting"}</span>
+                </div>
+                <p>${item.task || "Delegation waits for a decision"}</p>
+                <div class="route-decision-meta">
+                  <code>${item.id}</code>
+                  <span>${item.action || "review"}</span>
+                </div>
+                <div class="route-decision-actions">
+                  <button
+                    onClick=${() =>
+                      executeRouteCommand(statusCommand(item.id), "status")}
+                  >
+                    статус
+                  </button>
+                  <button
+                    disabled=${!item.id || item.action === "approve"}
+                    onClick=${() =>
+                      executeRouteCommand(retryCommand(item.id), "retry")}
+                  >
+                    повторить
+                  </button>
+                  <button
+                    onClick=${() =>
+                      executeRouteCommand(cleanupCommand, "cleanup")}
+                  >
+                    архив terminal
+                  </button>
+                </div>
+              </article>`,
+          )
+        : null}
+    </div>
+  </section>`;
+}
+
 function ExecutionFlowStage() {
   const map = executionMap.value;
+  const orchestration = orchestrationMap.value;
   useEffect(() => {
     let disposed = false;
     const refresh = () => {
       if (disposed) return;
-      loadExecutionMap("", null, 180).catch((e) =>
-        console.warn("main execution map refresh failed:", e),
-      );
+      Promise.allSettled([
+        loadExecutionMap("", activeDualSession.value || null, 180),
+        loadOrchestrationMap("", activeDualSession.value || null),
+      ]).then((results) => {
+        results
+          .filter((result) => result.status === "rejected")
+          .forEach((result) =>
+            console.warn("main execution refresh failed:", result.reason),
+          );
+      });
     };
     refresh();
     const timer = setInterval(refresh, 3000);
@@ -852,16 +1041,27 @@ function ExecutionFlowStage() {
       <div class="main-execution-meta">
         <span>${laneCount} веток</span>
         <span>${eventCount} событий</span>
-        <button onClick=${() => loadExecutionMap("", null, 180)}>
+        <button
+          onClick=${() =>
+            Promise.allSettled([
+              loadExecutionMap("", activeDualSession.value || null, 180),
+              loadOrchestrationMap("", activeDualSession.value || null),
+            ])}
+        >
           refresh
         </button>
       </div>
     </div>
+    <${RouteDecisionPanel} map=${orchestration} execution=${map} />
     ${map?.status === "ok"
       ? html`<${ExecutionMapCard}
           map=${map}
           variant="stage"
-          onRefresh=${() => loadExecutionMap("", null, 180)}
+          onRefresh=${() =>
+            Promise.allSettled([
+              loadExecutionMap("", activeDualSession.value || null, 180),
+              loadOrchestrationMap("", activeDualSession.value || null),
+            ])}
         />`
       : html`<div class="main-execution-empty">
           <b>Карта исполнения загружается</b>

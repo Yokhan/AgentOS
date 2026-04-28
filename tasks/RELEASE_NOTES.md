@@ -1,3 +1,11 @@
+# Agent OS 0.3.12
+
+- Centered the floating workspace dock against the full app viewport instead of the middle workbench column, so it no longer drifts left when the project rail or chat rail changes width.
+- Added direct PA-command execution for UI route controls, allowing blocker actions to run through the backend without asking the agent to echo `[DELEGATE_*]` commands in chat.
+- Made failed/rejected/cancelled delegations visible as user-decision items in the execution map instead of only showing pending approvals.
+- Added a visible route-decision panel above the live execution map with status, retry, cleanup, and health actions for blocked project-agent routes.
+- Cleaned up the stale failed `RABproject` delegation from the live queue so the dashboard no longer reports a phantom route waiting for a decision.
+
 # Agent OS 0.3.11
 
 - Fixed the workspace dock positioning so it is a real floating bottom-center control inside the workbench, not a sticky block drifting with column layout.

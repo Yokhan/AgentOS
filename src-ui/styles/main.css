@@ -396,6 +396,103 @@ body.chat-resizing {
     cursor: pointer;
     padding: 2px 8px;
 }
+.route-decision-panel {
+    border: 1px solid color-mix(in srgb, var(--yellow) 46%, var(--border));
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--yellow) 9%, transparent),
+        color-mix(in srgb, var(--sf) 94%, transparent)
+    );
+    margin: 0 0 var(--sp-xs);
+    padding: var(--sp-xs);
+    font-family: var(--font-mono);
+}
+.route-decision-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-s);
+    margin-bottom: var(--sp-xs);
+}
+.route-decision-head div {
+    display: grid;
+    gap: 2px;
+}
+.route-decision-head span {
+    color: var(--yellow);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 10px;
+}
+.route-decision-head b {
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: var(--fs-m);
+}
+.route-decision-head button,
+.route-decision-actions button {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    cursor: pointer;
+    padding: 3px 8px;
+}
+.route-decision-actions button:hover,
+.route-decision-head button:hover {
+    border-color: var(--yellow);
+    color: var(--text);
+}
+.route-decision-actions button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.route-decision-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: var(--sp-xs);
+}
+.route-decision-card {
+    border: 1px solid color-mix(in srgb, var(--yellow) 28%, var(--border));
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    padding: var(--sp-xs);
+    display: grid;
+    gap: 5px;
+}
+.route-decision-title,
+.route-decision-meta,
+.route-decision-actions {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+.route-decision-title {
+    justify-content: space-between;
+}
+.route-decision-title b {
+    color: var(--text);
+    font-family: var(--font-sans);
+}
+.route-decision-title span,
+.route-decision-meta span,
+.route-decision-meta code {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--sf2) 78%, transparent);
+    padding: 1px 5px;
+    color: var(--t3);
+}
+.route-decision-title span {
+    color: var(--yellow);
+}
+.route-decision-card p {
+    margin: 0;
+    color: var(--t2);
+    line-height: 1.35;
+    max-height: 3.9em;
+    overflow: hidden;
+}
 .main-execution-stage .exec-map-card.stage {
     flex: 1;
     min-height: 0;
@@ -603,15 +700,15 @@ body.chat-resizing {
     overflow-y: auto;
 }
 .workspace-dock {
-    position: absolute;
-    left: 50%;
-    bottom: var(--sp-m);
+    position: fixed;
+    left: 50vw;
+    bottom: calc(var(--sp-m) + 12px);
     transform: translateX(-50%);
-    z-index: 35;
+    z-index: 80;
     display: flex;
     gap: 4px;
     width: max-content;
-    max-width: min(860px, calc(100% - 32px));
+    max-width: min(860px, calc(100vw - 32px));
     padding: 6px;
     border: 1px solid color-mix(in srgb, var(--cyan) 24%, var(--border));
     background: linear-gradient(
@@ -994,7 +1091,7 @@ body.chat-resizing {
         flex-direction: column;
     }
     .workspace-dock {
-        max-width: calc(100% - 20px);
+        max-width: calc(100vw - 20px);
         bottom: var(--sp-s);
     }
     .workspace-dock button {

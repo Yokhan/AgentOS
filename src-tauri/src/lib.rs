@@ -205,6 +205,7 @@ pub fn run() {
             commands::event_contract::get_event_contract_schema,
             commands::timeline::get_execution_timeline,
             commands::execution_map::get_execution_map,
+            commands::pa_commands::execute_pa_text,
             // Multi-agent sessions
             commands::multi_agent::create_multi_agent_session,
             commands::multi_agent::list_multi_agent_sessions,
