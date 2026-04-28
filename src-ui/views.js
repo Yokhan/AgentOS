@@ -108,10 +108,14 @@ function OrchWarning() {
 }
 
 function currentSoloProviderLabel() {
-  return !currentProject.value &&
-    permData.value?.provider_status?.roles?.orchestrator_provider === "codex"
-    ? "codex"
-    : "claude";
+  const providerStatus = permData.value?.provider_status || {};
+  if (!currentProject.value && providerStatus?.roles?.orchestrator_provider) {
+    return providerStatus.roles.orchestrator_provider;
+  }
+  if (providerStatus?.providers?.claude?.enabled === false) {
+    return "codex";
+  }
+  return "claude";
 }
 
 function currentSoloSelectionLabel() {

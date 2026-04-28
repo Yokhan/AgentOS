@@ -87,27 +87,67 @@ pub fn parse_provider(value: Option<&str>, default: ProviderKind) -> ProviderKin
     }
 }
 
+fn config_flag_enabled(state: &AppState, key: &str, default: bool) -> bool {
+    state
+        .config()
+        .get(key)
+        .and_then(|v| v.as_str())
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            !matches!(
+                normalized.as_str(),
+                "0" | "false" | "off" | "disabled" | "no"
+            )
+        })
+        .unwrap_or(default)
+}
+
+pub fn claude_enabled(state: &AppState) -> bool {
+    config_flag_enabled(state, "claude_enabled", true)
+}
+
+pub fn provider_enabled(state: &AppState, provider: ProviderKind) -> bool {
+    match provider {
+        ProviderKind::Claude => claude_enabled(state),
+        ProviderKind::Codex => true,
+    }
+}
+
+fn provider_with_fallback(state: &AppState, provider: ProviderKind) -> ProviderKind {
+    if provider_enabled(state, provider) {
+        provider
+    } else {
+        ProviderKind::Codex
+    }
+}
+
 pub fn orchestrator_provider(state: &AppState) -> ProviderKind {
     let cfg = state.config();
-    parse_provider(
-        cfg.get("orchestrator_provider").and_then(|v| v.as_str()),
-        ProviderKind::Claude,
+    provider_with_fallback(
+        state,
+        parse_provider(
+            cfg.get("orchestrator_provider").and_then(|v| v.as_str()),
+            ProviderKind::Claude,
+        ),
     )
 }
 
 pub fn technical_reviewer_provider(state: &AppState) -> ProviderKind {
     let cfg = state.config();
-    parse_provider(
-        cfg.get("technical_reviewer_provider")
-            .and_then(|v| v.as_str()),
-        ProviderKind::Codex,
+    provider_with_fallback(
+        state,
+        parse_provider(
+            cfg.get("technical_reviewer_provider")
+                .and_then(|v| v.as_str()),
+            ProviderKind::Codex,
+        ),
     )
 }
 
 pub fn single_chat_provider(state: &AppState, explicit_provider: Option<&str>) -> ProviderKind {
     let default = orchestrator_provider(state);
     let explicit = explicit_provider.filter(|value| !value.trim().is_empty());
-    parse_provider(explicit, default)
+    provider_with_fallback(state, parse_provider(explicit, default))
 }
 
 pub fn resolve_single_chat_settings(
@@ -1107,13 +1147,23 @@ pub fn run_provider_with_chat_control(
     chat_key: Option<&str>,
 ) -> String {
     match provider {
-        ProviderKind::Claude => super::claude_runner::run_claude_with_opts(
-            cwd,
-            prompt,
-            perm_path.unwrap_or(""),
-            model,
-            reasoning_effort,
-        ),
+        ProviderKind::Claude => {
+            if !claude_enabled(state) {
+                return compact_provider_error(
+                    "claude",
+                    model,
+                    None,
+                    "Claude is disabled in AgentOS settings. Enable it in Settings -> Providers, or route this task to Codex.",
+                );
+            }
+            super::claude_runner::run_claude_with_opts(
+                cwd,
+                prompt,
+                perm_path.unwrap_or(""),
+                model,
+                reasoning_effort,
+            )
+        }
         ProviderKind::Codex => match effective_codex_transport(state, model, reasoning_effort) {
             CodexTransport::Cli => {
                 if codex_template(state).is_empty() {
@@ -1140,8 +1190,17 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
     let orchestrator = orchestrator_provider(state);
     let technical = technical_reviewer_provider(state);
 
-    let claude_binary = resolve_provider_binary(state, ProviderKind::Claude);
-    let claude_probe = probe_binary(&claude_binary);
+    let claude_is_enabled = claude_enabled(state);
+    let claude_binary = if claude_is_enabled {
+        resolve_provider_binary(state, ProviderKind::Claude)
+    } else {
+        String::new()
+    };
+    let claude_probe = if claude_is_enabled {
+        probe_binary(&claude_binary)
+    } else {
+        Err("disabled by AgentOS config".to_string())
+    };
     let configured_transport = codex_transport(state);
     let codex_template = codex_template(state);
     let codex_binary = resolve_codex_binary(state);
@@ -1225,8 +1284,10 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
         },
         "providers": {
             "claude": {
+                "enabled": claude_is_enabled,
+                "disabled": !claude_is_enabled,
                 "binary": claude_binary,
-                "available": claude_probe.is_ok(),
+                "available": claude_is_enabled && claude_probe.is_ok(),
                 "probe": claude_probe.clone().unwrap_or_else(|e| e),
                 "model": cfg.get("orchestrator_model").and_then(|v| v.as_str()).unwrap_or(""),
                 "effort": cfg.get("orchestrator_effort").and_then(|v| v.as_str()).unwrap_or(""),
@@ -1471,6 +1532,77 @@ user
         let (provider, _, _) = resolve_single_chat_settings(&state, "AgentOS", None, None, None);
 
         assert_eq!(provider, ProviderKind::Codex);
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn disabled_claude_routes_to_codex() {
+        let root = temp_path("disabled-claude-routes");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("n8n")).unwrap();
+        std::fs::write(
+            root.join("n8n").join("config.json"),
+            serde_json::to_string(&json!({
+                "claude_enabled": "false",
+                "orchestrator_provider": "claude",
+                "technical_reviewer_provider": "claude",
+                "codex_model": "gpt-5.5"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let state = crate::state::AppState::new(root.clone());
+
+        assert!(!claude_enabled(&state));
+        assert_eq!(orchestrator_provider(&state), ProviderKind::Codex);
+        assert_eq!(technical_reviewer_provider(&state), ProviderKind::Codex);
+        assert_eq!(
+            single_chat_provider(&state, Some("claude")),
+            ProviderKind::Codex
+        );
+
+        let status = provider_status_snapshot(&state);
+        assert_eq!(
+            status["roles"]["orchestrator_provider"].as_str(),
+            Some("codex")
+        );
+        assert_eq!(
+            status["providers"]["claude"]["enabled"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            status["providers"]["claude"]["available"].as_bool(),
+            Some(false)
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn disabled_claude_run_returns_actionable_error() {
+        let root = temp_path("disabled-claude-run");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("n8n")).unwrap();
+        std::fs::write(
+            root.join("n8n").join("config.json"),
+            serde_json::to_string(&json!({ "claude_enabled": "false" })).unwrap(),
+        )
+        .unwrap();
+        let state = crate::state::AppState::new(root.clone());
+
+        let output = run_provider_with_opts(
+            &state,
+            ProviderKind::Claude,
+            &root,
+            "hello",
+            None,
+            Some("opus"),
+            None,
+        );
+
+        assert!(output.contains("Provider error: claude model=opus"));
+        assert!(output.contains("Claude is disabled in AgentOS settings"));
 
         let _ = std::fs::remove_dir_all(&root);
     }

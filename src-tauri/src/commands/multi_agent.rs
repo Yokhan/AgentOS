@@ -33,18 +33,28 @@ fn parse_mode(mode: Option<&str>) -> SessionMode {
 }
 
 fn default_participants(state: &AppState) -> Vec<SessionParticipant> {
+    let orchestrator_provider = super::provider_runner::orchestrator_provider(state);
+    let technical_provider = super::provider_runner::technical_reviewer_provider(state);
+    let (orchestrator_id, orchestrator_label) = match orchestrator_provider {
+        super::provider_runner::ProviderKind::Claude => ("claude_pm", "Claude PM"),
+        super::provider_runner::ProviderKind::Codex => ("codex_orchestrator", "Codex Orchestrator"),
+    };
+    let (technical_id, technical_label) = match technical_provider {
+        super::provider_runner::ProviderKind::Claude => ("claude_reviewer", "Claude Reviewer"),
+        super::provider_runner::ProviderKind::Codex => ("codex_tech", "Codex Tech"),
+    };
     vec![
         SessionParticipant {
-            id: "claude_pm".to_string(),
-            label: "Claude PM".to_string(),
-            provider: super::provider_runner::orchestrator_provider(state),
+            id: orchestrator_id.to_string(),
+            label: orchestrator_label.to_string(),
+            provider: orchestrator_provider,
             role: "product".to_string(),
             write_enabled: true,
         },
         SessionParticipant {
-            id: "codex_tech".to_string(),
-            label: "Codex Tech".to_string(),
-            provider: super::provider_runner::technical_reviewer_provider(state),
+            id: technical_id.to_string(),
+            label: technical_label.to_string(),
+            provider: technical_provider,
             role: "technical".to_string(),
             write_enabled: false,
         },

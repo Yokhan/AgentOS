@@ -1,3 +1,11 @@
+# Agent OS 0.3.9
+
+- Added a system-level Claude enable/disable switch in Settings for periods when the Claude subscription or CLI is unavailable.
+- When Claude is disabled, orchestration, technical review, solo chat, and explicit Claude requests fall back to Codex instead of hanging or creating unusable Claude routes.
+- Updated provider status so Claude reports `disabled` separately from `missing`, and hidden Claude-only route controls from chat/Duo execution while disabled.
+- Renamed default Duo participants dynamically, so Codex-led rooms no longer appear as `Claude PM` when Claude is disabled.
+- Shipped the local config with `claude_enabled=false` so this machine routes through Codex by default until Claude is manually re-enabled.
+
 # Agent OS 0.3.8
 
 - Moved the branching execution map out of the chat drawer and onto the main dashboard as a first-class operational surface.

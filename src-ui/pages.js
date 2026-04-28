@@ -67,6 +67,19 @@ function SettingsPage() {
   const ps = pd?.provider_status || {};
   const prov = ps.providers || {};
   const profCount = (k) => pd?.profiles?.[k]?.permissions?.allow?.length || 0;
+  const claudeStatus = prov?.claude || {};
+  const claudeEnabled = claudeStatus.enabled !== false;
+  const claudeAvailable = claudeEnabled && !!claudeStatus.available;
+  const claudeStateLabel = !claudeEnabled
+    ? "disabled"
+    : claudeAvailable
+      ? "ready"
+      : "missing";
+  const claudeStateColor = !claudeEnabled
+    ? "var(--t3)"
+    : claudeAvailable
+      ? "var(--green)"
+      : "var(--accent)";
   const codexStatus = prov?.codex || {};
   const codexModel = pd?.config?.codex_model || "";
   const codexEffort = pd?.config?.codex_effort || "";
@@ -120,7 +133,9 @@ function SettingsPage() {
           ? "ACP is reachable but not ready yet. Refresh after login or adapter startup."
           : "CLI is reachable. Pick a model and AgentOS can use the official codex exec flow directly.";
   const providerOptions = [
-    ["claude", `claude ${prov?.claude?.available ? "ready" : "missing"}`],
+    ...(claudeEnabled
+      ? [["claude", `claude ${claudeAvailable ? "ready" : "missing"}`]]
+      : []),
     [
       "codex",
       `codex ${codexReady ? `ready via ${codexEffectiveTransport}` : codexStateLabel.toLowerCase()}`,
@@ -243,6 +258,39 @@ function SettingsPage() {
       <div class="panel">
         <h3>Claude Orchestrator</h3>
         <div style="display:flex;flex-direction:column;gap:var(--sp-s)">
+          <div
+            style="display:flex;justify-content:space-between;gap:var(--sp-s);align-items:flex-start;padding:var(--sp-s);border:1px solid var(--border);background:var(--bg-soft)"
+          >
+            <div>
+              <div
+                style="font-family:var(--font-mono);font-size:var(--fs-s);color:${claudeStateColor};text-transform:uppercase;letter-spacing:1px"
+              >
+                Claude ${claudeStateLabel}
+              </div>
+              <div style="font-size:var(--fs-s);color:var(--t2);margin-top:4px">
+                ${claudeEnabled
+                  ? "Claude can be selected for orchestration and delegation."
+                  : "Claude is hidden from routing. Old Claude routes fall back to Codex."}
+              </div>
+            </div>
+            <button
+              class="action-btn"
+              onClick=${() => {
+                __invoke("set_config", {
+                  key: "claude_enabled",
+                  value: claudeEnabled ? "false" : "true",
+                }).then(() => {
+                  showToast(
+                    claudeEnabled ? "Claude disabled" : "Claude enabled",
+                    "success",
+                  );
+                  loadPerms();
+                });
+              }}
+            >
+              ${claudeEnabled ? "disable" : "enable"}
+            </button>
+          </div>
           <div>
             <label
               style="display:block;font-family:var(--font-mono);font-size:var(--fs-s);color:var(--t3);margin-bottom:var(--sp-xs)"
@@ -459,7 +507,9 @@ function SettingsPage() {
             >
             <select
               style="width:100%;background:var(--sf);border:1px solid var(--border);color:var(--text);padding:var(--sp-s);font-family:var(--font-mono);font-size:var(--fs-s)"
-              value=${pd?.config?.orchestrator_provider || "claude"}
+              value=${ps?.roles?.orchestrator_provider ||
+              pd?.config?.orchestrator_provider ||
+              (claudeEnabled ? "claude" : "codex")}
               onChange=${(e) => {
                 __invoke("set_config", {
                   key: "orchestrator_provider",
@@ -483,7 +533,9 @@ function SettingsPage() {
             >
             <select
               style="width:100%;background:var(--sf);border:1px solid var(--border);color:var(--text);padding:var(--sp-s);font-family:var(--font-mono);font-size:var(--fs-s)"
-              value=${pd?.config?.technical_reviewer_provider || "codex"}
+              value=${ps?.roles?.technical_reviewer_provider ||
+              pd?.config?.technical_reviewer_provider ||
+              "codex"}
               onChange=${(e) => {
                 __invoke("set_config", {
                   key: "technical_reviewer_provider",
@@ -505,12 +557,7 @@ function SettingsPage() {
           >
             <div>
               claude:
-              <span
-                style="color:${prov?.claude?.available
-                  ? "var(--green)"
-                  : "var(--accent)"}"
-                >${prov?.claude?.available ? "available" : "missing"}</span
-              >
+              <span style="color:${claudeStateColor}">${claudeStateLabel}</span>
             </div>
             <div>
               codex:
@@ -1246,6 +1293,12 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
   const session = data?.session || null;
   const events = data?.events || [];
   const participants = session?.participants || [];
+  const providerStatus = permData.value?.provider_status?.providers || {};
+  const claudeEnabled = providerStatus?.claude?.enabled !== false;
+  const activeProviderOptions = [
+    ...(claudeEnabled ? [["claude", "claude"]] : []),
+    ["codex", "codex"],
+  ];
   const presence = session?.presence || {};
   const workingSet = session?.current_working_set || [];
   const activeWriters = data?.active_writers || [];
@@ -2240,13 +2293,15 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
             </div>
           </div>
           <div style="display:flex;gap:var(--sp-xs);flex-wrap:wrap">
-            <button
-              class="action-btn"
-              disabled=${!!dualBusy.value}
-              onClick=${() => queueProviderRound("claude")}
-            >
-              run all Claude tasks
-            </button>
+            ${claudeEnabled
+              ? html`<button
+                  class="action-btn"
+                  disabled=${!!dualBusy.value}
+                  onClick=${() => queueProviderRound("claude")}
+                >
+                  run all Claude tasks
+                </button>`
+              : null}
             <button
               class="action-btn"
               disabled=${!!dualBusy.value}
@@ -2658,8 +2713,10 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
             style="background:var(--sf);border:1px solid var(--border);color:var(--text);padding:10px"
           >
             <option value="">executor</option>
-            <option value="claude">claude</option>
-            <option value="codex">codex</option>
+            ${activeProviderOptions.map(
+              ([value, label]) =>
+                html`<option value=${value}>${label}</option>`,
+            )}
           </select>
           <select
             value=${todoReviewerProvider}
@@ -2667,8 +2724,10 @@ function EmbeddedDualAgentsPanel({ tab = "collaborate" }) {
             style="background:var(--sf);border:1px solid var(--border);color:var(--text);padding:10px"
           >
             <option value="">reviewer</option>
-            <option value="claude">claude</option>
-            <option value="codex">codex</option>
+            ${activeProviderOptions.map(
+              ([value, label]) =>
+                html`<option value=${value}>${label}</option>`,
+            )}
           </select>
         </div>
         <textarea

@@ -1889,17 +1889,25 @@ function ChatSidebar() {
   const duoCollaborateMode = duoEnabled && duoView === "collaborate";
   const duoExecuteMode = duoEnabled && duoView === "execute";
   const duoWorkspaceInCanvas = duoCollaborateMode || duoExecuteMode;
+  const claudeStatus = permData.value?.provider_status?.providers?.claude || {};
+  const claudeEnabled = claudeStatus.enabled !== false;
   const configuredSoloProvider =
-    permData.value?.provider_status?.roles?.orchestrator_provider || "claude";
+    permData.value?.provider_status?.roles?.orchestrator_provider ||
+    (claudeEnabled ? "claude" : "codex");
   const explicitSoloProvider = ["claude", "codex"].includes(
     selectedSoloProvider.value,
   )
     ? selectedSoloProvider.value
     : "";
-  const soloProvider = explicitSoloProvider || configuredSoloProvider;
+  const soloProvider =
+    !claudeEnabled && explicitSoloProvider === "claude"
+      ? configuredSoloProvider === "claude"
+        ? "codex"
+        : configuredSoloProvider
+      : explicitSoloProvider || configuredSoloProvider;
   const soloProviderOptions = [
     ["", "auto: " + configuredSoloProvider],
-    ["claude", "claude"],
+    ...(claudeEnabled ? [["claude", "claude"]] : []),
     ["codex", "codex"],
   ];
   const accessOptions = [
@@ -2297,6 +2305,11 @@ function ChatSidebar() {
     duoComposerTarget,
     participants,
   ]);
+  useEffect(() => {
+    if (!claudeEnabled && selectedSoloProvider.value === "claude") {
+      selectedSoloProvider.value = "codex";
+    }
+  }, [claudeEnabled]);
   useEffect(() => {
     const validModels = new Set(modelOptions.map(([value]) => value));
     if (!validModels.has(selectedModelValue)) {
@@ -3219,9 +3232,11 @@ function ChatSidebar() {
                     : " (review)"}
                 </button>`;
               })}
-              <button onClick=${() => useProviderAsLead("claude")}>
-                prefer Claude lead
-              </button>
+              ${claudeEnabled
+                ? html`<button onClick=${() => useProviderAsLead("claude")}>
+                    prefer Claude lead
+                  </button>`
+                : null}
               <button onClick=${() => useProviderAsLead("codex")}>
                 prefer Codex lead
               </button>
