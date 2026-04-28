@@ -63,6 +63,7 @@ import {
   activeScope,
   orchestrationMap,
   executionTimeline,
+  executionMap,
   eventContract,
   permData,
 } from "/store.js";
@@ -103,6 +104,7 @@ import {
   loadActiveScope,
   loadOrchestrationMap,
   loadExecutionTimeline,
+  loadExecutionMap,
   loadEventContract,
   setDualOrchestrator,
 } from "/api.js";
@@ -1552,11 +1554,226 @@ function OrchestrationMapCard({
 function timelineStatusClass(status) {
   const s = String(status || "").toLowerCase();
   if (["failed", "error", "cancelled", "warning"].includes(s)) return "warn";
-  if (["running", "started", "pending", "queued", "verifying"].includes(s)) {
+  if (
+    [
+      "running",
+      "started",
+      "pending",
+      "needs_permission",
+      "queued",
+      "verifying",
+    ].includes(s)
+  ) {
     return "live";
   }
   if (["done", "completed", "ok", "success"].includes(s)) return "done";
   return "info";
+}
+
+function executionStatusLabel(status) {
+  const labels = {
+    idle: "спит",
+    running: "работает",
+    pending: "ждет approve",
+    needs_permission: "нужен доступ",
+    waiting: "ждет",
+    queued: "в очереди",
+    scheduled: "запланировано",
+    verifying: "проверяет",
+    deciding: "решает",
+    escalated: "эскалация",
+    done: "готово",
+    complete: "готово",
+    completed: "готово",
+    failed: "упало",
+    error: "ошибка",
+    warning: "внимание",
+    cancelled: "отменено",
+    info: "инфо",
+  };
+  return labels[status] || status || "инфо";
+}
+
+function executionKindLabel(kind) {
+  const labels = {
+    root: "старт",
+    run: "запуск",
+    progress: "прогресс",
+    thinking: "думает",
+    tool: "tool",
+    tool_result: "tool result",
+    command: "команда",
+    queued: "делегация",
+    state: "состояние",
+    stage: "этап",
+    done: "результат",
+    feedback_received: "feedback",
+    safety: "safety",
+    system: "system",
+  };
+  return labels[kind] || kind || "event";
+}
+
+function ExecutionMapCard({ map, onRefresh }) {
+  const [selectedId, setSelectedId] = useState("");
+  if (!map || map.status !== "ok") return null;
+  const big = map.big_plan || {};
+  const lanes = map.lanes || [];
+  const events = map.events || [];
+  const edges = map.edges || [];
+  const waiting = map.waiting_for_user || [];
+  const counts = map.counts || {};
+  const eventById = new Map(events.map((event) => [event.id, event]));
+  const laneIndex = new Map(lanes.map((lane, index) => [lane.id, index]));
+  const selected = selectedId ? eventById.get(selectedId) : null;
+  const maxSequence = Math.max(
+    1,
+    ...events.map((event) => Number(event.sequence || 0)),
+  );
+  const stepW = 150;
+  const rowH = 72;
+  const topPad = 44;
+  const leftPad = 28;
+  const mapW = Math.max(760, (maxSequence + 3) * stepW);
+  const mapH = topPad + Math.max(1, lanes.length) * rowH + 18;
+  const pos = (event) => {
+    const sequence = Number(event?.sequence || 0);
+    const lane = laneIndex.get(event?.lane_id) ?? 0;
+    return {
+      x: leftPad + (sequence + 1) * stepW,
+      y: topPad + lane * rowH + 16,
+    };
+  };
+  const edgePath = (edge) => {
+    const from = pos(eventById.get(edge.from));
+    const to = pos(eventById.get(edge.to));
+    const x1 = from.x + 126;
+    const y1 = from.y + 20;
+    const x2 = to.x;
+    const y2 = to.y + 20;
+    const mid = Math.max(x1 + 30, Math.floor((x1 + x2) / 2));
+    return `M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`;
+  };
+  const copyMap = () => {
+    const lines = events.map((event) => {
+      const lane = lanes.find((item) => item.id === event.lane_id);
+      return `${lane?.label || event.lane_id}: ${executionStatusLabel(event.status)} ${executionKindLabel(event.kind)} - ${event.title || ""}`;
+    });
+    navigator.clipboard
+      ?.writeText(lines.join("\n"))
+      .then(() => showToast("execution map copied", "success", 1200))
+      .catch(() => showToast("copy failed", "error", 2000));
+  };
+  return html`<div class="exec-map-card">
+    <div class="exec-map-head">
+      <div>
+        <div class="orch-eyebrow">
+          карта исполнения - этап
+          ${Number(big.stage_index || 10)}/${Number(big.stage_total || 10)}
+        </div>
+        <div class="exec-map-title">
+          ${big.label || "Branching execution map"}
+          <span>${counts.lanes || lanes.length} веток</span>
+          <span>${counts.events || events.length} событий</span>
+          ${counts.waiting ? html`<em>${counts.waiting} ждут тебя</em>` : null}
+          ${counts.blocked ? html`<em>${counts.blocked} блокер</em>` : null}
+        </div>
+      </div>
+      <div class="exec-actions">
+        <button onClick=${onRefresh}>refresh</button>
+        <button onClick=${copyMap} disabled=${!events.length}>copy</button>
+      </div>
+    </div>
+    ${waiting.length
+      ? html`<div class="exec-map-waiting">
+          <b>нужен ты</b>
+          ${waiting.slice(0, 4).map(
+            (item) =>
+              html`<span>
+                ${item.project}: ${item.task || item.status}
+                <button onClick=${() => approveDel(item.id)}>approve</button>
+                <button onClick=${() => rejectDel(item.id)}>reject</button>
+              </span>`,
+          )}
+        </div>`
+      : null}
+    <div class="exec-map-body">
+      <div class="exec-map-rail" style=${`height:${mapH}px`}>
+        <div class="exec-map-rail-time">ветки</div>
+        ${lanes.map(
+          (lane) =>
+            html`<div
+              class=${`exec-map-lane-label ${timelineStatusClass(lane.status)}`}
+              style=${`height:${rowH}px`}
+            >
+              <b>${lane.label}</b>
+              <span>${lane.provider || lane.kind}</span>
+              <em>${executionStatusLabel(lane.status)}</em>
+            </div>`,
+        )}
+      </div>
+      <div class="exec-map-scroll">
+        <div class="exec-map-track" style=${`width:${mapW}px;height:${mapH}px`}>
+          <div class="exec-map-ruler">
+            ${Array.from({ length: Math.min(maxSequence + 2, 20) }).map(
+              (_, index) =>
+                html`<span style=${`left:${leftPad + (index + 1) * stepW}px`}>
+                  t+${index}
+                </span>`,
+            )}
+          </div>
+          <svg
+            class="exec-map-edges"
+            width=${mapW}
+            height=${mapH}
+            viewBox=${`0 0 ${mapW} ${mapH}`}
+          >
+            ${edges.map(
+              (edge) =>
+                html`<path
+                  d=${edgePath(edge)}
+                  class=${`exec-edge ${edge.type || "edge"} ${timelineStatusClass(
+                    edge.status,
+                  )}`}
+                />`,
+            )}
+          </svg>
+          ${lanes.map((lane, index) => {
+            const y = topPad + index * rowH;
+            return html`<div
+              class="exec-map-lane-bg"
+              style=${`top:${y}px;height:${rowH}px;width:${mapW}px`}
+            ></div>`;
+          })}
+          ${events.map((event) => {
+            const p = pos(event);
+            const cls = timelineStatusClass(event.status);
+            return html`<button
+              class=${`exec-event ${cls} ${selectedId === event.id ? "selected" : ""}`}
+              style=${`left:${p.x}px;top:${p.y}px`}
+              onClick=${() => setSelectedId(event.id)}
+              title=${event.detail || event.title || ""}
+            >
+              <b>${executionKindLabel(event.kind)}</b>
+              <span>${event.title || "event"}</span>
+              <em>${executionStatusLabel(event.status)}</em>
+            </button>`;
+          })}
+        </div>
+      </div>
+    </div>
+    ${selected
+      ? html`<div class="exec-map-selected">
+          <b>${selected.title || "event"}</b>
+          <span>
+            ${executionStatusLabel(selected.status)} / ${selected.source} /
+            ${selected.provider || "agent"}
+          </span>
+          ${selected.detail ? html`<p>${selected.detail}</p>` : null}
+          <em>${selected.project || ""} ${selected.ts || ""}</em>
+        </div>`
+      : null}
+  </div>`;
 }
 
 function ExecutionTimelineCard({ timeline, contract, onRefresh }) {
@@ -2024,6 +2241,22 @@ function ChatSidebar() {
       activeDualSession.value || null,
       80,
     ).catch((e) => console.warn("execution timeline load failed:", e));
+  }, [
+    currentProject.value,
+    activeDualSession.value,
+    dualBusy.value,
+    activeRun.value?.status,
+    activeRun.value?.phase,
+    activeRun.value?.detail,
+    streamChain.value.length,
+    Object.keys(delegations.value || {}).length,
+  ]);
+  useEffect(() => {
+    loadExecutionMap(
+      currentProject.value || "",
+      activeDualSession.value || null,
+      120,
+    ).catch((e) => console.warn("execution map load failed:", e));
   }, [
     currentProject.value,
     activeDualSession.value,
@@ -2650,13 +2883,25 @@ function ChatSidebar() {
       onFollow=${scrollToBottom}
       onLoadOlder=${loadOlder}
     />
-    <details class="chat-context-drawer">
+    <details
+      class="chat-context-drawer"
+      open=${!!(
+        executionMap.value?.counts?.waiting ||
+        isStreaming.value ||
+        activeRun.value
+      )}
+    >
       <summary>
-        <span>context / routes / tools</span>
+        <span>context / execution map / tools</span>
         <em>
           ${(orchestrationMap.value?.project_agent_routes || []).length} routes
           · ${(executionTimeline.value?.items || []).length} events ·
           ${Object.keys(delegations.value || {}).length} delegations
+        </em>
+        <em class="exec-map-drawer-summary">
+          ${(executionMap.value?.lanes || []).length} lanes /
+          ${(executionMap.value?.events || []).length} events /
+          ${executionMap.value?.counts?.waiting || 0} waiting
         </em>
       </summary>
       <${OrchestrationMapCard}
@@ -2752,15 +2997,14 @@ function ChatSidebar() {
           );
         }}
       />
-      <${ExecutionTimelineCard}
-        timeline=${executionTimeline.value}
-        contract=${eventContract.value}
+      <${ExecutionMapCard}
+        map=${executionMap.value}
         onRefresh=${() =>
-          loadExecutionTimeline(
+          loadExecutionMap(
             currentProject.value || "",
             activeDualSession.value || null,
-            80,
-          ).catch((e) => console.warn("execution timeline refresh:", e))}
+            120,
+          ).catch((e) => console.warn("execution map refresh:", e))}
       />
       ${duoEnabled
         ? html`<div class="duo-brief">
@@ -4347,6 +4591,7 @@ export {
   ToolCard,
   ThinkBlock,
   ProgressBar,
+  ExecutionMapCard,
   ExecutionTimelineCard,
   ChatMsg,
   StreamBubble,

@@ -62,6 +62,7 @@ import {
   activeScope,
   orchestrationMap,
   executionTimeline,
+  executionMap,
   eventContract,
   showToast,
 } from "/store.js";
@@ -873,6 +874,65 @@ async function loadExecutionTimeline(
     return res;
   }
   throw new Error(res?.error || "Cannot load execution timeline");
+}
+
+async function loadExecutionMap(
+  project = currentProject.value || "",
+  sessionId = activeDualSession.value || null,
+  limit = 120,
+) {
+  if (!__IS_TAURI) {
+    executionMap.value = {
+      status: "ok",
+      schema_version: "agentos.execution_map.v1",
+      event_schema_version: "agentos.event.v1",
+      project: project || "_orchestrator",
+      big_plan: {
+        stage: "branching_execution_map",
+        stage_index: 10,
+        stage_total: 10,
+        label: "Branching execution map + live orchestration visibility",
+      },
+      counts: { lanes: 1, events: 1, edges: 0, waiting: 0, blocked: 0 },
+      lanes: [
+        {
+          id: "orchestrator",
+          kind: "orchestrator",
+          label: "Orchestrator",
+          project: "_orchestrator",
+          status: "idle",
+          provider: "orchestrator",
+          order: 0,
+        },
+      ],
+      events: [
+        {
+          id: "evt-root",
+          lane_id: "orchestrator",
+          source: "system",
+          kind: "root",
+          status: "idle",
+          title: "Orchestrator context",
+          detail: "No recent execution events.",
+          ts: new Date().toISOString(),
+          sequence: 0,
+        },
+      ],
+      edges: [],
+      waiting_for_user: [],
+    };
+    return executionMap.value;
+  }
+  const res = await __invoke("get_execution_map", {
+    project: project || null,
+    roomSessionId: sessionId || null,
+    limit,
+  });
+  if (res?.status === "ok") {
+    executionMap.value = res;
+    return res;
+  }
+  throw new Error(res?.error || "Cannot load execution map");
 }
 
 async function loadEventContract() {
@@ -2180,6 +2240,7 @@ export {
   loadActiveScope,
   loadOrchestrationMap,
   loadExecutionTimeline,
+  loadExecutionMap,
   loadEventContract,
   generateStrategy,
   createAdhocPlanFromRoom,

@@ -214,6 +214,7 @@ const dualBusy = signal("");
 const activeScope = signal(null);
 const orchestrationMap = signal(null);
 const executionTimeline = signal(null);
+const executionMap = signal(null);
 const eventContract = signal(null);
 
 // Clock interval (global, no cleanup needed for desktop app)
@@ -300,6 +301,7 @@ export {
   activeScope,
   orchestrationMap,
   executionTimeline,
+  executionMap,
   eventContract,
   showToast,
 };

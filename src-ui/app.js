@@ -46,6 +46,7 @@ import {
   ensureDualSession,
   loadDualSession,
   loadActiveScope,
+  loadExecutionMap,
 } from "/api.js";
 import { App } from "/views.js";
 import { normalizeProjectKey, projectParam } from "/route-state.js";
@@ -242,6 +243,7 @@ try {
     loadSignals(),
     loadPerms(),
     loadDelegations(),
+    loadExecutionMap(),
   ]);
   syncRecoveredActiveRun();
   await loadChat(normalizeProjectKey(currentProject.value || ""));
@@ -288,6 +290,7 @@ setInterval(async () => {
   loadFeed();
   loadSignals();
   loadDelegations();
+  loadExecutionMap().catch(() => {});
   await loadInbox();
   const { inboxData } = await import("/store.js");
   if (inboxData.value.count > 0 && !inboxData.value.needs_user) {
@@ -320,5 +323,6 @@ setInterval(() => {
     loadFeed().catch(() => {});
     loadSignals().catch(() => {});
     loadDelegations().catch(() => {});
+    loadExecutionMap().catch(() => {});
   }
 }, 1000);

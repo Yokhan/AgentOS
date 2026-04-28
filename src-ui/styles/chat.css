@@ -207,7 +207,11 @@
     letter-spacing: 0;
     white-space: nowrap;
 }
+.chat-context-drawer > summary em:not(.exec-map-drawer-summary) {
+    display: none;
+}
 .chat-context-drawer .orch-map-card,
+.chat-context-drawer .exec-map-card,
 .chat-context-drawer .exec-timeline-card,
 .chat-context-drawer .duo-brief,
 .chat-context-drawer .inbox-panel,
@@ -660,6 +664,253 @@
 .exec-title em {
     color: var(--yellow);
     border-color: color-mix(in srgb, var(--yellow) 45%, var(--border));
+}
+.exec-map-card {
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--bg) 76%, var(--sf)),
+        color-mix(in srgb, var(--sf) 78%, var(--bg))
+    );
+    padding: var(--sp-s) var(--sp-m);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-xs);
+}
+.exec-map-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-s);
+}
+.exec-map-title {
+    color: var(--text);
+    font-weight: 650;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+}
+.exec-map-title span,
+.exec-map-title em {
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    font-style: normal;
+    color: var(--t3);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+}
+.exec-map-title em {
+    color: var(--yellow);
+    border-color: color-mix(in srgb, var(--yellow) 45%, var(--border));
+}
+.exec-map-waiting {
+    border: 1px solid color-mix(in srgb, var(--yellow) 50%, var(--border));
+    background: color-mix(in srgb, var(--yellow) 7%, transparent);
+    color: var(--yellow);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-xs);
+    flex-wrap: wrap;
+    padding: 6px 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.exec-map-waiting b {
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.exec-map-waiting span {
+    border-left: 1px dashed color-mix(in srgb, var(--yellow) 45%, var(--border));
+    padding-left: var(--sp-xs);
+    color: var(--t2);
+}
+.exec-map-waiting button {
+    margin-left: 5px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--yellow);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    cursor: pointer;
+}
+.exec-map-body {
+    display: grid;
+    grid-template-columns: 170px minmax(0, 1fr);
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    min-height: 210px;
+}
+.exec-map-rail {
+    border-right: 1px solid var(--border);
+    background: color-mix(in srgb, var(--sf) 80%, transparent);
+    position: sticky;
+    left: 0;
+    z-index: 3;
+}
+.exec-map-rail-time {
+    height: 44px;
+    padding: 9px 8px;
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+}
+.exec-map-lane-label {
+    padding: 7px 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.exec-map-lane-label b {
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.exec-map-lane-label span,
+.exec-map-lane-label em {
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    font-style: normal;
+}
+.exec-map-lane-label.live em {
+    color: var(--cyan);
+}
+.exec-map-lane-label.warn em {
+    color: var(--yellow);
+}
+.exec-map-lane-label.done em {
+    color: var(--green);
+}
+.exec-map-scroll {
+    overflow: auto;
+    min-width: 0;
+}
+.exec-map-track {
+    position: relative;
+    min-height: 100%;
+}
+.exec-map-ruler {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 44px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+    z-index: 2;
+}
+.exec-map-ruler span {
+    position: absolute;
+    top: 11px;
+    transform: translateX(-50%);
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.exec-map-lane-bg {
+    position: absolute;
+    left: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--sf) 40%, transparent),
+        transparent
+    );
+}
+.exec-map-edges {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+}
+.exec-edge {
+    fill: none;
+    stroke: color-mix(in srgb, var(--cyan) 55%, var(--border));
+    stroke-width: 1.5;
+    stroke-dasharray: 5 4;
+}
+.exec-edge.merge {
+    stroke: color-mix(in srgb, var(--green) 55%, var(--border));
+    stroke-dasharray: none;
+}
+.exec-edge.warn {
+    stroke: color-mix(in srgb, var(--yellow) 70%, var(--border));
+}
+.exec-event {
+    position: absolute;
+    z-index: 2;
+    width: 132px;
+    min-height: 42px;
+    padding: 5px 7px;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--sf) 86%, var(--bg));
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    text-align: left;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.exec-event:hover,
+.exec-event.selected {
+    border-color: var(--cyan);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--cyan) 30%, transparent);
+}
+.exec-event.live {
+    border-left: 3px solid var(--cyan);
+}
+.exec-event.warn {
+    border-left: 3px solid var(--yellow);
+}
+.exec-event.done {
+    border-left: 3px solid var(--green);
+}
+.exec-event b {
+    color: var(--cyan);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+}
+.exec-event span {
+    max-width: 100%;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.exec-event em {
+    color: var(--t3);
+    font-style: normal;
+}
+.exec-map-selected {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 76%, transparent);
+    padding: 6px 8px;
+    display: grid;
+    grid-template-columns: minmax(120px, 0.7fr) minmax(140px, 1fr);
+    gap: 4px var(--sp-s);
+    font-size: var(--fs-s);
+}
+.exec-map-selected b {
+    color: var(--text);
+}
+.exec-map-selected span,
+.exec-map-selected em,
+.exec-map-selected p {
+    font-family: var(--font-mono);
+    color: var(--t3);
+    margin: 0;
+}
+.exec-map-selected p {
+    grid-column: 1 / -1;
+    color: var(--t2);
 }
 .exec-actions {
     display: flex;
