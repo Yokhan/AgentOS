@@ -2997,15 +2997,6 @@ function ChatSidebar() {
           );
         }}
       />
-      <${ExecutionMapCard}
-        map=${executionMap.value}
-        onRefresh=${() =>
-          loadExecutionMap(
-            currentProject.value || "",
-            activeDualSession.value || null,
-            120,
-          ).catch((e) => console.warn("execution map refresh:", e))}
-      />
       ${duoEnabled
         ? html`<div class="duo-brief">
             <div class="scope-strip">

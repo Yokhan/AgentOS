@@ -331,6 +331,92 @@ body.chat-resizing {
 .workbench-content .stats {
     margin-bottom: var(--sp-m);
 }
+.main-execution-stage {
+    border: 1px solid color-mix(in srgb, var(--cyan) 32%, var(--border));
+    background:
+        radial-gradient(
+            circle at 12% 0%,
+            color-mix(in srgb, var(--cyan) 10%, transparent),
+            transparent 34%
+        ),
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--sf2) 72%, transparent),
+            color-mix(in srgb, var(--sf) 94%, transparent)
+        );
+    margin-bottom: var(--sp-m);
+    padding: var(--sp-m);
+    min-height: 360px;
+}
+.main-execution-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-m);
+    margin-bottom: var(--sp-s);
+}
+.main-execution-head h2 {
+    margin: 2px 0 0;
+    font-size: clamp(18px, 1.8vw, 26px);
+    letter-spacing: -0.02em;
+}
+.main-execution-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    color: var(--t3);
+}
+.main-execution-meta span {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    padding: 2px 7px;
+}
+.main-execution-meta button {
+    border: 1px solid var(--border);
+    background: var(--sf);
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    cursor: pointer;
+    padding: 2px 8px;
+}
+.main-execution-stage .exec-map-card {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    padding: var(--sp-s);
+}
+.main-execution-stage .exec-map-body {
+    min-height: 260px;
+}
+.main-execution-stage .exec-map-scroll {
+    max-height: 52vh;
+}
+.main-execution-stage .exec-map-title {
+    font-size: var(--fs-m);
+}
+.main-execution-empty {
+    min-height: 260px;
+    border: 1px dashed var(--border);
+    display: grid;
+    place-content: center;
+    gap: var(--sp-s);
+    text-align: center;
+    color: var(--t3);
+    font-family: var(--font-mono);
+}
+.main-execution-empty b {
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: var(--fs-l);
+}
+.main-execution-empty span {
+    max-width: 680px;
+    line-height: 1.5;
+}
 .workbench-hero {
     border: 1px solid var(--border);
     background: linear-gradient(
@@ -725,6 +811,9 @@ body.chat-resizing {
     }
     .workbench-hero {
         grid-template-columns: 1fr;
+    }
+    .main-execution-head {
+        flex-direction: column;
     }
 }
 

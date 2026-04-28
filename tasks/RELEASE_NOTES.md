@@ -1,3 +1,11 @@
+# Agent OS 0.3.8
+
+- Moved the branching execution map out of the chat drawer and onto the main dashboard as a first-class operational surface.
+- Added a central live execution flow stage showing orchestrator lanes, project-agent lanes, delegation/feedback edges, event counts, and waiting work without opening chat details.
+- Kept chat focused on command input and transcript instead of using it as the primary container for execution visualization.
+- Added auto-refresh for the main execution flow every 5 seconds, plus a manual refresh control.
+- Enlarged dashboard execution-map styling so the branch track reads like a horizontal work graph instead of a compact diagnostic card.
+
 # Agent OS 0.3.7
 
 - Fixed the Strategy page startup crash caused by a missing `activeStrategy` store import.

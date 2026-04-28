@@ -44,6 +44,7 @@ import {
   signalsData,
   activities,
   composerDraftText,
+  executionMap,
   appInfo,
   showToast,
 } from "/store.js";
@@ -57,6 +58,7 @@ import {
   loadPlansData,
   loadPerms,
   loadFeed,
+  loadExecutionMap,
   ensureDualSession,
   sendMessage,
 } from "/api.js";
@@ -64,6 +66,7 @@ import {
   Tile,
   DetailView,
   ChatSidebar,
+  ExecutionMapCard,
   NewProjectModal,
   Toasts,
 } from "/chat.js";
@@ -810,6 +813,55 @@ function WorkbenchFocus({ all }) {
       )}
     </div>
   </div>`;
+}
+
+function ExecutionFlowStage() {
+  const map = executionMap.value;
+  useEffect(() => {
+    let disposed = false;
+    const refresh = () => {
+      if (disposed) return;
+      loadExecutionMap("", null, 180).catch((e) =>
+        console.warn("main execution map refresh failed:", e),
+      );
+    };
+    refresh();
+    const timer = setInterval(refresh, 5000);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
+  }, []);
+  const laneCount = (map?.lanes || []).length;
+  const eventCount = (map?.events || []).length;
+  return html`<section class="main-execution-stage">
+    <div class="main-execution-head">
+      <div>
+        <div class="workbench-eyebrow">live execution flow</div>
+        <h2>Карта веток: оркестратор → проектные агенты → feedback</h2>
+      </div>
+      <div class="main-execution-meta">
+        <span>${laneCount} веток</span>
+        <span>${eventCount} событий</span>
+        <button onClick=${() => loadExecutionMap("", null, 180)}>
+          refresh
+        </button>
+      </div>
+    </div>
+    ${map?.status === "ok"
+      ? html`<${ExecutionMapCard}
+          map=${map}
+          onRefresh=${() => loadExecutionMap("", null, 180)}
+        />`
+      : html`<div class="main-execution-empty">
+          <b>Карта исполнения загружается</b>
+          <span>
+            Здесь будет горизонтальный трек как gitflow: главная ветка
+            оркестратора, ниже ветки проектных агентов, стрелки делегаций и
+            возвраты feedback.
+          </span>
+        </div>`}
+  </section>`;
 }
 
 function projectHasDelegation(project) {
@@ -1591,6 +1643,7 @@ function DashboardWorkbenchView() {
     </aside>
     <section class="workbench-primary">
       <${StatsRow} />
+      <${ExecutionFlowStage} />
       <${WorkbenchFocus} all=${allAgents} />
       <div class="workbench-panels">
         <${ActivePlanCard} />
