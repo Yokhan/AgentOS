@@ -11,6 +11,7 @@ import {
   plansData,
   goals,
   strategies,
+  activeStrategy,
   strategyLoading,
   permData,
   activeDualSession,

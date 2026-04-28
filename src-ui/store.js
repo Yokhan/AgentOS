@@ -216,6 +216,7 @@ const orchestrationMap = signal(null);
 const executionTimeline = signal(null);
 const executionMap = signal(null);
 const eventContract = signal(null);
+const appInfo = signal({ version: "dev" });
 
 // Clock interval (global, no cleanup needed for desktop app)
 setInterval(() => (clock.value = new Date().toLocaleTimeString()), 1000);
@@ -303,5 +304,6 @@ export {
   executionTimeline,
   executionMap,
   eventContract,
+  appInfo,
   showToast,
 };

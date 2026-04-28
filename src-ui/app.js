@@ -23,6 +23,7 @@ import {
   sideMessages,
   projectPlan,
   permData,
+  inboxData,
   showToast,
 } from "/store.js";
 import {
@@ -47,6 +48,7 @@ import {
   loadDualSession,
   loadActiveScope,
   loadExecutionMap,
+  loadAppInfo,
 } from "/api.js";
 import { App } from "/views.js";
 import { normalizeProjectKey, projectParam } from "/route-state.js";
@@ -242,6 +244,7 @@ try {
     loadPlansData(),
     loadSignals(),
     loadPerms(),
+    loadAppInfo(),
     loadDelegations(),
     loadExecutionMap(),
   ]);
@@ -292,7 +295,6 @@ setInterval(async () => {
   loadDelegations();
   loadExecutionMap().catch(() => {});
   await loadInbox();
-  const { inboxData } = await import("/store.js");
   if (inboxData.value.count > 0 && !inboxData.value.needs_user) {
     const { processInbox } = await import("/api.js");
     processInbox();

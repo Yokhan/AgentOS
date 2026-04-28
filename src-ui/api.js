@@ -64,11 +64,24 @@ import {
   executionTimeline,
   executionMap,
   eventContract,
+  appInfo,
   showToast,
 } from "/store.js";
 import { normalizeSoloSelection } from "/provider-caps.js";
 import { normalizeProjectKey, projectParam } from "/route-state.js";
 // ===== API =====
+
+async function loadAppInfo() {
+  try {
+    if (__IS_TAURI) {
+      appInfo.value = await __invoke("get_app_info");
+    } else {
+      appInfo.value = { version: "dev" };
+    }
+  } catch (e) {
+    console.warn("loadAppInfo:", e);
+  }
+}
 
 let recog = null;
 const ACTIVE_DELEGATION_STATUSES = new Set([
@@ -2242,6 +2255,7 @@ export {
   loadExecutionTimeline,
   loadExecutionMap,
   loadEventContract,
+  loadAppInfo,
   generateStrategy,
   createAdhocPlanFromRoom,
   createRoomProjectSession,

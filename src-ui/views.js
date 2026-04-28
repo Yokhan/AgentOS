@@ -44,6 +44,7 @@ import {
   signalsData,
   activities,
   composerDraftText,
+  appInfo,
   showToast,
 } from "/store.js";
 import {
@@ -666,6 +667,9 @@ function AnalyticsBar() {
     <div style="flex:1"></div>
     <div class="metric">
       <span style="color:var(--t3)">${currentSoloSelectionLabel()}</span>
+    </div>
+    <div class="metric" title="Agent OS version">
+      <span>v</span><span class="v">${appInfo.value?.version || "dev"}</span>
     </div>
     <div
       class="metric"

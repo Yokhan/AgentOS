@@ -4,6 +4,14 @@ use std::sync::Arc;
 use tauri::State;
 
 #[tauri::command]
+pub fn get_app_info() -> Value {
+    json!({
+        "name": env!("CARGO_PKG_NAME"),
+        "version": env!("CARGO_PKG_VERSION"),
+    })
+}
+
+#[tauri::command]
 pub fn get_permissions(state: State<Arc<AppState>>) -> Value {
     permissions_snapshot(&state)
 }

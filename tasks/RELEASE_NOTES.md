@@ -1,3 +1,11 @@
+# Agent OS 0.3.7
+
+- Fixed the Strategy page startup crash caused by a missing `activeStrategy` store import.
+- Added a visible Agent OS version indicator to the bottom status bar so the running build is obvious in the UI.
+- Added a backend `get_app_info` command that exposes the packaged app version from Cargo metadata.
+- Strengthened the UI release gate: store-signal import checks now cover all `src-ui/*.js` modules instead of only `chat.js`.
+- Extended the UI smoke check to import `pages.js` and verify `StrategyView` is exported before release packaging.
+
 # Agent OS 0.3.6
 
 - Added a branching execution map so chat can show orchestrator, project-agent lanes, command/delegation events, and feedback merges as one live operational timeline.

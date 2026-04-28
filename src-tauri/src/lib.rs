@@ -162,6 +162,7 @@ pub fn run() {
             commands::graph::get_subgraph,
             commands::graph::get_graph_at_commit,
             // Config
+            commands::config::get_app_info,
             commands::config::get_permissions,
             commands::config::set_permission,
             commands::config::get_health_history,

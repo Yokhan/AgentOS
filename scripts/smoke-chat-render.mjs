@@ -70,6 +70,7 @@ globalThis.setInterval = (...args) => {
 const storeModuleUrl = pathToFileURL(path.join(tempDir, "store.js")).href;
 const chatModuleUrl = pathToFileURL(path.join(tempDir, "chat.js")).href;
 const viewsModuleUrl = pathToFileURL(path.join(tempDir, "views.js")).href;
+const pagesModuleUrl = pathToFileURL(path.join(tempDir, "pages.js")).href;
 const pagesSource = fs.readFileSync(path.join(srcDir, "pages.js"), "utf8");
 if (
   pagesSource.includes("useRef(") &&
@@ -88,9 +89,16 @@ const {
   searchQuery,
   activeFilter,
   sortBy,
+  goals,
+  strategies,
+  activeStrategy,
 } = await import(storeModuleUrl);
 const { DetailView, ExecutionTimelineCard } = await import(chatModuleUrl);
 const { DashboardWorkbenchView } = await import(viewsModuleUrl);
+const { StrategyView } = await import(pagesModuleUrl);
+if (typeof StrategyView !== "function") {
+  throw new Error("pages.js does not export StrategyView");
+}
 
 isLoading.value = false;
 searchQuery.value = "";
@@ -123,6 +131,28 @@ delegations.value = {
   smoke: { status: "running" },
 };
 queueTasks.value = [{ done: false, text: "smoke task" }];
+goals.value = [
+  {
+    title: "Smoke goal",
+    status: "active",
+    deadline: "today",
+    projects: ["AgentOS"],
+  },
+];
+strategies.value = [
+  {
+    title: "Smoke strategy",
+    status: "draft",
+    plans: [
+      {
+        project: "AgentOS",
+        priority: "HIGH",
+        steps: [{ title: "Render strategy", status: "pending" }],
+      },
+    ],
+  },
+];
+activeStrategy.value = null;
 
 DetailView();
 DashboardWorkbenchView();
