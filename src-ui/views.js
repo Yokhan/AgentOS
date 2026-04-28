@@ -35,6 +35,7 @@ import {
   activeFilter,
   sortBy,
   viewMode,
+  activeWorkspaceTab,
   searchQuery,
   actionPlan,
   queueTasks,
@@ -830,7 +831,7 @@ function ExecutionFlowStage() {
       );
     };
     refresh();
-    const timer = setInterval(refresh, 5000);
+    const timer = setInterval(refresh, 3000);
     return () => {
       disposed = true;
       clearInterval(timer);
@@ -842,7 +843,11 @@ function ExecutionFlowStage() {
     <div class="main-execution-head">
       <div>
         <div class="workbench-eyebrow">live execution flow</div>
-        <h2>Карта веток: оркестратор → проектные агенты → feedback</h2>
+        <h2>Живая карта исполнения</h2>
+        <p>
+          Оркестратор, проектные агенты, события и возвраты feedback в одном
+          горизонтальном треке.
+        </p>
       </div>
       <div class="main-execution-meta">
         <span>${laneCount} веток</span>
@@ -855,6 +860,7 @@ function ExecutionFlowStage() {
     ${map?.status === "ok"
       ? html`<${ExecutionMapCard}
           map=${map}
+          variant="stage"
           onRefresh=${() => loadExecutionMap("", null, 180)}
         />`
       : html`<div class="main-execution-empty">
@@ -866,6 +872,165 @@ function ExecutionFlowStage() {
           </span>
         </div>`}
   </section>`;
+}
+
+function WorkbenchDock() {
+  const tabs = [
+    ["flow", "Поток", "ветки и события"],
+    ["focus", "Фокус", "что делать сейчас"],
+    ["projects", "Проекты", "обзор выбранного среза"],
+    ["plans", "Планы", "план и очередь"],
+    ["signals", "Сигналы", "риски и входящие"],
+  ];
+  return html`<nav class="workspace-dock" aria-label="Workspace views">
+    ${tabs.map(
+      ([id, label, hint]) =>
+        html`<button
+          class=${activeWorkspaceTab.value === id ? "active" : ""}
+          onClick=${() => (activeWorkspaceTab.value = id)}
+        >
+          <b>${label}</b>
+          <span>${hint}</span>
+        </button>`,
+    )}
+  </nav>`;
+}
+
+function ProjectsWorkspace({ items, segMap, useFlat, flatItems }) {
+  const groups = useFlat
+    ? [["all", flatItems]]
+    : Object.entries(segMap).filter(([_, list]) => list.length);
+  return html`<section class="workspace-panel projects-workspace">
+    <div class="workspace-panel-head">
+      <div>
+        <div class="workbench-eyebrow">projects</div>
+        <h2>Проектный срез</h2>
+      </div>
+      <div class="workspace-actions">
+        <button
+          class=${viewMode.value === "grid" ? "active" : ""}
+          onClick=${() => (viewMode.value = "grid")}
+        >
+          grid
+        </button>
+        <button
+          class=${viewMode.value === "list" ? "active" : ""}
+          onClick=${() => (viewMode.value = "list")}
+        >
+          list
+        </button>
+      </div>
+    </div>
+    ${!items.length
+      ? html`<div class="workspace-empty">
+          <b>Нет проектов в текущем фильтре</b>
+          <button
+            onClick=${() => {
+              activeFilter.value = "";
+              searchQuery.value = "";
+            }}
+          >
+            сбросить фильтры
+          </button>
+        </div>`
+      : groups.map(
+          ([name, list]) =>
+            html`<section class="workspace-project-group">
+              <div class="project-rail-title">
+                <span>${name || "all"}</span>
+                <em>${list.length}</em>
+              </div>
+              ${viewMode.value === "list"
+                ? html`<div class="workspace-project-list">
+                    ${list.map(
+                      (ag) =>
+                        html`<button
+                          class="workspace-project-row"
+                          onClick=${() => (currentProject.value = ag.name)}
+                        >
+                          <span class="dot ${ag.status || "sleeping"}"></span>
+                          <b>${ag.name}</b>
+                          <em>${ag.task || ag.status || "sleeping"}</em>
+                          <small>${ag.uncommitted || 0} dirty</small>
+                        </button>`,
+                    )}
+                  </div>`
+                : html`<div class="grid compact-grid">
+                    ${list.map((ag) => html`<${Tile} a=${ag} />`)}
+                  </div>`}
+            </section>`,
+        )}
+  </section>`;
+}
+
+function PlansWorkspace() {
+  return html`<section class="workspace-panel plans-workspace">
+    <div class="workspace-panel-head">
+      <div>
+        <div class="workbench-eyebrow">plans</div>
+        <h2>План и очередь</h2>
+      </div>
+      <div class="workspace-actions">
+        <button onClick=${() => loadPlansData()}>refresh plans</button>
+      </div>
+    </div>
+    <div class="workspace-two-col">
+      <${ActivePlanCard} />
+      <${QueuePanel} />
+    </div>
+    <${PlanPanel} />
+  </section>`;
+}
+
+function SignalsWorkspace() {
+  return html`<section class="workspace-panel signals-workspace">
+    <div class="workspace-panel-head">
+      <div>
+        <div class="workbench-eyebrow">signals</div>
+        <h2>Сигналы и контроль</h2>
+      </div>
+      <div class="workspace-actions">
+        <button onClick=${() => loadSignals()}>refresh signals</button>
+      </div>
+    </div>
+    <div class="workspace-two-col">
+      <${SignalsPanel} />
+      <div class="panel">
+        <h3>Inbox</h3>
+        <div class="mod">
+          <span>needs user</span>
+          <b>${inboxData.value?.needs_user ? "yes" : "no"}</b>
+        </div>
+        <div class="mod">
+          <span>items</span>
+          <b>${inboxData.value?.count || 0}</b>
+        </div>
+      </div>
+    </div>
+  </section>`;
+}
+
+function WorkspaceCanvas({
+  allAgents,
+  visibleAgents,
+  segMap,
+  useFlat,
+  flatItems,
+}) {
+  const tab = activeWorkspaceTab.value || "flow";
+  if (tab === "focus") return html`<${WorkbenchFocus} all=${allAgents} />`;
+  if (tab === "projects" && currentProject.value)
+    return html`<${DetailView} />`;
+  if (tab === "projects")
+    return html`<${ProjectsWorkspace}
+      items=${visibleAgents}
+      segMap=${segMap}
+      useFlat=${useFlat}
+      flatItems=${flatItems}
+    />`;
+  if (tab === "plans") return html`<${PlansWorkspace} />`;
+  if (tab === "signals") return html`<${SignalsWorkspace} />`;
+  return html`<${ExecutionFlowStage} />`;
 }
 
 function projectHasDelegation(project) {
@@ -1647,14 +1812,16 @@ function DashboardWorkbenchView() {
     </aside>
     <section class="workbench-primary">
       <${StatsRow} />
-      <${ExecutionFlowStage} />
-      <${WorkbenchFocus} all=${allAgents} />
-      <div class="workbench-panels">
-        <${ActivePlanCard} />
-        <${PlanPanel} />
-        <${QueuePanel} />
-        <${SignalsPanel} />
+      <div class="workspace-canvas">
+        <${WorkspaceCanvas}
+          allAgents=${allAgents}
+          visibleAgents=${visibleAgents}
+          segMap=${segMap}
+          useFlat=${useFlat}
+          flatItems=${flatItems}
+        />
       </div>
+      <${WorkbenchDock} />
     </section>
   </div>`;
 }
@@ -1735,7 +1902,17 @@ function ProjectWorkbenchView() {
       />
     </aside>
     <section class="workbench-primary project-workbench-primary">
-      <${DetailView} />
+      <${StatsRow} />
+      <div class="workspace-canvas">
+        <${WorkspaceCanvas}
+          allAgents=${allAgents}
+          visibleAgents=${visibleAgents}
+          segMap=${segMap}
+          useFlat=${useFlat}
+          flatItems=${flatItems}
+        />
+      </div>
+      <${WorkbenchDock} />
     </section>
   </div>`;
 }

@@ -153,6 +153,12 @@ const activeFilter = signal("");
 const sortBy = signal("");
 const viewMode = signal(localStorage.getItem("agentos_viewmode") || "grid"); // 'grid' or 'list'
 effect(() => localStorage.setItem("agentos_viewmode", viewMode.value));
+const activeWorkspaceTab = signal(
+  localStorage.getItem("agentos_workspace_tab") || "flow",
+);
+effect(() =>
+  localStorage.setItem("agentos_workspace_tab", activeWorkspaceTab.value),
+);
 const modules = signal([]);
 const searchQuery = signal("");
 const actionPlan = signal(null);
@@ -282,6 +288,7 @@ export {
   activeFilter,
   sortBy,
   viewMode,
+  activeWorkspaceTab,
   modules,
   searchQuery,
   actionPlan,

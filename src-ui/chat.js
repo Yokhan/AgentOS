@@ -1614,9 +1614,10 @@ function executionKindLabel(kind) {
   return labels[kind] || kind || "event";
 }
 
-function ExecutionMapCard({ map, onRefresh }) {
+function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const [selectedId, setSelectedId] = useState("");
   if (!map || map.status !== "ok") return null;
+  const isStage = variant === "stage";
   const big = map.big_plan || {};
   const lanes = map.lanes || [];
   const events = map.events || [];
@@ -1630,29 +1631,38 @@ function ExecutionMapCard({ map, onRefresh }) {
     1,
     ...events.map((event) => Number(event.sequence || 0)),
   );
-  const stepW = 150;
-  const rowH = 72;
-  const topPad = 44;
-  const leftPad = 28;
-  const mapW = Math.max(760, (maxSequence + 3) * stepW);
-  const mapH = topPad + Math.max(1, lanes.length) * rowH + 18;
+  const eventW = isStage ? 190 : 132;
+  const eventH = isStage ? 58 : 42;
+  const stepW = isStage ? 240 : 150;
+  const rowH = isStage ? 96 : 72;
+  const topPad = isStage ? 58 : 44;
+  const leftPad = isStage ? 42 : 28;
+  const mapW = Math.max(isStage ? 1180 : 760, (maxSequence + 3) * stepW);
+  const mapH = topPad + Math.max(1, lanes.length) * rowH + (isStage ? 28 : 18);
+  const arrowId = isStage ? "exec-map-arrow-stage" : "exec-map-arrow-compact";
   const pos = (event) => {
     const sequence = Number(event?.sequence || 0);
     const lane = laneIndex.get(event?.lane_id) ?? 0;
     return {
       x: leftPad + (sequence + 1) * stepW,
-      y: topPad + lane * rowH + 16,
+      y: topPad + lane * rowH + Math.max(8, Math.floor((rowH - eventH) / 2)),
     };
   };
   const edgePath = (edge) => {
-    const from = pos(eventById.get(edge.from));
-    const to = pos(eventById.get(edge.to));
-    const x1 = from.x + 126;
-    const y1 = from.y + 20;
+    const fromEvent = eventById.get(edge.from);
+    const toEvent = eventById.get(edge.to);
+    if (!fromEvent || !toEvent) return "";
+    const from = pos(fromEvent);
+    const to = pos(toEvent);
+    const x1 = from.x + eventW;
+    const y1 = from.y + eventH / 2;
     const x2 = to.x;
-    const y2 = to.y + 20;
-    const mid = Math.max(x1 + 30, Math.floor((x1 + x2) / 2));
-    return `M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`;
+    const y2 = to.y + eventH / 2;
+    const mid = Math.max(x1 + 32, Math.floor((x1 + x2) / 2));
+    if (Math.abs(y1 - y2) < 4) {
+      return `M ${x1} ${y1} H ${x2}`;
+    }
+    return `M ${x1} ${y1} H ${mid} V ${y2} H ${x2}`;
   };
   const copyMap = () => {
     const lines = events.map((event) => {
@@ -1664,26 +1674,49 @@ function ExecutionMapCard({ map, onRefresh }) {
       .then(() => showToast("execution map copied", "success", 1200))
       .catch(() => showToast("copy failed", "error", 2000));
   };
-  return html`<div class="exec-map-card">
-    <div class="exec-map-head">
-      <div>
-        <div class="orch-eyebrow">
-          карта исполнения - этап
-          ${Number(big.stage_index || 10)}/${Number(big.stage_total || 10)}
-        </div>
-        <div class="exec-map-title">
-          ${big.label || "Branching execution map"}
-          <span>${counts.lanes || lanes.length} веток</span>
-          <span>${counts.events || events.length} событий</span>
-          ${counts.waiting ? html`<em>${counts.waiting} ждут тебя</em>` : null}
-          ${counts.blocked ? html`<em>${counts.blocked} блокер</em>` : null}
-        </div>
-      </div>
-      <div class="exec-actions">
-        <button onClick=${onRefresh}>refresh</button>
-        <button onClick=${copyMap} disabled=${!events.length}>copy</button>
-      </div>
-    </div>
+  return html`<div class=${`exec-map-card ${isStage ? "stage" : ""}`}>
+    ${isStage
+      ? html`<div class="exec-map-stage-strip">
+            <span>ветки идут слева направо</span>
+            <span>прямые углы = делегация / feedback</span>
+            <span>клик по блоку открывает детали</span>
+            <b
+              >${Number(big.stage_index || 10)}/${Number(
+                big.stage_total || 10,
+              )}</b
+            >
+          </div>
+          <div class="exec-map-stage-actions">
+            <span>${counts.lanes || lanes.length} веток</span>
+            <span>${counts.events || events.length} событий</span>
+            ${counts.waiting
+              ? html`<em>${counts.waiting} ждут тебя</em>`
+              : null}
+            ${counts.blocked ? html`<em>${counts.blocked} блокер</em>` : null}
+            <button onClick=${onRefresh}>refresh</button>
+            <button onClick=${copyMap} disabled=${!events.length}>copy</button>
+          </div>`
+      : html`<div class="exec-map-head">
+          <div>
+            <div class="orch-eyebrow">
+              карта исполнения - этап
+              ${Number(big.stage_index || 10)}/${Number(big.stage_total || 10)}
+            </div>
+            <div class="exec-map-title">
+              ${big.label || "Branching execution map"}
+              <span>${counts.lanes || lanes.length} веток</span>
+              <span>${counts.events || events.length} событий</span>
+              ${counts.waiting
+                ? html`<em>${counts.waiting} ждут тебя</em>`
+                : null}
+              ${counts.blocked ? html`<em>${counts.blocked} блокер</em>` : null}
+            </div>
+          </div>
+          <div class="exec-actions">
+            <button onClick=${onRefresh}>refresh</button>
+            <button onClick=${copyMap} disabled=${!events.length}>copy</button>
+          </div>
+        </div>`}
     ${waiting.length
       ? html`<div class="exec-map-waiting">
           <b>нужен ты</b>
@@ -1728,6 +1761,19 @@ function ExecutionMapCard({ map, onRefresh }) {
             height=${mapH}
             viewBox=${`0 0 ${mapW} ${mapH}`}
           >
+            <defs>
+              <marker
+                id=${arrowId}
+                markerWidth="8"
+                markerHeight="8"
+                refX="7"
+                refY="4"
+                orient="auto"
+                markerUnits="strokeWidth"
+              >
+                <path d="M 0 0 L 8 4 L 0 8 z" class="exec-arrow-head" />
+              </marker>
+            </defs>
             ${edges.map(
               (edge) =>
                 html`<path
@@ -1735,22 +1781,27 @@ function ExecutionMapCard({ map, onRefresh }) {
                   class=${`exec-edge ${edge.type || "edge"} ${timelineStatusClass(
                     edge.status,
                   )}`}
+                  marker-end=${`url(#${arrowId})`}
                 />`,
             )}
           </svg>
           ${lanes.map((lane, index) => {
             const y = topPad + index * rowH;
             return html`<div
-              class="exec-map-lane-bg"
-              style=${`top:${y}px;height:${rowH}px;width:${mapW}px`}
-            ></div>`;
+                class="exec-map-lane-bg"
+                style=${`top:${y}px;height:${rowH}px;width:${mapW}px`}
+              ></div>
+              <div
+                class="exec-map-lane-line"
+                style=${`top:${y + rowH / 2}px;width:${mapW}px`}
+              ></div>`;
           })}
           ${events.map((event) => {
             const p = pos(event);
             const cls = timelineStatusClass(event.status);
             return html`<button
               class=${`exec-event ${cls} ${selectedId === event.id ? "selected" : ""}`}
-              style=${`left:${p.x}px;top:${p.y}px`}
+              style=${`left:${p.x}px;top:${p.y}px;--event-w:${eventW}px;--event-h:${eventH}px`}
               onClick=${() => setSelectedId(event.id)}
               title=${event.detail || event.title || ""}
             >
@@ -1877,7 +1928,7 @@ function ChatSidebar() {
   const stickToBottom = useRef(true);
   const [chatWidth, setChatWidth] = useState(() => {
     const saved = Number(localStorage.getItem("agentos.chatWidth") || 0);
-    return saved > 0 ? saved : null;
+    return saved > 0 ? Math.max(360, Math.min(560, saved)) : null;
   });
   const showScrollBtn = signal(false);
   const [viewportMode, setViewportMode] = useState("following");
@@ -2804,86 +2855,6 @@ function ChatSidebar() {
     </div>
     ${isDrag.value ? html`<div class="drop-zone">Drop files here</div>` : null}
     <${LiveStatusStrip} />
-    <${RouteCard}
-      route=${route}
-      providerOptions=${soloProviderOptions}
-      modelOptions=${modelOptions}
-      effortOptions=${effortOptions}
-      accessOptions=${accessOptions}
-      onToggleMode=${() => {
-        chatRunMode.value = chatRunMode.value === "plan" ? "act" : "plan";
-        setRouteChangeNote(`mode changed to ${chatRunMode.value}`);
-        setTimeout(() => setRouteChangeNote(""), 1600);
-      }}
-      onAccess=${(value) => {
-        chatAccessLevel.value = value;
-        setRouteChangeNote(`access changed to ${value}`);
-        setTimeout(() => setRouteChangeNote(""), 1600);
-        showToast("access: " + value, "success", 1200);
-      }}
-      onProvider=${(value) => {
-        selectedSoloProvider.value = value;
-        setRouteChangeNote(
-          `provider changed to ${value || configuredSoloProvider}`,
-        );
-        setTimeout(() => setRouteChangeNote(""), 1600);
-        showToast(
-          "provider: " + (value || configuredSoloProvider),
-          "success",
-          1200,
-        );
-      }}
-      onModel=${(value) => {
-        if (soloProvider === "codex") selectedCodexModel.value = value;
-        else selectedClaudeModel.value = value;
-        setRouteChangeNote(`model changed to ${value || "auto"}`);
-        setTimeout(() => setRouteChangeNote(""), 1600);
-        showToast("model: " + (value || "auto"), "success", 1200);
-      }}
-      onEffort=${(value) => {
-        if (soloProvider === "codex") selectedCodexEffort.value = value;
-        else selectedClaudeEffort.value = value;
-        setRouteChangeNote(`effort changed to ${value || "default"}`);
-        setTimeout(() => setRouteChangeNote(""), 1600);
-        showToast("effort: " + (value || "default"), "success", 1200);
-      }}
-      onProjectContext=${() =>
-        attachContext({
-          key: "project:" + routeState.key,
-          kind: "project",
-          label: routeState.isGlobal
-            ? "global dashboard"
-            : routeState.label + " state",
-          prompt: routeState.isGlobal
-            ? "[DASHBOARD_FULL]\nSummarize the global project state, blockers, and safest next route."
-            : `[PROJECT_CONTEXT:${routeState.label}]\nSummarize current state, blockers, dirty files, and safest next action.`,
-        })}
-      onGraphContext=${() =>
-        attachContext({
-          key: "graph:" + routeState.key,
-          kind: "graph",
-          label: routeState.isGlobal
-            ? "global graph"
-            : routeState.label + " graph",
-          prompt: routeState.isGlobal
-            ? "[GRAPH_CONTEXT:overview]\nUse the project graph to choose the safest orchestration target."
-            : `[GRAPH_CONTEXT:${routeState.label}]\nUse code graph context to identify dependency risks before making changes.`,
-        })}
-      onReview=${() =>
-        insertPrompt(
-          currentProject.value
-            ? "Review this route and project state. If execution is safe, propose the exact next step; otherwise state the blocker."
-            : "Review the global orchestration route. Choose the safest project, provider, and execution mode.",
-        )}
-      onAskBoth=${() => {
-        setDuoComposerAction("ask_both");
-        setDuoComposerTarget("");
-        setDuoView("collaborate");
-        focusComposerSoon();
-      }}
-      onMakePlan=${draftPlanFromDuo}
-      onLeadExecute=${openExecutionWithLead}
-    />
     <${ContextChips}
       items=${contextAttachments.value || []}
       onRemove=${removeContextAttachment}
@@ -2896,210 +2867,214 @@ function ChatSidebar() {
       onFollow=${scrollToBottom}
       onLoadOlder=${loadOlder}
     />
-    <details
-      class="chat-context-drawer"
-      open=${!!(
-        executionMap.value?.counts?.waiting ||
-        isStreaming.value ||
-        activeRun.value
-      )}
-    >
-      <summary>
-        <span>context / execution map / tools</span>
-        <em>
-          ${(orchestrationMap.value?.project_agent_routes || []).length} routes
-          · ${(executionTimeline.value?.items || []).length} events ·
-          ${Object.keys(delegations.value || {}).length} delegations
-        </em>
-        <em class="exec-map-drawer-summary">
-          ${(executionMap.value?.lanes || []).length} lanes /
-          ${(executionMap.value?.events || []).length} events /
-          ${executionMap.value?.counts?.waiting || 0} waiting
-        </em>
-      </summary>
-      <${OrchestrationMapCard}
-        map=${orchestrationMap.value}
-        onAttachGraph=${() =>
-          attachContext({
-            key: "graph-route:" + routeState.key,
-            kind: "graph",
-            label: routeState.isGlobal
-              ? "global graph"
-              : routeState.label + " graph",
-            prompt: routeState.isGlobal
-              ? "[GRAPH_CONTEXT:overview]\nUse the project graph to choose the safest orchestration route."
-              : `[GRAPH_CONTEXT:${routeState.label}]\nUse this code context when planning and executing. Call out dependency risks before edits.`,
-          })}
-        onOpenGraph=${() => loadGraph(currentProject.value || "overview")}
-        onVerifyGraph=${() =>
-          insertPrompt(
-            currentProject.value
-              ? `[GRAPH_VERIFY:${currentProject.value}]\nVerify graph health and dependency risks before continuing.`
-              : "[GRAPH_CONTEXT:overview]\nVerify global dependency and orchestration risks.",
+    ${false
+      ? html`<details
+          class="chat-context-drawer"
+          open=${!!(
+            executionMap.value?.counts?.waiting ||
+            isStreaming.value ||
+            activeRun.value
           )}
-        onOpenPlans=${() => {
-          showPlans.value = true;
-          loadPlansData().catch((e) => console.warn("plans refresh:", e));
-        }}
-        onManagementPrompt=${(leverage) =>
-          insertPrompt(
-            leverage?.management_prompt ||
-              "[MANAGEMENT_REVIEW]\nОцени управляемость текущей работы: параллельность, качество через reviewer/cross-check, контрольную нагрузку, live route progress и связь со стратегией. Дай следующий управленческий шаг без микроменеджмента.",
-          )}
-        onRouteAgent=${async (route) => {
-          const next = route.next_work_item || {};
-          const progress = route.progress || {};
-          const phase = progress.phase || route.route_state || "idle";
-          if (route.can_queue_next && next.id) {
-            if (
-              !confirm(
-                `Queue next work item for ${route.project || routeState.label}?`,
-              )
-            ) {
-              return;
-            }
-            try {
-              await queueWorkItemExecution(next.id);
-              await Promise.allSettled([
-                loadOrchestrationMap(
-                  currentProject.value || "",
-                  activeDualSession.value || null,
-                ),
-                loadExecutionTimeline(
-                  currentProject.value || "",
-                  activeDualSession.value || null,
-                  80,
-                ),
-              ]);
-              return;
-            } catch (e) {
-              showToast("Route queue failed: " + e, "error", 6000);
-            }
-          }
-          insertPrompt(
-            [
-              `[PROJECT_AGENT_ROUTE:${route.project || routeState.label}]`,
-              `Фаза: ${routePhaseLabel(phase)} (${phase})`,
-              `Исполнитель: ${route.executor_provider || "auto"}`,
-              route.reviewer_provider
-                ? `Ревьюер: ${route.reviewer_provider}`
-                : "",
-              progress.active_delegation_id
-                ? `Делегация: ${progress.active_delegation_id}`
-                : "",
-              next.id
-                ? `Work item: ${next.id} - ${next.title || next.task}`
-                : `Lane: ${route.title || "project-agent lane"}`,
-              route.has_blockers
-                ? `Блокеры: ${(route.blocker_delegation_ids || []).join(", ") || "present"}`
-                : "",
-              progress.review_verdict_status
-                ? `Reviewer verdict: ${progress.review_verdict_status} ${progress.review_verdict_summary || ""}`
-                : "",
-              route.action ? `Рекомендуемое действие: ${route.action}` : "",
-              phase === "needs_user"
-                ? "Разбери, что именно требует моего решения, предложи минимальный unblock-step и не запускай новую волну без подтверждения."
-                : phase === "running" ||
-                    phase === "verifying" ||
-                    phase === "reviewing"
-                  ? "Проверь live-состояние маршрута, кратко объясни прогресс, риски и следующий безопасный шаг."
-                  : "Продолжи самый безопасный следующий шаг. Используй graph context, если вероятны изменения кода, и делегируй подзадачи только при необходимости.",
-            ]
-              .filter(Boolean)
-              .join("\n"),
-          );
-        }}
-      />
-      ${duoEnabled
-        ? html`<div class="duo-brief">
-            <div class="scope-strip">
-              <div class="scope-path">
-                ${scopeCrumbs.map(
-                  (crumb, index) =>
-                    html`<span class="scope-crumb">
-                      ${index > 0 ? html`<b>/</b>` : null}${crumb.label}
-                    </span>`,
-                )}
-              </div>
-              <span class="scope-kind">${scope.label || scope.kind}</span>
-            </div>
-            <div class="duo-brief-top">
-              <div>
-                <div class="duo-eyebrow">${scope.kind || "global"} context</div>
-                <div class="duo-title">
-                  ${scope.title ||
-                  activeOrchestrator?.label ||
-                  "Choose work area"}
-                </div>
-                <div class="duo-sub">
-                  ${scope.summary ||
-                  (duoExecuteMode
-                    ? "Execution board is open in the main canvas."
-                    : duoCollaborateMode
-                      ? "Ask both agents, then choose who leads the next step."
-                      : "Normal chat mode; Duo room is standing by.")}
-                </div>
-              </div>
-              <span class="duo-pill ${duoExecuteMode ? "hot" : ""}">
-                ${duoExecuteMode
-                  ? "execute"
-                  : duoCollaborateMode
-                    ? "review"
-                    : "chat"}
-              </span>
-            </div>
-            <div class="scope-actions">
-              ${scopeActions.map(
-                (action) =>
-                  html`<button
-                    class="scope-action ${action.tone === "primary"
-                      ? "primary"
-                      : ""}"
-                    disabled=${!!dualBusy.value}
-                    onClick=${() => runScopeAction(action.id)}
-                  >
-                    ${action.label}
-                  </button>`,
+        >
+          <summary>
+            <span>context / execution map / tools</span>
+            <em>
+              ${(orchestrationMap.value?.project_agent_routes || []).length}
+              routes · ${(executionTimeline.value?.items || []).length} events ·
+              ${Object.keys(delegations.value || {}).length} delegations
+            </em>
+            <em class="exec-map-drawer-summary">
+              ${(executionMap.value?.lanes || []).length} lanes /
+              ${(executionMap.value?.events || []).length} events /
+              ${executionMap.value?.counts?.waiting || 0} waiting
+            </em>
+          </summary>
+          <${OrchestrationMapCard}
+            map=${orchestrationMap.value}
+            onAttachGraph=${() =>
+              attachContext({
+                key: "graph-route:" + routeState.key,
+                kind: "graph",
+                label: routeState.isGlobal
+                  ? "global graph"
+                  : routeState.label + " graph",
+                prompt: routeState.isGlobal
+                  ? "[GRAPH_CONTEXT:overview]\nUse the project graph to choose the safest orchestration route."
+                  : `[GRAPH_CONTEXT:${routeState.label}]\nUse this code context when planning and executing. Call out dependency risks before edits.`,
+              })}
+            onOpenGraph=${() => loadGraph(currentProject.value || "overview")}
+            onVerifyGraph=${() =>
+              insertPrompt(
+                currentProject.value
+                  ? `[GRAPH_VERIFY:${currentProject.value}]\nVerify graph health and dependency risks before continuing.`
+                  : "[GRAPH_CONTEXT:overview]\nVerify global dependency and orchestration risks.",
               )}
-            </div>
-            <details class="duo-small-controls">
-              <summary>lead / mode</summary>
-              <div class="duo-control-grid">
-                ${visibleLeadCandidates.map(
-                  (participant) =>
-                    html`<button
-                      class=${participant.id === activeOrchestratorId
-                        ? "lead selected"
-                        : "lead"}
-                      disabled=${!!dualBusy.value}
-                      onClick=${() => useDuoOrchestrator(participant.id)}
-                    >
-                      lead:
-                      ${participant.label}${participant.write_enabled
-                        ? ""
-                        : " + write"}
-                    </button>`,
-                )}
-                ${[
-                  ["chat", "plain chat"],
-                  ["collaborate", "review room"],
-                  ["execute", "execution board"],
-                ].map(
-                  ([id, label]) =>
-                    html`<button
-                      class=${duoView === id ? "selected" : ""}
-                      onClick=${() => setDuoView(id)}
-                    >
-                      ${label}
-                    </button>`,
-                )}
-              </div>
-            </details>
-          </div>`
-        : null}
-      <${InboxPanel} />
-      <${DelegationPanel} />
-    </details>
+            onOpenPlans=${() => {
+              showPlans.value = true;
+              loadPlansData().catch((e) => console.warn("plans refresh:", e));
+            }}
+            onManagementPrompt=${(leverage) =>
+              insertPrompt(
+                leverage?.management_prompt ||
+                  "[MANAGEMENT_REVIEW]\nОцени управляемость текущей работы: параллельность, качество через reviewer/cross-check, контрольную нагрузку, live route progress и связь со стратегией. Дай следующий управленческий шаг без микроменеджмента.",
+              )}
+            onRouteAgent=${async (route) => {
+              const next = route.next_work_item || {};
+              const progress = route.progress || {};
+              const phase = progress.phase || route.route_state || "idle";
+              if (route.can_queue_next && next.id) {
+                if (
+                  !confirm(
+                    `Queue next work item for ${route.project || routeState.label}?`,
+                  )
+                ) {
+                  return;
+                }
+                try {
+                  await queueWorkItemExecution(next.id);
+                  await Promise.allSettled([
+                    loadOrchestrationMap(
+                      currentProject.value || "",
+                      activeDualSession.value || null,
+                    ),
+                    loadExecutionTimeline(
+                      currentProject.value || "",
+                      activeDualSession.value || null,
+                      80,
+                    ),
+                  ]);
+                  return;
+                } catch (e) {
+                  showToast("Route queue failed: " + e, "error", 6000);
+                }
+              }
+              insertPrompt(
+                [
+                  `[PROJECT_AGENT_ROUTE:${route.project || routeState.label}]`,
+                  `Фаза: ${routePhaseLabel(phase)} (${phase})`,
+                  `Исполнитель: ${route.executor_provider || "auto"}`,
+                  route.reviewer_provider
+                    ? `Ревьюер: ${route.reviewer_provider}`
+                    : "",
+                  progress.active_delegation_id
+                    ? `Делегация: ${progress.active_delegation_id}`
+                    : "",
+                  next.id
+                    ? `Work item: ${next.id} - ${next.title || next.task}`
+                    : `Lane: ${route.title || "project-agent lane"}`,
+                  route.has_blockers
+                    ? `Блокеры: ${(route.blocker_delegation_ids || []).join(", ") || "present"}`
+                    : "",
+                  progress.review_verdict_status
+                    ? `Reviewer verdict: ${progress.review_verdict_status} ${progress.review_verdict_summary || ""}`
+                    : "",
+                  route.action ? `Рекомендуемое действие: ${route.action}` : "",
+                  phase === "needs_user"
+                    ? "Разбери, что именно требует моего решения, предложи минимальный unblock-step и не запускай новую волну без подтверждения."
+                    : phase === "running" ||
+                        phase === "verifying" ||
+                        phase === "reviewing"
+                      ? "Проверь live-состояние маршрута, кратко объясни прогресс, риски и следующий безопасный шаг."
+                      : "Продолжи самый безопасный следующий шаг. Используй graph context, если вероятны изменения кода, и делегируй подзадачи только при необходимости.",
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+              );
+            }}
+          />
+          ${duoEnabled
+            ? html`<div class="duo-brief">
+                <div class="scope-strip">
+                  <div class="scope-path">
+                    ${scopeCrumbs.map(
+                      (crumb, index) =>
+                        html`<span class="scope-crumb">
+                          ${index > 0 ? html`<b>/</b>` : null}${crumb.label}
+                        </span>`,
+                    )}
+                  </div>
+                  <span class="scope-kind">${scope.label || scope.kind}</span>
+                </div>
+                <div class="duo-brief-top">
+                  <div>
+                    <div class="duo-eyebrow">
+                      ${scope.kind || "global"} context
+                    </div>
+                    <div class="duo-title">
+                      ${scope.title ||
+                      activeOrchestrator?.label ||
+                      "Choose work area"}
+                    </div>
+                    <div class="duo-sub">
+                      ${scope.summary ||
+                      (duoExecuteMode
+                        ? "Execution board is open in the main canvas."
+                        : duoCollaborateMode
+                          ? "Ask both agents, then choose who leads the next step."
+                          : "Normal chat mode; Duo room is standing by.")}
+                    </div>
+                  </div>
+                  <span class="duo-pill ${duoExecuteMode ? "hot" : ""}">
+                    ${duoExecuteMode
+                      ? "execute"
+                      : duoCollaborateMode
+                        ? "review"
+                        : "chat"}
+                  </span>
+                </div>
+                <div class="scope-actions">
+                  ${scopeActions.map(
+                    (action) =>
+                      html`<button
+                        class="scope-action ${action.tone === "primary"
+                          ? "primary"
+                          : ""}"
+                        disabled=${!!dualBusy.value}
+                        onClick=${() => runScopeAction(action.id)}
+                      >
+                        ${action.label}
+                      </button>`,
+                  )}
+                </div>
+                <details class="duo-small-controls">
+                  <summary>lead / mode</summary>
+                  <div class="duo-control-grid">
+                    ${visibleLeadCandidates.map(
+                      (participant) =>
+                        html`<button
+                          class=${participant.id === activeOrchestratorId
+                            ? "lead selected"
+                            : "lead"}
+                          disabled=${!!dualBusy.value}
+                          onClick=${() => useDuoOrchestrator(participant.id)}
+                        >
+                          lead:
+                          ${participant.label}${participant.write_enabled
+                            ? ""
+                            : " + write"}
+                        </button>`,
+                    )}
+                    ${[
+                      ["chat", "plain chat"],
+                      ["collaborate", "review room"],
+                      ["execute", "execution board"],
+                    ].map(
+                      ([id, label]) =>
+                        html`<button
+                          class=${duoView === id ? "selected" : ""}
+                          onClick=${() => setDuoView(id)}
+                        >
+                          ${label}
+                        </button>`,
+                    )}
+                  </div>
+                </details>
+              </div>`
+            : null}
+          <${InboxPanel} />
+          <${DelegationPanel} />
+        </details>`
+      : null}
     <div
       class="ch-msgs"
       ref=${msgsRef}

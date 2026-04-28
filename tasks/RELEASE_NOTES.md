@@ -1,3 +1,14 @@
+# Agent OS 0.3.10
+
+- Reworked the dashboard execution map into a real stage view instead of embedding the compact chat-card version.
+- Increased branch spacing, lane height, node size, and map minimum width so the horizontal execution flow uses materially more screen space.
+- Replaced curved delegation/feedback connectors with orthogonal right-angle arrows aligned to lane centers.
+- Removed duplicate map titles from the main stage and replaced them with a compact legend/actions strip.
+- Narrowed the default chat width and clamped old saved chat widths to give the main branch map more room after update.
+- Increased main dashboard refresh cadence for the execution map from 5 seconds to 3 seconds.
+- Added a floating bottom workspace dock for Flow, Focus, Projects, Plans, and Signals, so operational views move out of the chat and into the main canvas.
+- Cleaned the right chat rail by removing the heavy route card and execution/context drawer from the transcript area.
+
 # Agent OS 0.3.9
 
 - Added a system-level Claude enable/disable switch in Settings for periods when the Claude subscription or CLI is unavailable.
