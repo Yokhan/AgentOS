@@ -1,3 +1,9 @@
+# Agent OS 0.3.11
+
+- Fixed the workspace dock positioning so it is a real floating bottom-center control inside the workbench, not a sticky block drifting with column layout.
+- Reserved more bottom space for the active workspace canvas so the dock does not cover the current Flow/Focus/Projects/Plans/Signals view.
+- Added responsive dock compaction for narrower layouts: shorter buttons, hidden hints, and horizontal overflow without visual scrollbars.
+
 # Agent OS 0.3.10
 
 - Reworked the dashboard execution map into a real stage view instead of embedding the compact chat-card version.

@@ -330,6 +330,7 @@ body.chat-resizing {
     padding-right: var(--sp-xs);
     display: flex;
     flex-direction: column;
+    position: relative;
 }
 .workbench-content .stats {
     margin-bottom: var(--sp-s);
@@ -592,7 +593,7 @@ body.chat-resizing {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    padding-bottom: 86px;
+    padding-bottom: 104px;
 }
 .workspace-canvas > * {
     min-height: 0;
@@ -602,13 +603,15 @@ body.chat-resizing {
     overflow-y: auto;
 }
 .workspace-dock {
-    position: sticky;
-    bottom: var(--sp-s);
-    z-index: 15;
-    align-self: center;
+    position: absolute;
+    left: 50%;
+    bottom: var(--sp-m);
+    transform: translateX(-50%);
+    z-index: 35;
     display: flex;
     gap: 4px;
-    max-width: min(920px, 100%);
+    width: max-content;
+    max-width: min(860px, calc(100% - 32px));
     padding: 6px;
     border: 1px solid color-mix(in srgb, var(--cyan) 24%, var(--border));
     background: linear-gradient(
@@ -620,6 +623,11 @@ body.chat-resizing {
         0 16px 44px color-mix(in srgb, #000 34%, transparent),
         inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
     backdrop-filter: blur(10px);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.workspace-dock::-webkit-scrollbar {
+    display: none;
 }
 .workspace-dock button {
     min-width: 108px;
@@ -984,6 +992,16 @@ body.chat-resizing {
     }
     .main-execution-head {
         flex-direction: column;
+    }
+    .workspace-dock {
+        max-width: calc(100% - 20px);
+        bottom: var(--sp-s);
+    }
+    .workspace-dock button {
+        min-width: 96px;
+    }
+    .workspace-dock span {
+        display: none;
     }
 }
 
