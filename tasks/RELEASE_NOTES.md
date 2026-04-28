@@ -1,3 +1,11 @@
+# Agent OS 0.3.6
+
+- Added a branching execution map so chat can show orchestrator, project-agent lanes, command/delegation events, and feedback merges as one live operational timeline.
+- Made live delegation visibility more reliable: running/verifying/pending work appears even when stream output is quiet, fresh approvals are not mislabeled as stale, and heartbeat handling no longer creates false stuck states.
+- Added a non-idle waiting coordinator so the orchestrator gets a bounded route snapshot and can continue independent ready work instead of silently waiting on one blocked project agent.
+- Added `[WORK_ITEM_QUEUE:id]` for route-aware continuation of existing work items through the delegation pipeline without losing plan/session linkage.
+- Hardened critical-signal auto-triggering with append-only acknowledgements so the same critical signal is not processed repeatedly after refresh/reload cycles.
+
 # Agent OS 0.3.5
 
 - Fixed delegation approval UX so fresh pending delegations are no longer reported as stale blockers.
