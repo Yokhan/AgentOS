@@ -40,6 +40,7 @@ pub fn queue_delegation_internal(state: &AppState, project: &str, task: &str) ->
         project: project.to_string(),
         task: task.to_string(),
         ts: state.now_iso(),
+        started_at: None,
         status: crate::commands::status::DelegationStatus::Pending,
         response: None,
         retries: 0,
@@ -106,6 +107,7 @@ pub fn get_delegations(state: State<Arc<AppState>>) -> Value {
 /// Core delegation logic — can be called from both Tauri command and API handler
 pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
     crate::log_info!("[delegation] approving id={}", id);
+    let started_at = state.now_iso();
     // Atomic check-and-update
     let d = {
         let mut delegations = match state.delegations.lock() {
@@ -124,6 +126,7 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
             }
         };
         del.status = crate::commands::status::DelegationStatus::Running;
+        del.started_at = Some(started_at);
         del.clone()
     };
     state.save_delegations();

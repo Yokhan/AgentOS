@@ -90,6 +90,49 @@ fn delegation_age_secs(d: &crate::state::Delegation) -> u64 {
         .unwrap_or(0)
 }
 
+/// Select recent unacknowledged critical signals for one auto-trigger cycle.
+fn collect_unacked_critical_signals(content: &str, limit: usize) -> Vec<(String, String)> {
+    let signal_entries: Vec<Value> = content
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .collect();
+    let acked: std::collections::HashSet<String> = signal_entries
+        .iter()
+        .filter(|v| v.get("type").and_then(|t| t.as_str()) == Some("ack"))
+        .filter_map(|v| {
+            v.get("signal_id")
+                .and_then(|id| id.as_str())
+                .map(String::from)
+        })
+        .collect();
+
+    signal_entries
+        .iter()
+        .rev()
+        .take(80)
+        .filter(|v| {
+            if v.get("type").and_then(|t| t.as_str()) == Some("ack") {
+                return false;
+            }
+            let id = v.get("id").and_then(|i| i.as_str()).unwrap_or("");
+            v.get("severity").and_then(|s| s.as_str()) == Some("critical")
+                && !id.is_empty()
+                && !acked.contains(id)
+                && !v
+                    .get("acknowledged")
+                    .and_then(|a| a.as_bool())
+                    .unwrap_or(false)
+        })
+        .take(limit)
+        .filter_map(|v| {
+            Some((
+                v.get("id").and_then(|id| id.as_str())?.to_string(),
+                v.get("message").and_then(|m| m.as_str())?.to_string(),
+            ))
+        })
+        .collect()
+}
+
 /// Background loop — spawned in lib.rs, ticks every 30 seconds
 pub async fn auto_approve_loop(state: Arc<AppState>) {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
@@ -259,6 +302,24 @@ mod tests {
         assert!(should_pause_all(&actions, &mut paused));
         assert!(paused.contains("proj-a"));
     }
+
+    #[test]
+    fn auto_trigger_ignores_acknowledged_critical_signals() {
+        let content = [
+            r#"{"id":"old-critical","severity":"critical","message":"old failure"}"#,
+            r#"{"type":"ack","signal_id":"old-critical","ts":"2026-04-28T10:00:00Z"}"#,
+            r#"{"id":"warn-only","severity":"warn","message":"warning"}"#,
+            r#"{"id":"new-critical","severity":"critical","message":"new failure"}"#,
+        ]
+        .join("\n");
+
+        let signals = collect_unacked_critical_signals(&content, 5);
+
+        assert_eq!(
+            signals,
+            vec![("new-critical".to_string(), "new failure".to_string())]
+        );
+    }
 }
 
 #[tauri::command]
@@ -322,25 +383,16 @@ fn auto_trigger_pa(state: &AppState) {
         Ok(c) => c,
         Err(_) => return,
     };
-    let critical_msgs: Vec<String> = content
-        .lines()
-        .rev()
-        .take(20)
-        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-        .filter(|v| {
-            v.get("severity").and_then(|s| s.as_str()) == Some("critical")
-                && !v
-                    .get("acknowledged")
-                    .and_then(|a| a.as_bool())
-                    .unwrap_or(false)
-        })
-        .take(5)
-        .filter_map(|v| v.get("message").and_then(|m| m.as_str()).map(String::from))
-        .collect();
+    let critical_signals = collect_unacked_critical_signals(&content, 5);
 
-    if critical_msgs.is_empty() {
+    if critical_signals.is_empty() {
         return;
     }
+    let critical_ids: Vec<String> = critical_signals.iter().map(|(id, _)| id.clone()).collect();
+    let critical_msgs: Vec<String> = critical_signals
+        .iter()
+        .map(|(_, msg)| msg.clone())
+        .collect();
 
     LAST_TRIGGER.store(now_secs, Ordering::Relaxed);
     crate::log_info!(
@@ -421,10 +473,14 @@ fn auto_trigger_pa(state: &AppState) {
             }
         }
     }
+    for signal_id in &critical_ids {
+        super::signals::acknowledge_signal(state, signal_id);
+    }
 
     crate::log_info!(
-        "[auto-trigger] PA responded ({} chars), {} commands",
+        "[auto-trigger] PA responded ({} chars), {} commands, {} signals acked",
         response.len(),
-        commands.len()
+        commands.len(),
+        critical_ids.len()
     );
 }

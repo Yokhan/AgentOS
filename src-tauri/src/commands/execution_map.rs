@@ -132,6 +132,35 @@ fn delegation_provider_by_project(state: &AppState) -> HashMap<String, String> {
         .unwrap_or_default()
 }
 
+fn provider_for_delegation(delegation: &Delegation) -> String {
+    delegation
+        .executor_provider
+        .as_ref()
+        .or(delegation.reviewer_provider.as_ref())
+        .map(|provider| provider.to_string())
+        .unwrap_or_else(|| "project-agent".to_string())
+}
+
+fn live_delegations(state: &AppState, project: &str) -> Vec<Delegation> {
+    let project = project.trim();
+    let mut items: Vec<Delegation> = state
+        .delegations
+        .lock()
+        .map(|delegations| {
+            delegations
+                .values()
+                .filter(|delegation| {
+                    (project.is_empty() || delegation.project == project)
+                        && !delegation.status.is_terminal()
+                })
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    items.sort_by(|a, b| a.ts.cmp(&b.ts));
+    items
+}
+
 fn waiting_delegations(state: &AppState, project: &str) -> Vec<Value> {
     let project = project.trim();
     let mut items: Vec<Delegation> = state
@@ -161,7 +190,8 @@ fn waiting_delegations(state: &AppState, project: &str) -> Vec<Value> {
                 "status": delegation.status.to_string(),
                 "task": crate::commands::event_contract::short(&delegation.task, 220),
                 "action": "approve",
-                "ts": delegation.ts
+                "ts": delegation.ts,
+                "started_at": delegation.started_at
             })
         })
         .collect()
@@ -244,12 +274,7 @@ pub fn build_execution_map(
         let status = field(row, "status");
         let project = clean_project(&field(row, "project"));
         let lane_id = lane_id_for(row);
-        let event_id = format!(
-            "evt-{}-{}-{}",
-            idx + 1,
-            safe_id(&lane_id),
-            safe_id(&kind)
-        );
+        let event_id = format!("evt-{}-{}-{}", idx + 1, safe_id(&lane_id), safe_id(&kind));
         let provider = if source == "delegation" {
             providers
                 .get(&project)
@@ -342,6 +367,65 @@ pub fn build_execution_map(
         }
     }
 
+    for (live_idx, delegation) in live_delegations(state, &project_filter)
+        .into_iter()
+        .enumerate()
+    {
+        let project = clean_project(&delegation.project);
+        let lane_id = format!("project:{}", safe_id(&project));
+        let provider = provider_for_delegation(&delegation);
+        let status = delegation.status.to_string();
+        let event_id = format!("evt-live-delegation-{}", safe_id(&delegation.id));
+        if !lanes.contains_key(&lane_id) {
+            let order = lanes.len();
+            lanes.insert(
+                lane_id.clone(),
+                json!({
+                    "id": lane_id,
+                    "kind": lane_kind(&lane_id),
+                    "label": project,
+                    "project": project,
+                    "status": status,
+                    "provider": provider,
+                    "model": "",
+                    "order": order
+                }),
+            );
+            lane_order.insert(lane_id.clone(), order);
+        }
+        let current_status = lane_status.get(&lane_id).cloned().unwrap_or_default();
+        lane_status.insert(lane_id.clone(), merge_status(&current_status, &status));
+        if seen_lanes.insert(lane_id.clone()) {
+            edges.push(json!({
+                "id": format!("edge-live-spawn-{}", safe_id(&lane_id)),
+                "from": "evt-root",
+                "to": event_id,
+                "type": "spawn",
+                "label": "live delegation",
+                "status": status
+            }));
+        }
+        latest_project_event.insert(lane_id.clone(), event_id.clone());
+        events.push(json!({
+            "id": event_id,
+            "lane_id": lane_id,
+            "branch_id": lane_id,
+            "source": "delegation",
+            "kind": "delegation_state",
+            "status": status,
+            "title": format!("{} delegation", delegation.status),
+            "detail": crate::commands::event_contract::short(&delegation.task, 220),
+            "project": project,
+            "provider": provider,
+            "model": "",
+            "ts": delegation.started_at.clone().unwrap_or_else(|| delegation.ts.clone()),
+            "queued_at": delegation.ts,
+            "started_at": delegation.started_at,
+            "delegation_id": delegation.id,
+            "sequence": rows.len() + live_idx + 1
+        }));
+    }
+
     let mut lane_values: Vec<Value> = lanes
         .into_iter()
         .map(|(id, mut lane)| {
@@ -351,22 +435,17 @@ pub fn build_execution_map(
                 }
                 obj.insert(
                     "last_event_id".to_string(),
-                    json!(
-                        latest_project_event
-                            .get(&id)
-                            .cloned()
-                            .unwrap_or_else(|| "evt-root".to_string())
-                    ),
+                    json!(latest_project_event
+                        .get(&id)
+                        .cloned()
+                        .unwrap_or_else(|| "evt-root".to_string())),
                 );
             }
             lane
         })
         .collect();
-    lane_values.sort_by_key(|lane| {
-        lane.get("order")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(999) as usize
-    });
+    lane_values
+        .sort_by_key(|lane| lane.get("order").and_then(|v| v.as_u64()).unwrap_or(999) as usize);
 
     let waiting = waiting_delegations(state, &project_filter);
     let blocked = lane_values
@@ -452,6 +531,11 @@ mod tests {
             project: "HealthTracker".to_string(),
             task: "Run project health check".to_string(),
             ts: "2026-04-28T08:00:03Z".to_string(),
+            started_at: if status == DelegationStatus::Running {
+                Some("2026-04-28T08:01:00Z".to_string())
+            } else {
+                None
+            },
             status,
             response: None,
             retries: 0,
@@ -491,20 +575,44 @@ mod tests {
             &json!({"type":"delegation","project":"HealthTracker","task":"Run health check","ts":"2026-04-28T08:00:02Z"}),
             "test delegation queued",
         );
-        state
-            .delegations
-            .lock()
-            .expect("delegations")
-            .insert("d-1".to_string(), delegation("d-1", DelegationStatus::Pending));
+        state.delegations.lock().expect("delegations").insert(
+            "d-1".to_string(),
+            delegation("d-1", DelegationStatus::Pending),
+        );
 
         let result = build_execution_map(&state, None, None, 50);
         assert_eq!(result["status"], "ok");
         assert_eq!(result["schema_version"], "agentos.execution_map.v1");
         assert!(result["lanes"].as_array().unwrap().len() >= 2);
-        assert!(result["edges"].as_array().unwrap().iter().any(|edge| {
-            edge.get("type").and_then(|v| v.as_str()) == Some("spawn")
-        }));
+        assert!(result["edges"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|edge| { edge.get("type").and_then(|v| v.as_str()) == Some("spawn") }));
         assert_eq!(result["waiting_for_user"].as_array().unwrap().len(), 1);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn includes_live_running_delegation_without_stream_output() {
+        let root = test_root("live-running");
+        let state = AppState::new(root.clone());
+        state.delegations.lock().expect("delegations").insert(
+            "d-live".to_string(),
+            delegation("d-live", DelegationStatus::Running),
+        );
+
+        let result = build_execution_map(&state, None, None, 50);
+        let events = result["events"].as_array().expect("events");
+        let live = events
+            .iter()
+            .find(|event| event.get("kind").and_then(|v| v.as_str()) == Some("delegation_state"))
+            .expect("live delegation event");
+
+        assert_eq!(live["status"], "running");
+        assert_eq!(live["started_at"], "2026-04-28T08:01:00Z");
+        assert_eq!(live["provider"], "codex");
 
         let _ = std::fs::remove_dir_all(root);
     }

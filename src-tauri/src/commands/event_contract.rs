@@ -406,6 +406,7 @@ mod tests {
             project: "AgentOS".to_string(),
             task: "Check release".to_string(),
             ts: "2026-04-26T10:00:00Z".to_string(),
+            started_at: Some("2026-04-26T10:00:05Z".to_string()),
             status: DelegationStatus::Running,
             response: None,
             retries: 0,

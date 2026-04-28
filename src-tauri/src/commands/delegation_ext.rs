@@ -407,6 +407,7 @@ mod tests {
             project: "AgentOS".to_string(),
             task: "test task".to_string(),
             ts: ts.to_string(),
+            started_at: None,
             status: DelegationStatus::Pending,
             response: None,
             retries: 0,

@@ -154,7 +154,8 @@ fn sensor_stale_process(state: &AppState) -> Vec<SensorAction> {
             continue;
         }
 
-        let age = chrono::DateTime::parse_from_rfc3339(&d.ts)
+        let running_since = d.started_at.as_deref().unwrap_or(&d.ts);
+        let age = chrono::DateTime::parse_from_rfc3339(running_since)
             .map(|dt| {
                 chrono::Utc::now()
                     .signed_duration_since(dt)

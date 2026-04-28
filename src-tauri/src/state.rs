@@ -26,6 +26,9 @@ pub struct Delegation {
     pub project: String,
     pub task: String,
     pub ts: String,
+    /// Actual execution start time. `ts` is the queue time and can be much older.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
     pub status: crate::commands::status::DelegationStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response: Option<String>,

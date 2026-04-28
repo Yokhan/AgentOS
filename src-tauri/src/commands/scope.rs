@@ -1765,6 +1765,11 @@ mod tests {
             project: project.to_string(),
             task: "Blocked project-agent task".to_string(),
             ts: ts.to_string(),
+            started_at: if status == DelegationStatus::Running {
+                Some(ts.to_string())
+            } else {
+                None
+            },
             status,
             response: None,
             retries: 0,

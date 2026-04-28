@@ -108,6 +108,9 @@ pub fn run_delegation_streaming(
         loop {
             std::thread::sleep(std::time::Duration::from_secs(15));
             let last = hb.load(std::sync::atomic::Ordering::Relaxed);
+            if last == 0 {
+                break;
+            } // sentinel: reader finished normally
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -140,9 +143,6 @@ pub fn run_delegation_streaming(
                 }
                 break;
             }
-            if last == 0 {
-                break;
-            } // sentinel: reader finished normally
         }
     });
 
