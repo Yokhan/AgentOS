@@ -345,6 +345,138 @@ fn codex_acp_args(state: &AppState) -> Result<Vec<String>, String> {
     }
 }
 
+fn base64url_decode(input: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    let mut buffer = 0u32;
+    let mut bits = 0u8;
+    for byte in input.bytes() {
+        let val = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'-' => 62,
+            b'_' => 63,
+            b'=' => continue,
+            _ => return None,
+        } as u32;
+        buffer = (buffer << 6) | val;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push(((buffer >> bits) & 0xff) as u8);
+        }
+    }
+    Some(out)
+}
+
+fn jwt_payload(token: &str) -> Option<Value> {
+    let payload = token.split('.').nth(1)?;
+    let bytes = base64url_decode(payload)?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+fn short_secret_tail(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.len() <= 8 {
+        return trimmed.to_string();
+    }
+    format!("...{}", &trimmed[trimmed.len().saturating_sub(6)..])
+}
+
+fn account_display_from(email: Option<&str>, name: Option<&str>, fallback: Option<&str>) -> String {
+    if let Some(email) = email.map(str::trim).filter(|v| !v.is_empty()) {
+        return email.to_string();
+    }
+    if let Some(name) = name.map(str::trim).filter(|v| !v.is_empty()) {
+        return name.to_string();
+    }
+    if let Some(fallback) = fallback.map(str::trim).filter(|v| !v.is_empty()) {
+        return format!("account {}", short_secret_tail(fallback));
+    }
+    "unknown account".to_string()
+}
+
+fn codex_account_snapshot_from_auth_path(path: &Path) -> Value {
+    let source = path.to_string_lossy().to_string();
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(error) => {
+            return json!({
+                "status": "missing",
+                "source": source,
+                "display": "not signed in",
+                "error": error.to_string(),
+            });
+        }
+    };
+    let auth: Value = match serde_json::from_str(&content) {
+        Ok(value) => value,
+        Err(error) => {
+            return json!({
+                "status": "error",
+                "source": source,
+                "display": "unreadable auth",
+                "error": error.to_string(),
+            });
+        }
+    };
+    let auth_mode = auth
+        .get("auth_mode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let tokens = auth.get("tokens").cloned().unwrap_or(Value::Null);
+    let account_id = tokens
+        .get("account_id")
+        .and_then(|v| v.as_str())
+        .or_else(|| auth.get("account_id").and_then(|v| v.as_str()));
+    let payload = tokens
+        .get("id_token")
+        .and_then(|v| v.as_str())
+        .and_then(jwt_payload)
+        .unwrap_or(Value::Null);
+    let email = payload
+        .get("email")
+        .and_then(|v| v.as_str())
+        .or_else(|| auth.get("email").and_then(|v| v.as_str()));
+    let name = payload
+        .get("name")
+        .and_then(|v| v.as_str())
+        .or_else(|| auth.get("name").and_then(|v| v.as_str()));
+    let api_key_tail = auth
+        .get("OPENAI_API_KEY")
+        .and_then(|v| v.as_str())
+        .filter(|v| !v.trim().is_empty())
+        .map(short_secret_tail);
+    let fallback = account_id.or(api_key_tail.as_deref());
+    let display = account_display_from(email, name, fallback);
+
+    json!({
+        "status": "ok",
+        "source": source,
+        "auth_mode": auth_mode,
+        "display": display,
+        "email": email.unwrap_or(""),
+        "name": name.unwrap_or(""),
+        "account_id_tail": account_id.map(short_secret_tail).unwrap_or_default(),
+        "api_key_tail": api_key_tail.unwrap_or_default(),
+        "last_refresh": auth
+            .get("last_refresh")
+            .and_then(|v| v.as_str())
+            .or_else(|| tokens.get("last_refresh").and_then(|v| v.as_str()))
+            .unwrap_or(""),
+    })
+}
+
+fn codex_account_snapshot() -> Value {
+    let Some(home) = dirs::home_dir() else {
+        return json!({
+            "status": "missing",
+            "display": "home not found",
+        });
+    };
+    codex_account_snapshot_from_auth_path(&home.join(".codex").join("auth.json"))
+}
+
 pub fn resolve_provider_binary(state: &AppState, provider: ProviderKind) -> String {
     match provider {
         ProviderKind::Claude => super::claude_runner::find_claude(),
@@ -1205,6 +1337,7 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
     let codex_template = codex_template(state);
     let codex_binary = resolve_codex_binary(state);
     let codex_probe = probe_binary(&codex_binary);
+    let codex_account = codex_account_snapshot();
     let codex_acp = if configured_transport == CodexTransport::Acp {
         codex_acp_status_snapshot(state)
     } else {
@@ -1307,6 +1440,7 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
                 "acp_ready": acp_ready,
                 "model": codex_model,
                 "effort": codex_effort,
+                "account": codex_account,
                 "command_template": codex_template,
                 "ready": effective_ready,
                 "authenticated": codex_acp.get("authenticated").cloned().unwrap_or(Value::Null),
@@ -1434,6 +1568,40 @@ mod tests {
                 .and_then(|source| source.as_str()),
             Some("test")
         );
+    }
+
+    #[test]
+    fn codex_account_snapshot_reads_safe_identity_fields() {
+        let root = temp_path("codex-account");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let auth_path = root.join("auth.json");
+        std::fs::write(
+            &auth_path,
+            serde_json::to_string(&json!({
+                "auth_mode": "chatgpt",
+                "tokens": {
+                    "id_token": "head.eyJlbWFpbCI6Imlnb3JAZXhhbXBsZS5jb20iLCJuYW1lIjoiSWdvciJ9.sig",
+                    "access_token": "secret-access-token",
+                    "refresh_token": "secret-refresh-token",
+                    "account_id": "acc_1234567890abcdef"
+                },
+                "last_refresh": "2026-05-09T00:00:00Z"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let snapshot = codex_account_snapshot_from_auth_path(&auth_path);
+
+        assert_eq!(snapshot["status"], "ok");
+        assert_eq!(snapshot["auth_mode"], "chatgpt");
+        assert_eq!(snapshot["display"], "igor@example.com");
+        assert_eq!(snapshot["email"], "igor@example.com");
+        assert_eq!(snapshot["account_id_tail"], "...abcdef");
+        assert_eq!(snapshot.get("access_token"), None);
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

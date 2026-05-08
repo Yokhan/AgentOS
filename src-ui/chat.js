@@ -205,6 +205,17 @@ function codexModelSourceLabel(codexStatus) {
   return "fallback";
 }
 
+function codexAccountLabel(codexStatus) {
+  const account = codexStatus?.account || {};
+  return (
+    account.display ||
+    account.email ||
+    account.name ||
+    account.account_id_tail ||
+    ""
+  );
+}
+
 function providerAvailability(provider, providerStatus) {
   const info = providerStatus?.providers?.[provider] || {};
   if (info.available === false) return "offline";
@@ -323,6 +334,11 @@ function RouteCard({
         <span>${shortModelLabel(route.model)}</span>
         <span>${route.mode}/${route.access}</span>
         <span>${route.providerState}</span>
+        ${route.accountLabel
+          ? html`<span title=${route.accountTitle || route.accountLabel}>
+              ${route.accountLabel}
+            </span>`
+          : null}
       </div>
     </div>
     <div class="route-meta compact">
@@ -420,6 +436,9 @@ function RouteCard({
         <span>models: ${route.modelCount} ${route.modelSource}</span>
         <span>scope: ${route.scope}</span>
         <span>provider: ${route.providerState}</span>
+        ${route.accountLabel
+          ? html`<span>account: ${route.accountLabel}</span>`
+          : null}
         ${run
           ? html`<span
               >${run.detail || run.phase || run.status || "running"}</span
@@ -2570,6 +2589,12 @@ function ChatSidebar() {
   );
   const modelSource =
     soloProvider === "codex" ? codexModelSourceLabel(codexStatus) : "static";
+  const accountLabel =
+    (!duoEnabled && soloProvider === "codex") ||
+    (duoEnabled && activeOrchestrator?.provider === "codex")
+      ? codexAccountLabel(codexStatus)
+      : "";
+  const account = codexStatus?.account || {};
   const modelCount =
     soloProvider === "codex"
       ? Number(codexStatus.models_count || 0) ||
@@ -2617,6 +2642,10 @@ function ChatSidebar() {
     provider: duoEnabled ? activeOrchestrator?.provider || "duo" : soloProvider,
     providerRaw: selectedSoloProvider.value,
     providerState,
+    accountLabel,
+    accountTitle: account?.last_refresh
+      ? `${accountLabel} · ${account.auth_mode || "auth"} · refreshed ${account.last_refresh}`
+      : accountLabel,
     model: duoEnabled
       ? activeOrchestrator?.model || "room"
       : selectedModelValue || "auto",

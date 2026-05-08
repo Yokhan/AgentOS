@@ -81,6 +81,13 @@ function SettingsPage() {
       ? "var(--green)"
       : "var(--accent)";
   const codexStatus = prov?.codex || {};
+  const codexAccount = codexStatus?.account || {};
+  const codexAccountLabel =
+    codexAccount.display ||
+    codexAccount.email ||
+    codexAccount.name ||
+    codexAccount.account_id_tail ||
+    "not signed in";
   const codexModel = pd?.config?.codex_model || "";
   const codexEffort = pd?.config?.codex_effort || "";
   const codexModelOptions = codexModelOptionsFromStatus(
@@ -657,6 +664,22 @@ function SettingsPage() {
           <div
             style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-xs);font-size:var(--fs-s);font-family:var(--font-mono)"
           >
+            <div
+              style="border:1px solid var(--border);background:var(--bg-soft);padding:var(--sp-xs);color:${codexAccount?.status ===
+              "ok"
+                ? "var(--green)"
+                : "var(--yellow)"}"
+              title=${codexAccount?.last_refresh
+                ? `last refresh: ${codexAccount.last_refresh}`
+                : codexAccount?.source || ""}
+            >
+              account: ${codexAccountLabel}
+            </div>
+            <div
+              style="border:1px solid var(--border);background:var(--bg-soft);padding:var(--sp-xs);color:var(--t2)"
+            >
+              auth: ${codexAccount?.auth_mode || "unknown"}
+            </div>
             <div
               style="border:1px solid var(--border);background:var(--bg-soft);padding:var(--sp-xs);color:var(--t2)"
             >

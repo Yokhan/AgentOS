@@ -1,3 +1,10 @@
+# Agent OS 0.3.13
+
+- Added a safe Codex account snapshot to provider status by reading local Codex auth metadata without exposing access or refresh tokens.
+- The chat route card now shows the active Codex/ChatGPT account next to provider, model, mode, and runtime state when Codex is selected.
+- Settings -> Codex Connection now shows the current account and auth mode, with refresh timestamp in the tooltip.
+- Added regression coverage to ensure Codex account identity is extracted from safe JWT payload fields and token values are not returned.
+
 # Agent OS 0.3.12
 
 - Centered the floating workspace dock against the full app viewport instead of the middle workbench column, so it no longer drifts left when the project rail or chat rail changes width.
