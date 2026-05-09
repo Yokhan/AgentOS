@@ -679,6 +679,8 @@
 }
 .exec-map-card.stage {
     gap: 0;
+    min-height: 0;
+    flex: 1 1 auto;
 }
 .exec-map-head {
     display: flex;
@@ -790,6 +792,13 @@
     background: color-mix(in srgb, var(--bg) 82%, transparent);
     min-height: 210px;
 }
+.exec-map-card.stage .exec-map-body {
+    flex: 1 1 auto;
+    min-height: min(58vh, 620px);
+    max-height: min(72vh, 760px);
+    overflow: auto;
+    align-items: start;
+}
 .exec-map-rail {
     border-right: 1px solid var(--border);
     background: color-mix(in srgb, var(--sf) 80%, transparent);
@@ -848,9 +857,15 @@
     overflow: auto;
     min-width: 0;
 }
+.exec-map-card.stage .exec-map-scroll {
+    overflow: visible;
+}
 .exec-map-track {
     position: relative;
     min-height: 100%;
+}
+.exec-map-card.stage .exec-map-track {
+    min-width: 100%;
 }
 .exec-map-ruler {
     position: absolute;

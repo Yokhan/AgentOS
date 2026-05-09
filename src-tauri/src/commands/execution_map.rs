@@ -11,14 +11,16 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tauri::State;
 
-const EXECUTION_MAP_SCHEMA_VERSION: &str = "agentos.execution_map.v1";
+const EXECUTION_MAP_SCHEMA_VERSION: &str = "agentos.execution_map.v2";
 
 fn field(row: &Value, key: &str) -> String {
-    row.get(key)
+    let raw = row
+        .get(key)
         .and_then(|v| v.as_str())
         .unwrap_or_default()
         .trim()
-        .to_string()
+        .to_string();
+    crate::commands::event_contract::clean_display_text(&raw)
 }
 
 fn clean_project(project: &str) -> String {
@@ -204,13 +206,61 @@ fn waiting_delegations(state: &AppState, project: &str) -> Vec<Value> {
         .collect()
 }
 
+fn parse_ts_ms(ts: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(ts)
+        .map(|dt| dt.timestamp_millis())
+        .or_else(|_| {
+            chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%dT%H:%M:%SZ")
+                .map(|dt| dt.and_utc().timestamp_millis())
+        })
+        .ok()
+}
+
+fn time_label(offset_ms: i64) -> String {
+    let seconds = (offset_ms.max(0) + 999) / 1000;
+    if seconds < 60 {
+        format!("+{}s", seconds)
+    } else {
+        format!("+{}m{}s", seconds / 60, seconds % 60)
+    }
+}
+
+fn enrich_event_times(events: &mut [Value]) {
+    let parsed: Vec<Option<i64>> = events
+        .iter()
+        .map(|event| {
+            event
+                .get("ts")
+                .and_then(|v| v.as_str())
+                .and_then(parse_ts_ms)
+        })
+        .collect();
+    let min_ts = parsed.iter().flatten().min().copied().unwrap_or(0);
+    for (index, event) in events.iter_mut().enumerate() {
+        let ts_ms = parsed
+            .get(index)
+            .and_then(|value| *value)
+            .unwrap_or(min_ts + index as i64 * 1000);
+        let offset_ms = ts_ms.saturating_sub(min_ts).max(0);
+        if let Some(obj) = event.as_object_mut() {
+            obj.insert("event_index".to_string(), json!(index));
+            obj.insert("ts_ms".to_string(), json!(ts_ms));
+            obj.insert("offset_ms".to_string(), json!(offset_ms));
+            obj.insert("time_label".to_string(), json!(time_label(offset_ms)));
+        }
+    }
+}
+
 pub fn build_execution_map(
     state: &AppState,
     project: Option<String>,
     room_session_id: Option<String>,
     limit: usize,
 ) -> Value {
-    let project_filter = project.unwrap_or_default();
+    let project_filter = match project.unwrap_or_default().trim() {
+        "" | "_orchestrator" => String::new(),
+        value => value.to_string(),
+    };
     let limit = limit.clamp(20, 180);
     let timeline = build_execution_timeline(
         state,
@@ -433,6 +483,8 @@ pub fn build_execution_map(
         }));
     }
 
+    enrich_event_times(&mut events);
+
     let mut lane_values: Vec<Value> = lanes
         .into_iter()
         .map(|(id, mut lane)| {
@@ -587,10 +639,13 @@ mod tests {
             delegation("d-1", DelegationStatus::Pending),
         );
 
-        let result = build_execution_map(&state, None, None, 50);
+        let result = build_execution_map(&state, Some("_orchestrator".to_string()), None, 50);
         assert_eq!(result["status"], "ok");
-        assert_eq!(result["schema_version"], "agentos.execution_map.v1");
+        assert_eq!(result["schema_version"], "agentos.execution_map.v2");
         assert!(result["lanes"].as_array().unwrap().len() >= 2);
+        assert!(result["events"][0].get("event_index").is_some());
+        assert!(result["events"][0].get("offset_ms").is_some());
+        assert!(result["events"][0].get("time_label").is_some());
         assert!(result["edges"]
             .as_array()
             .unwrap()
@@ -639,6 +694,35 @@ mod tests {
         assert_eq!(live["status"], "running");
         assert_eq!(live["started_at"], "2026-04-28T08:01:00Z");
         assert_eq!(live["provider"], "codex");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn includes_archived_delegation_as_project_lane_with_clean_text() {
+        let root = test_root("archive-lane");
+        let state = AppState::new(root.clone());
+        let mut archived = delegation("d-archived", DelegationStatus::Failed);
+        archived.project = "RABproject".to_string();
+        archived.task =
+            "\u{0420}\u{045f}\u{0421}\u{0402}\u{0420}\u{0451}\u{0420}\u{0406}\u{0420}\u{00b5}\u{0421}\u{201a} \u{0420}\u{0451}\u{0420}\u{00b7} \u{0420}\u{00b0}\u{0421}\u{0402}\u{0421}\u{2026}\u{0420}\u{0451}\u{0420}\u{0406}\u{0420}\u{00b0}"
+                .to_string();
+        archived.ts = "2026-04-28T08:02:00Z".to_string();
+        append_jsonl_logged(
+            &root.join("tasks").join(".delegation-archive.jsonl"),
+            &serde_json::to_value(&archived).expect("archive json"),
+            "test archive delegation",
+        );
+
+        let result = build_execution_map(&state, None, None, 50);
+        let lanes = result["lanes"].as_array().expect("lanes");
+        assert!(lanes.iter().any(|lane| lane["project"] == "RABproject"));
+        let events = result["events"].as_array().expect("events");
+        let archived_event = events
+            .iter()
+            .find(|event| event["project"] == "RABproject")
+            .expect("archived project event");
+        assert_eq!(archived_event["detail"], "Привет из архива");
 
         let _ = std::fs::remove_dir_all(root);
     }

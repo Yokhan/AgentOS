@@ -897,7 +897,7 @@ async function loadExecutionMap(
   if (!__IS_TAURI) {
     executionMap.value = {
       status: "ok",
-      schema_version: "agentos.execution_map.v1",
+      schema_version: "agentos.execution_map.v2",
       event_schema_version: "agentos.event.v1",
       project: project || "_orchestrator",
       big_plan: {
@@ -929,6 +929,9 @@ async function loadExecutionMap(
           detail: "No recent execution events.",
           ts: new Date().toISOString(),
           sequence: 0,
+          event_index: 0,
+          offset_ms: 0,
+          time_label: "+0s",
         },
       ],
       edges: [],

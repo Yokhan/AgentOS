@@ -50,8 +50,170 @@ impl EventRow {
     }
 }
 
+fn looks_like_cp1251_mojibake(value: &str) -> bool {
+    [
+        "\u{0420}\u{045f}",
+        "\u{0420}\u{0457}",
+        "\u{0420}\u{00b5}",
+        "\u{0420}\u{0405}",
+        "\u{0420}\u{0455}",
+        "\u{0420}\u{0451}",
+        "\u{0420}\u{00b0}",
+        "\u{0420}\u{00b1}",
+        "\u{0420}\u{0491}",
+        "\u{0420}\u{00bb}",
+        "\u{0420}\u{00a0}",
+        "\u{0420}\u{040e}",
+        "\u{0421}\u{0403}",
+        "\u{0421}\u{201a}",
+        "\u{0421}\u{0402}",
+        "\u{0421}\u{040f}",
+        "\u{0421}\u{2039}",
+        "\u{0421}\u{040a}",
+        "\u{0432}\u{0402}",
+        "\u{0412}\u{00b1}",
+        "\u{0412}\u{00b0}",
+    ]
+    .iter()
+    .any(|marker| value.contains(marker))
+}
+
+fn cp1251_byte(ch: char) -> Option<u8> {
+    let code = ch as u32;
+    if (0x0410..=0x044F).contains(&code) {
+        return Some((0xC0 + (code - 0x0410)) as u8);
+    }
+    match ch {
+        '\u{0402}' => Some(0x80),
+        '\u{0403}' => Some(0x81),
+        '\u{201A}' => Some(0x82),
+        '\u{0453}' => Some(0x83),
+        '\u{201E}' => Some(0x84),
+        '\u{2026}' => Some(0x85),
+        '\u{2020}' => Some(0x86),
+        '\u{2021}' => Some(0x87),
+        '\u{20AC}' => Some(0x88),
+        '\u{2030}' => Some(0x89),
+        '\u{0409}' => Some(0x8A),
+        '\u{2039}' => Some(0x8B),
+        '\u{040A}' => Some(0x8C),
+        '\u{040C}' => Some(0x8D),
+        '\u{040B}' => Some(0x8E),
+        '\u{040F}' => Some(0x8F),
+        '\u{0452}' => Some(0x90),
+        '\u{2018}' => Some(0x91),
+        '\u{2019}' => Some(0x92),
+        '\u{201C}' => Some(0x93),
+        '\u{201D}' => Some(0x94),
+        '\u{2022}' => Some(0x95),
+        '\u{2013}' => Some(0x96),
+        '\u{2014}' => Some(0x97),
+        '\u{2122}' => Some(0x99),
+        '\u{0459}' => Some(0x9A),
+        '\u{203A}' => Some(0x9B),
+        '\u{045A}' => Some(0x9C),
+        '\u{045C}' => Some(0x9D),
+        '\u{045B}' => Some(0x9E),
+        '\u{045F}' => Some(0x9F),
+        '\u{00A0}' => Some(0xA0),
+        '\u{040E}' => Some(0xA1),
+        '\u{045E}' => Some(0xA2),
+        '\u{0408}' => Some(0xA3),
+        '\u{00A4}' => Some(0xA4),
+        '\u{0490}' => Some(0xA5),
+        '\u{00A6}' => Some(0xA6),
+        '\u{00A7}' => Some(0xA7),
+        '\u{0401}' => Some(0xA8),
+        '\u{00A9}' => Some(0xA9),
+        '\u{0404}' => Some(0xAA),
+        '\u{00AB}' => Some(0xAB),
+        '\u{00AC}' => Some(0xAC),
+        '\u{00AD}' => Some(0xAD),
+        '\u{00AE}' => Some(0xAE),
+        '\u{0407}' => Some(0xAF),
+        '\u{00B0}' => Some(0xB0),
+        '\u{00B1}' => Some(0xB1),
+        '\u{0406}' => Some(0xB2),
+        '\u{0456}' => Some(0xB3),
+        '\u{0491}' => Some(0xB4),
+        '\u{00B5}' => Some(0xB5),
+        '\u{00B6}' => Some(0xB6),
+        '\u{00B7}' => Some(0xB7),
+        '\u{0451}' => Some(0xB8),
+        '\u{2116}' => Some(0xB9),
+        '\u{0454}' => Some(0xBA),
+        '\u{00BB}' => Some(0xBB),
+        '\u{0458}' => Some(0xBC),
+        '\u{0405}' => Some(0xBD),
+        '\u{0455}' => Some(0xBE),
+        '\u{0457}' => Some(0xBF),
+        _ if code <= 0x00FF => Some(code as u8),
+        _ => None,
+    }
+}
+
+fn decode_cp1251_mojibake_once(value: &str) -> Option<String> {
+    let mut bytes = Vec::with_capacity(value.len());
+    for ch in value.chars() {
+        if ch.is_ascii() {
+            bytes.push(ch as u8);
+        } else {
+            bytes.push(cp1251_byte(ch)?);
+        }
+    }
+    String::from_utf8(bytes).ok()
+}
+
+fn mojibake_score(value: &str) -> usize {
+    [
+        "\u{0420}\u{045f}",
+        "\u{0420}\u{0457}",
+        "\u{0420}\u{00b5}",
+        "\u{0420}\u{0405}",
+        "\u{0420}\u{0455}",
+        "\u{0420}\u{0451}",
+        "\u{0420}\u{00b0}",
+        "\u{0420}\u{00b1}",
+        "\u{0420}\u{0491}",
+        "\u{0420}\u{00bb}",
+        "\u{0420}\u{00a0}",
+        "\u{0420}\u{040e}",
+        "\u{0421}\u{0403}",
+        "\u{0421}\u{201a}",
+        "\u{0421}\u{0402}",
+        "\u{0421}\u{040f}",
+        "\u{0421}\u{2039}",
+        "\u{0421}\u{040a}",
+        "\u{0432}\u{0402}",
+        "\u{0412}\u{00b1}",
+        "\u{0412}\u{00b0}",
+    ]
+    .iter()
+    .map(|marker| value.matches(marker).count())
+    .sum()
+}
+
+pub fn clean_display_text(value: &str) -> String {
+    let mut current = value.to_string();
+    for _ in 0..3 {
+        if !looks_like_cp1251_mojibake(&current) {
+            break;
+        }
+        let current_score = mojibake_score(&current);
+        let Some(decoded) = decode_cp1251_mojibake_once(&current) else {
+            break;
+        };
+        if mojibake_score(&decoded) >= current_score {
+            break;
+        }
+        current = decoded;
+    }
+    current
+}
+
 pub fn short(value: &str, max: usize) -> String {
-    let trimmed = value.trim().replace(['\r', '\n'], " ");
+    let cleaned = clean_display_text(value);
+    let trimmed = cleaned.trim().replace(['\r', '\n'], " ");
     if trimmed.chars().count() <= max {
         trimmed
     } else {
@@ -374,7 +536,8 @@ pub fn get_event_contract_schema(_state: State<Arc<AppState>>) -> Value {
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_chat_stream_event, normalize_delegation_stream_event, normalize_session_event,
+        clean_display_text, normalize_chat_stream_event, normalize_delegation_stream_event,
+        normalize_session_event, short,
     };
     use crate::commands::status::DelegationStatus;
     use crate::state::{Delegation, SessionEvent};
@@ -448,5 +611,28 @@ mod tests {
         assert_eq!(row.source, "delegation");
         assert_eq!(row.kind, "stage");
         assert_eq!(row.status, "running");
+    }
+
+    #[test]
+    fn display_text_decodes_cp1251_mojibake() {
+        assert_eq!(
+            clean_display_text(
+                "\u{0420}\u{045f}\u{0421}\u{0402}\u{0420}\u{0451}\u{0420}\u{0406}\u{0420}\u{00b5}\u{0421}\u{201a}"
+            ),
+            "Привет"
+        );
+        assert_eq!(
+            clean_display_text(
+                "\u{0420}\u{00a0}\u{0412}\u{0098}\u{0420}\u{040e}\u{0432}\u{0402}\u{0459}\u{0420}\u{00a0}\u{0421}\u{2022}\u{0420}\u{00a0}\u{0421}\u{2013}"
+            ),
+            "Итог"
+        );
+        assert_eq!(
+            short(
+                "\u{0420}\u{045f}\u{0421}\u{0402}\u{0420}\u{0451}\u{0420}\u{0406}\u{0420}\u{00b5}\u{0421}\u{201a}\n\u{0420}\u{0458}\u{0420}\u{0451}\u{0421}\u{0402}",
+                40
+            ),
+            "Привет мир"
+        );
     }
 }

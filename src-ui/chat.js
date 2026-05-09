@@ -1639,31 +1639,51 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const isStage = variant === "stage";
   const big = map.big_plan || {};
   const lanes = map.lanes || [];
-  const events = map.events || [];
+  const rawEvents = map.events || [];
+  const finiteNumber = (value, fallback = 0) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : fallback;
+  };
+  const events = rawEvents.map((event, index) => {
+    const eventIndex = finiteNumber(
+      event.event_index,
+      finiteNumber(event.sequence, index),
+    );
+    const offsetMs = finiteNumber(event.offset_ms, eventIndex * 1000);
+    return {
+      ...event,
+      _eventIndex: eventIndex,
+      _offsetMs: offsetMs,
+      _timeLabel: event.time_label || `#${eventIndex}`,
+    };
+  });
   const edges = map.edges || [];
   const waiting = map.waiting_for_user || [];
   const counts = map.counts || {};
   const eventById = new Map(events.map((event) => [event.id, event]));
   const laneIndex = new Map(lanes.map((lane, index) => [lane.id, index]));
   const selected = selectedId ? eventById.get(selectedId) : null;
-  const maxSequence = Math.max(
+  const maxEventIndex = Math.max(
     1,
-    ...events.map((event) => Number(event.sequence || 0)),
+    ...events.map((event) => finiteNumber(event._eventIndex, 0)),
   );
+  const rulerEvents = Array.from(
+    new Map(events.map((event) => [event._eventIndex, event])).values(),
+  ).sort((a, b) => a._eventIndex - b._eventIndex);
   const eventW = isStage ? 190 : 132;
   const eventH = isStage ? 58 : 42;
   const stepW = isStage ? 240 : 150;
   const rowH = isStage ? 96 : 72;
   const topPad = isStage ? 58 : 44;
   const leftPad = isStage ? 42 : 28;
-  const mapW = Math.max(isStage ? 1180 : 760, (maxSequence + 3) * stepW);
+  const mapW = Math.max(isStage ? 1180 : 760, (maxEventIndex + 3) * stepW);
   const mapH = topPad + Math.max(1, lanes.length) * rowH + (isStage ? 28 : 18);
   const arrowId = isStage ? "exec-map-arrow-stage" : "exec-map-arrow-compact";
   const pos = (event) => {
-    const sequence = Number(event?.sequence || 0);
+    const eventIndex = finiteNumber(event?._eventIndex, 0);
     const lane = laneIndex.get(event?.lane_id) ?? 0;
     return {
-      x: leftPad + (sequence + 1) * stepW,
+      x: leftPad + (eventIndex + 1) * stepW,
       y: topPad + lane * rowH + Math.max(8, Math.floor((rowH - eventH) / 2)),
     };
   };
@@ -1767,12 +1787,17 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
       <div class="exec-map-scroll">
         <div class="exec-map-track" style=${`width:${mapW}px;height:${mapH}px`}>
           <div class="exec-map-ruler">
-            ${Array.from({ length: Math.min(maxSequence + 2, 20) }).map(
-              (_, index) =>
-                html`<span style=${`left:${leftPad + (index + 1) * stepW}px`}>
-                  t+${index}
-                </span>`,
-            )}
+            ${rulerEvents
+              .slice(0, isStage ? 32 : 18)
+              .map(
+                (event) =>
+                  html`<span
+                    style=${`left:${leftPad + (event._eventIndex + 1) * stepW}px`}
+                    title=${event.ts || ""}
+                  >
+                    ${event._timeLabel}
+                  </span>`,
+              )}
           </div>
           <svg
             class="exec-map-edges"

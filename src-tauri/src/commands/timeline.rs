@@ -6,6 +6,7 @@ use crate::commands::event_contract::{
 };
 use crate::state::{AppState, Delegation};
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 use tauri::State;
@@ -85,13 +86,42 @@ fn delegation_rows(state: &AppState, project: &str, limit: usize) -> Vec<EventRo
     rows
 }
 
+fn archived_delegation_rows(state: &AppState, project: &str, limit: usize) -> Vec<EventRow> {
+    let path = state.root.join("tasks").join(".delegation-archive.jsonl");
+    let mut rows = Vec::new();
+    let mut seen = HashSet::new();
+    for value in read_recent_jsonl(&path, limit.saturating_mul(4).max(16))
+        .into_iter()
+        .rev()
+    {
+        let Ok(delegation) = serde_json::from_value::<Delegation>(value) else {
+            continue;
+        };
+        if !project.is_empty() && delegation.project != project {
+            continue;
+        }
+        if !seen.insert(delegation.id.clone()) {
+            continue;
+        }
+        rows.push(normalize_delegation_state(&delegation));
+        if rows.len() >= limit.min(12) {
+            break;
+        }
+    }
+    rows.reverse();
+    rows
+}
+
 pub fn build_execution_timeline(
     state: &AppState,
     project: Option<String>,
     room_session_id: Option<String>,
     limit: usize,
 ) -> Value {
-    let project = project.unwrap_or_default();
+    let project = match project.unwrap_or_default().trim() {
+        "" | "_orchestrator" => String::new(),
+        value => value.to_string(),
+    };
     let limit = limit.clamp(10, 120);
     let mut rows = chat_stream_rows(state, &project, limit);
 
@@ -101,6 +131,7 @@ pub fn build_execution_timeline(
     {
         rows.extend(session_rows(state, session_id, &project, limit.min(40)));
     }
+    rows.extend(archived_delegation_rows(state, &project, limit.min(24)));
     rows.extend(delegation_rows(state, &project, limit.min(24)));
     rows.sort_by(|a, b| a.ts.cmp(&b.ts));
     if rows.len() > limit {

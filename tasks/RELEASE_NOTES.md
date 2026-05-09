@@ -1,3 +1,12 @@
+# Agent OS 0.3.15
+
+- Rebuilt the live execution map contract as `agentos.execution_map.v2` with `event_index`, `ts_ms`, `offset_ms`, and `time_label` fields so the horizontal ruler uses real event timing instead of synthetic `t+N` labels.
+- Fixed the global/orchestrator scope filter: `_orchestrator` now means global execution context, so project-agent lanes are not accidentally filtered out.
+- Added archived delegation rows from `.delegation-archive.jsonl` to the execution timeline, keeping completed/failed project-agent branches visible after cleanup instead of collapsing the map to one orchestrator row.
+- Added CP1251/UTF-8 mojibake cleanup for runtime display text and regression tests for single and double mojibake strings.
+- Expanded the mojibake gate from a small UI allowlist to source, backend, scripts, docs, release notes, and tracked plan files.
+- Updated the execution map UI to use event metadata for node columns, real time labels on the ruler, and a dedicated scroll viewport for the large stage map.
+
 # Agent OS 0.3.14
 
 - Fixed Codex streaming hangs where AgentOS could wait forever inside the provider subprocess and never emit `run_done`.
