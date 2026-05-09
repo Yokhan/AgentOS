@@ -3,8 +3,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, Instant};
 use tauri::State;
 
@@ -595,6 +598,16 @@ fn codex_wants_runtime_control(model: Option<&str>, reasoning_effort: Option<&st
         || reasoning_effort.filter(|e| !e.trim().is_empty()).is_some()
 }
 
+fn provider_timeout(state: &AppState) -> Duration {
+    let seconds = state
+        .config()
+        .get("provider_timeout_seconds")
+        .and_then(|v| v.as_u64().or_else(|| v.as_str()?.parse::<u64>().ok()))
+        .unwrap_or(45 * 60)
+        .clamp(30, 6 * 60 * 60);
+    Duration::from_secs(seconds)
+}
+
 fn effective_codex_transport(
     state: &AppState,
     model: Option<&str>,
@@ -1022,11 +1035,74 @@ fn wait_with_optional_pid_tracking(
         track_pid(state, key, pid);
         crate::log_info!("[provider:{}] spawned pid={}", key, pid);
     }
-    let output = child.wait_with_output();
+
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = tx.send(child.wait_with_output());
+    });
+
+    let started = Instant::now();
+    let timeout = provider_timeout(state);
+    let output = loop {
+        match rx.recv_timeout(Duration::from_millis(250)) {
+            Ok(output) => break output,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                if chat_key
+                    .map(|key| super::process_manager::is_cancelled(state, key))
+                    .unwrap_or(false)
+                {
+                    crate::log_warn!(
+                        "[provider:{}] cancelling pid={} after user stop",
+                        chat_key.unwrap_or("_unknown"),
+                        pid
+                    );
+                    kill_pid_tree(pid);
+                    break Err(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "provider cancelled by user",
+                    ));
+                }
+                if started.elapsed() >= timeout {
+                    crate::log_warn!(
+                        "[provider:{}] timeout after {}s, killing pid={}",
+                        chat_key.unwrap_or("_unknown"),
+                        timeout.as_secs(),
+                        pid
+                    );
+                    kill_pid_tree(pid);
+                    break Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        format!("provider timed out after {} seconds", timeout.as_secs()),
+                    ));
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                break Err(io::Error::new(
+                    io::ErrorKind::BrokenPipe,
+                    "provider wait thread disconnected",
+                ));
+            }
+        }
+    };
     if let Some(key) = chat_key {
         untrack_pid_if_match(state, key, pid);
     }
     output
+}
+
+fn kill_pid_tree(pid: u32) {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = super::claude_runner::silent_cmd("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .output();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = super::claude_runner::silent_cmd("kill")
+            .args(["-9", &pid.to_string()])
+            .output();
+    }
 }
 
 fn run_codex_with_template(
@@ -1771,6 +1847,30 @@ user
 
         assert!(output.contains("Provider error: claude model=opus"));
         assert!(output.contains("Claude is disabled in AgentOS settings"));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn provider_timeout_uses_config_with_bounds() {
+        let root = temp_path("provider-timeout");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("n8n")).unwrap();
+        std::fs::write(
+            root.join("n8n").join("config.json"),
+            serde_json::to_string(&json!({ "provider_timeout_seconds": "3" })).unwrap(),
+        )
+        .unwrap();
+        let state = crate::state::AppState::new(root.clone());
+        assert_eq!(provider_timeout(&state).as_secs(), 30);
+
+        std::fs::write(
+            root.join("n8n").join("config.json"),
+            serde_json::to_string(&json!({ "provider_timeout_seconds": 120 })).unwrap(),
+        )
+        .unwrap();
+        state.invalidate_config();
+        assert_eq!(provider_timeout(&state).as_secs(), 120);
 
         let _ = std::fs::remove_dir_all(&root);
     }

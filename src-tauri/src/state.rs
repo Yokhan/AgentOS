@@ -415,6 +415,8 @@ impl AppState {
 
         // Ensure chats dir exists
         let _ = std::fs::create_dir_all(&chats_dir);
+        let _ = std::fs::create_dir_all(root.join("tasks"));
+        let _ = std::fs::write(root.join("tasks").join(".running-tasks.json"), "{}");
 
         // Update project_root in config to match detected root
         Self::update_project_root(&config_path, &root);

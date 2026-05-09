@@ -173,11 +173,7 @@ fn waiting_delegations(state: &AppState, project: &str) -> Vec<Value> {
                     (project.is_empty() || delegation.project == project)
                         && matches!(
                             delegation.status.to_string().as_str(),
-                            "pending"
-                                | "needs_permission"
-                                | "failed"
-                                | "rejected"
-                                | "cancelled"
+                            "pending" | "needs_permission" | "failed" | "rejected" | "cancelled"
                         )
                 })
                 .cloned()

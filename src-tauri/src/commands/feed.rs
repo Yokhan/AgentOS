@@ -32,8 +32,10 @@ pub fn get_feed(state: State<Arc<AppState>>) -> Value {
 
 #[tauri::command]
 pub fn get_activity(state: State<Arc<AppState>>) -> Value {
-    // Clean stale activities (>10 min old with no running PID)
-    if let Ok(mut acts) = state.activities.lock() {
+    // Clean stale in-memory activities and rewrite the sidecar file. Running
+    // processes cannot survive an app restart, so the file must not be treated
+    // as source of truth.
+    let tasks = if let Ok(mut acts) = state.activities.lock() {
         let pids = state.running_pids.lock().ok();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -52,8 +54,18 @@ pub fn get_activity(state: State<Arc<AppState>>) -> Value {
             }
             true
         });
-    }
-    let tasks = load_tasks(&state.root);
+        let map: serde_json::Map<String, Value> =
+            acts.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        let value = Value::Object(map);
+        let path = state.root.join("tasks").join(".running-tasks.json");
+        let _ = super::claude_runner::atomic_write(
+            &path,
+            &serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string()),
+        );
+        value
+    } else {
+        json!({})
+    };
     let delegations = match state.delegations.lock() {
         Ok(d) => {
             let active: std::collections::HashMap<String, Value> = d
@@ -456,11 +468,3 @@ pub fn get_project_plan(state: State<Arc<AppState>>, project: String) -> Value {
 }
 
 // --- Helpers ---
-
-fn load_tasks(root: &std::path::Path) -> serde_json::Value {
-    let path = root.join("tasks").join(".running-tasks.json");
-    std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|c| serde_json::from_str(&c).ok())
-        .unwrap_or(json!({}))
-}

@@ -1,3 +1,12 @@
+# Agent OS 0.3.14
+
+- Fixed Codex streaming hangs where AgentOS could wait forever inside the provider subprocess and never emit `run_done`.
+- Added cancel-aware provider waiting: Stop now kills the tracked Codex process tree and returns a clear cancelled provider error.
+- Added a configurable provider timeout (`provider_timeout_seconds`, default 45 minutes, bounded from 30 seconds to 6 hours) so silent provider hangs end with an explicit failure instead of blocking the chat indefinitely.
+- Added live provider heartbeat events while Codex is running: the chat status now shows phase, subprocess pid, elapsed time, and that AgentOS is waiting for provider output.
+- Stopped treating stale `.running-tasks.json` as source of truth after restart; app startup and activity polling now clear phantom running states when no process exists.
+- Preserved the existing active-run/details UI path, but now feeds it real backend telemetry instead of a vague timer.
+
 # Agent OS 0.3.13
 
 - Added a safe Codex account snapshot to provider status by reading local Codex auth metadata without exposing access or refresh tokens.

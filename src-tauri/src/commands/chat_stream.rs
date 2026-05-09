@@ -8,7 +8,10 @@ use crate::state::AppState;
 use serde_json::{json, Value};
 use std::io::BufRead;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tauri::State;
 
 fn unix_millis() -> u128 {
@@ -39,6 +42,61 @@ fn response_outcome(text: &str, cancelled: bool, exit_code: Option<i32>) -> &'st
 
 fn append_stream_event(stream_buf: &Path, event: Value, label: &str) {
     crate::commands::jsonl::append_jsonl_logged(stream_buf, &event, label);
+}
+
+fn spawn_provider_heartbeat(
+    state: Arc<AppState>,
+    chat_key: String,
+    stream_buf: std::path::PathBuf,
+    run_id: String,
+    active: Arc<AtomicBool>,
+) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        let started = std::time::Instant::now();
+        let mut beat = 0u64;
+        while active.load(Ordering::Relaxed) {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            if !active.load(Ordering::Relaxed) {
+                break;
+            }
+            beat += 1;
+            let elapsed = started.elapsed().as_secs();
+            let pid = state
+                .running_pids
+                .lock()
+                .ok()
+                .and_then(|pids| pids.get(&chat_key).copied());
+            let cancelled = is_cancelled(&state, &chat_key);
+            let detail = if cancelled {
+                "Stop requested; waiting for provider process to exit.".to_string()
+            } else if let Some(pid) = pid {
+                format!(
+                    "Codex subprocess pid={} is still running; waiting for provider output ({}s).",
+                    pid, elapsed
+                )
+            } else {
+                format!(
+                    "Provider call is active; waiting for process registration/output ({}s).",
+                    elapsed
+                )
+            };
+            append_stream_event(
+                &stream_buf,
+                json!({
+                    "type": "run_heartbeat",
+                    "run_id": run_id.as_str(),
+                    "status": "running",
+                    "phase": "provider",
+                    "detail": detail,
+                    "elapsed_ms": elapsed * 1000,
+                    "pid": pid,
+                    "beat": beat,
+                    "ts": state.now_iso()
+                }),
+                "stream provider heartbeat",
+            );
+        }
+    })
 }
 
 fn append_chat_system(
@@ -230,6 +288,14 @@ pub async fn stream_chat(
                 }),
                 "stream codex provider running",
             );
+            let heartbeat_active = Arc::new(AtomicBool::new(true));
+            let heartbeat_handle = spawn_provider_heartbeat(
+                Arc::clone(&state_arc),
+                chat_key_bg.clone(),
+                stream_buf_bg.clone(),
+                run_id_bg.clone(),
+                Arc::clone(&heartbeat_active),
+            );
             let response = super::provider_runner::run_provider_with_chat_control(
                 &state_arc,
                 provider,
@@ -240,6 +306,8 @@ pub async fn stream_chat(
                 resolved_effort.as_deref(),
                 Some(&chat_key_bg),
             );
+            heartbeat_active.store(false, Ordering::Relaxed);
+            let _ = heartbeat_handle.join();
             if is_cancelled(&state_arc, &chat_key_bg) {
                 append_stream_event(
                     &stream_buf_bg,

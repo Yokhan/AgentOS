@@ -1591,6 +1591,13 @@ async function sendMessage(msg) {
                   mode: normalizedSelection.runMode,
                   access: normalizedSelection.accessLevel,
                 });
+                if (
+                  (evt.type === "run_progress" ||
+                    evt.type === "run_heartbeat") &&
+                  evt.detail
+                ) {
+                  curActivity.value = evt.detail;
+                }
               }
               // Text (complete block from assistant event)
               if (evt.type === "text") {
