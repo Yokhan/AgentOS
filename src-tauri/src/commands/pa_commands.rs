@@ -25,6 +25,12 @@ static RE_REMEMBER: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"\[REMEMBER:([^\]]+)\]").unwrap());
 static RE_STRATEGY: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"(?s)\[STRATEGY:([^\]]+)\](.*?)\[/STRATEGY\]").unwrap());
+static RE_BACKTICK_READONLY_COMMAND: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(
+        r"`(DELEGATE_STATUS(?::[^`\]\s]+)?|DELEGATE_LOG(?::[^`\]\s]+)?|DELEGATE_DIFF(?::[^`\]\s]+)?|GIT_STATUS_ALL|TEMPLATE_AUDIT|DASHBOARD_FULL|HEALTH_CHECK:[^`\]\s]+)`",
+    )
+    .unwrap()
+});
 
 #[derive(Debug, Clone)]
 pub enum PaCommand {
@@ -449,6 +455,43 @@ fn command_scan_text(response: &str) -> String {
         text = strip_named_context_block(&text, block);
     }
     text
+}
+
+/// Recover a narrow allowlist of read-only diagnostics when the model writes
+/// them as inline code instead of executable `[PA_COMMAND]` tags.
+pub fn recover_bare_readonly_commands(response: &str) -> String {
+    let scan_text = command_scan_text(response);
+    if scan_text.trim().is_empty() {
+        return String::new();
+    }
+
+    let mut recovered = scan_text.clone();
+    let added = recoverable_bare_readonly_commands(response);
+
+    if !added.is_empty() {
+        recovered.push('\n');
+        recovered.push_str(&added.join("\n"));
+    }
+    recovered
+}
+
+pub fn recoverable_bare_readonly_commands(response: &str) -> Vec<String> {
+    let scan_text = command_scan_text(response);
+    if scan_text.trim().is_empty() {
+        return Vec::new();
+    }
+
+    let mut added = Vec::new();
+    for caps in RE_BACKTICK_READONLY_COMMAND.captures_iter(&scan_text) {
+        let Some(token) = caps.get(1).map(|m| m.as_str().trim()) else {
+            continue;
+        };
+        let bracketed = format!("[{}]", token);
+        if !scan_text.contains(&bracketed) && !added.contains(&bracketed) {
+            added.push(bracketed);
+        }
+    }
+    added
 }
 
 fn strip_named_context_block(input: &str, block: &str) -> String {
@@ -890,6 +933,49 @@ ERROR: {"type":"error","status":400}"#;
             &cmd.cmd,
             PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::DashboardFull)
         )));
+    }
+
+    #[test]
+    fn backticked_readonly_diagnostics_are_recovered_for_orchestrator_loop() {
+        let state = test_state("backtick-diagnostics");
+        let response = "Запускаю `DELEGATE_STATUS:?stale`, `GIT_STATUS_ALL` и `TEMPLATE_AUDIT`.";
+        let recovered = recover_bare_readonly_commands(response);
+        let recovered_only = recoverable_bare_readonly_commands(response);
+        let commands = parse_pa_commands(&recovered, &state);
+
+        assert_eq!(recovered_only.len(), 3);
+        assert_eq!(commands.len(), 3);
+        assert!(commands.iter().all(|cmd| cmd.valid));
+        assert!(commands.iter().any(|cmd| matches!(
+            &cmd.cmd,
+            PaCommand::DelegExt(super::super::pa_commands_deleg::DelegPaCommand::Status { filter }) if filter == "?stale"
+        )));
+        assert!(commands.iter().any(|cmd| matches!(
+            &cmd.cmd,
+            PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::GitStatusAll)
+        )));
+        assert!(commands.iter().any(|cmd| matches!(
+            &cmd.cmd,
+            PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::TemplateAudit)
+        )));
+    }
+
+    #[test]
+    fn plain_prose_readonly_diagnostics_are_not_recovered() {
+        let state = test_state("plain-prose-diagnostics");
+        let response = "Можно запустить DELEGATE_STATUS:?stale и GIT_STATUS_ALL позже.";
+        let recovered = recover_bare_readonly_commands(response);
+
+        assert!(parse_pa_commands(&recovered, &state).is_empty());
+    }
+
+    #[test]
+    fn fenced_backticked_diagnostics_are_not_recovered() {
+        let state = test_state("fenced-backtick-diagnostics");
+        let response = "```text\n`GIT_STATUS_ALL`\n```\nNo action.";
+        let recovered = recover_bare_readonly_commands(response);
+
+        assert!(parse_pa_commands(&recovered, &state).is_empty());
     }
 
     #[test]

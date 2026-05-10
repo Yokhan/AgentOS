@@ -15,6 +15,7 @@ const files = [
   "pages.js",
   "provider-caps.js",
   "route-state.js",
+  "run-state.js",
   "store.js",
   "utils.js",
   "views.js",

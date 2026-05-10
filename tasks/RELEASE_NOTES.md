@@ -1,3 +1,16 @@
+# Agent OS 0.3.16
+
+- Made the chat execution route more explicit: the composer now previews provider, model, access, context attachments, recoverable read-only AgentOS commands, and risky write commands before send.
+- Added shared frontend run-state handling so live chat, route cards, stuck-state hints, and stream diagnostics use one contract instead of re-parsing scattered raw events.
+- Preserved and restored partial live output across polling errors, cancellation, and reloads when backend history has not persisted the assistant response yet.
+- Added visible stuck-state diagnostics for quiet provider/tool waits, including phase, trace, latest heartbeat, elapsed time, and recommended interpretation.
+- Recovered safe read-only AgentOS diagnostics from inline/backticked command text and surfaced that recovery in chat, while still refusing to infer write commands from prose.
+- Expanded the startup error screen with route/view/run context, version, timestamp, copyable report, main-view recovery, and broken-view reset actions.
+- Kept Live Execution Flow on global orchestration scope so selecting a project no longer collapses the main branch map to a single project lane.
+- Enlarged the execution map stage, added comfortable/dense density switching, replaced synthetic `t+N` ruler labels with event-index labels, and added a warning when only the orchestrator lane is available.
+- Fixed the Needs You panel so pending approvals render alongside blocked route cards instead of disappearing behind other blockers, with direct approve/reject actions.
+- Strengthened release gates: UI smoke checks now cover the new run-state module, and GitHub release workflow runs UI checks and Rust lib tests before packaging.
+
 # Agent OS 0.3.15
 
 - Rebuilt the live execution map contract as `agentos.execution_map.v2` with `event_index`, `ts_ms`, `offset_ms`, and `time_label` fields so the horizontal ruler uses real event timing instead of synthetic `t+N` labels.

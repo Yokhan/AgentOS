@@ -444,6 +444,15 @@ body.chat-resizing {
     border-color: var(--yellow);
     color: var(--text);
 }
+.route-decision-actions button.primary {
+    border-color: color-mix(in srgb, var(--green) 58%, var(--border));
+    background: color-mix(in srgb, var(--green) 16%, var(--bg));
+    color: var(--green);
+}
+.route-decision-actions button.primary:hover {
+    border-color: var(--green);
+    color: var(--text);
+}
 .route-decision-actions button:disabled {
     opacity: 0.45;
     cursor: not-allowed;

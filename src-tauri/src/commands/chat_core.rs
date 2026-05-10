@@ -4,22 +4,35 @@ use crate::state::AppState;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
+pub fn is_global_chat_project(project: &str) -> bool {
+    matches!(project.trim(), "" | "_orchestrator")
+}
+
+pub fn normalize_chat_project(project: &str) -> String {
+    if is_global_chat_project(project) {
+        String::new()
+    } else {
+        project.trim().to_string()
+    }
+}
+
 /// Resolve project to working directory + chat key + chat file path.
 /// Shared by send_chat, stream_chat, and API send_chat.
 pub fn resolve_chat_context(
     state: &AppState,
     project: &str,
 ) -> Result<(PathBuf, String, PathBuf), String> {
+    let project = normalize_chat_project(project);
     let (_, pa_dir) = state.get_orch_dir();
     let cwd = if !project.is_empty() {
-        state.validate_project(project)?
+        state.validate_project(&project)?
     } else {
         pa_dir
     };
     let chat_key = if project.is_empty() {
         "_orchestrator".to_string()
     } else {
-        project.to_string()
+        project
     };
     let chat_file = state.chats_dir.join(format!("{}.jsonl", chat_key));
     Ok((cwd, chat_key, chat_file))

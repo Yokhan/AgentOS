@@ -36,13 +36,15 @@ pub async fn send_chat(
         return Ok(json!({"status": "error", "error": "Empty message"}));
     }
 
-    let (cwd, chat_key, chat_file) = match super::chat_core::resolve_chat_context(&state, &project)
-    {
-        Ok(ctx) => ctx,
-        Err(e) => return Ok(json!({"status": "error", "error": e})),
-    };
+    let normalized_project = super::chat_core::normalize_chat_project(&project);
+    let is_orchestrator = normalized_project.is_empty();
+    let (cwd, chat_key, chat_file) =
+        match super::chat_core::resolve_chat_context(&state, &normalized_project) {
+            Ok(ctx) => ctx,
+            Err(e) => return Ok(json!({"status": "error", "error": e})),
+        };
     let prompt =
-        super::chat_core::prepare_chat(&state, &chat_key, &chat_file, &message, project.is_empty());
+        super::chat_core::prepare_chat(&state, &chat_key, &chat_file, &message, is_orchestrator);
 
     let perm_path = get_permission_path(&state, &chat_key);
     let detail: String = message.chars().take(50).collect();
@@ -51,7 +53,7 @@ pub async fn send_chat(
     let (provider, resolved_model, resolved_effort) =
         super::provider_runner::resolve_single_chat_settings(
             &state,
-            &project,
+            &normalized_project,
             provider.as_deref(),
             model.as_deref(),
             reasoning_effort.as_deref(),
@@ -89,9 +91,18 @@ pub async fn send_chat(
 
     // Process PA commands from orchestrator response
     let mut final_response = response.clone();
-    if project.is_empty() {
-        let commands = super::pa_commands::parse_pa_commands(&response, &state);
-        let warnings = super::pa_commands::detect_malformed_commands(&response);
+    if is_orchestrator {
+        let command_text = super::pa_commands::recover_bare_readonly_commands(&response);
+        let recovered_readonly = super::pa_commands::recoverable_bare_readonly_commands(&response);
+        let commands = super::pa_commands::parse_pa_commands(&command_text, &state);
+        let warnings = super::pa_commands::detect_malformed_commands(&command_text);
+
+        if !recovered_readonly.is_empty() {
+            final_response += &format!(
+                "\n\n---\nRecovered read-only AgentOS commands from inline code: {}. Write commands are not inferred from prose.",
+                recovered_readonly.join(", ")
+            );
+        }
 
         for parsed in &commands {
             if !parsed.valid {

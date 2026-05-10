@@ -73,6 +73,12 @@ import {
   projectParam,
 } from "/route-state.js";
 import {
+  buildComposerPreview,
+  runPhaseLabel,
+  runStuckHint,
+  runTraceLabel,
+} from "/run-state.js";
+import {
   togVoice,
   hdlFiles,
   rmFile,
@@ -1102,6 +1108,7 @@ function LiveStatusStrip() {
     ? Math.max(0, Math.round((Date.now() - startedAt) / 1000))
     : 0;
   const events = runMatches ? (run.events || []).slice(-6) : [];
+  const stuck = runStuckHint(runMatches ? run : null);
   const statusLabel =
     runMatches && run.status === "done"
       ? "done"
@@ -1110,7 +1117,7 @@ function LiveStatusStrip() {
         : runMatches && run.status === "cancelled"
           ? "cancelled"
           : runMatches
-            ? run.status || "running"
+            ? runPhaseLabel(run)
             : "backend";
   const phase = runMatches ? run.phase || "run" : act?.action || "backend";
   const detail = runMatches
@@ -1135,6 +1142,9 @@ function LiveStatusStrip() {
           <b>${statusLabel}</b>
         </div>
         <div class="live-run-detail">${phase}: ${detail}</div>
+        ${runMatches
+          ? html`<div class="live-run-trace">${runTraceLabel(run)}</div>`
+          : null}
       </div>
       <div class="live-run-badges">
         <span>${runMatches ? run.mode || "act" : "activity"}</span>
@@ -1198,6 +1208,12 @@ function LiveStatusStrip() {
             >
           </div>`
         : null}
+    ${stuck
+      ? html`<div class="live-run-stuck ${stuck.severity || "info"}">
+          <b>${stuck.title}</b>
+          <span>${stuck.text}</span>
+        </div>`
+      : null}
   </div>`;
 }
 
@@ -1258,6 +1274,58 @@ function TranscriptStatusBar({
         latest
       </button>
     </div>
+  </div>`;
+}
+
+function ComposerPreview({ preview }) {
+  if (!preview) return null;
+  if (
+    !preview.hasDraft &&
+    !preview.contextCount &&
+    !preview.fileCount &&
+    !preview.warnings.length
+  ) {
+    return null;
+  }
+  const chips = [
+    preview.mode === "plan"
+      ? "plan/read-only"
+      : `${preview.mode}/${preview.access}`,
+    preview.provider,
+    preview.model || "auto model",
+    preview.contextCount ? `${preview.contextCount} context` : "",
+    preview.fileCount ? `${preview.fileCount} files` : "",
+  ].filter(Boolean);
+  const commandCount =
+    preview.strictCommands.length + preview.recoveredReadonly.length;
+  return html`<div
+    class="composer-preview ${preview.warnings.length ? "warn" : ""}"
+  >
+    <div class="composer-preview-main">
+      <span class="composer-route">${preview.headline}</span>
+      <span class="composer-detail">${preview.detail}</span>
+    </div>
+    <div class="composer-preview-chips">
+      ${chips.map((chip) => html`<span>${chip}</span>`)}
+      ${commandCount
+        ? html`<span class="command"
+            >${commandCount} PA command${commandCount === 1 ? "" : "s"}</span
+          >`
+        : null}
+      ${preview.recoveredReadonly.length
+        ? html`<span class="recovered"
+            >${preview.recoveredReadonly.length} recoverable read-only</span
+          >`
+        : null}
+      ${preview.writeCommands.length
+        ? html`<span class="write">${preview.writeCommands.length} write</span>`
+        : null}
+    </div>
+    ${preview.warnings.length
+      ? html`<div class="composer-preview-warnings">
+          ${preview.warnings.map((warning) => html`<span>${warning}</span>`)}
+        </div>`
+      : null}
   </div>`;
 }
 
@@ -1635,8 +1703,18 @@ function executionKindLabel(kind) {
 
 function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const [selectedId, setSelectedId] = useState("");
+  const [density, setDensity] = useState(() => {
+    try {
+      return localStorage.getItem("agentos.execMapDensity") === "dense"
+        ? "dense"
+        : "comfortable";
+    } catch {
+      return "comfortable";
+    }
+  });
   if (!map || map.status !== "ok") return null;
   const isStage = variant === "stage";
+  const dense = density === "dense";
   const big = map.big_plan || {};
   const lanes = map.lanes || [];
   const rawEvents = map.events || [];
@@ -1654,7 +1732,10 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
       ...event,
       _eventIndex: eventIndex,
       _offsetMs: offsetMs,
-      _timeLabel: event.time_label || `#${eventIndex}`,
+      _timeLabel:
+        event.time_label && !String(event.time_label).startsWith("t+")
+          ? event.time_label
+          : `#${eventIndex}`,
     };
   });
   const edges = map.edges || [];
@@ -1670,15 +1751,34 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const rulerEvents = Array.from(
     new Map(events.map((event) => [event._eventIndex, event])).values(),
   ).sort((a, b) => a._eventIndex - b._eventIndex);
-  const eventW = isStage ? 190 : 132;
-  const eventH = isStage ? 58 : 42;
-  const stepW = isStage ? 240 : 150;
-  const rowH = isStage ? 96 : 72;
+  const eventW = isStage ? (dense ? 156 : 196) : 132;
+  const eventH = isStage ? (dense ? 48 : 62) : 42;
+  const stepW = isStage ? (dense ? 188 : 248) : 150;
+  const rowH = isStage ? (dense ? 74 : 104) : 72;
   const topPad = isStage ? 58 : 44;
   const leftPad = isStage ? 42 : 28;
-  const mapW = Math.max(isStage ? 1180 : 760, (maxEventIndex + 3) * stepW);
+  const mapW = Math.max(
+    isStage ? (dense ? 980 : 1240) : 760,
+    (maxEventIndex + 3) * stepW,
+  );
   const mapH = topPad + Math.max(1, lanes.length) * rowH + (isStage ? 28 : 18);
   const arrowId = isStage ? "exec-map-arrow-stage" : "exec-map-arrow-compact";
+  const onlyOrchestratorLane =
+    isStage &&
+    lanes.length <= 1 &&
+    events.length > 0 &&
+    !events.some((event) => {
+      const lane = laneIndex.get(event.lane_id);
+      return lane !== undefined && lane > 0;
+    });
+  const setMapDensity = (next) => {
+    setDensity(next);
+    try {
+      localStorage.setItem("agentos.execMapDensity", next);
+    } catch {
+      // Density persistence is optional; the current session still updates.
+    }
+  };
   const pos = (event) => {
     const eventIndex = finiteNumber(event?._eventIndex, 0);
     const lane = laneIndex.get(event?.lane_id) ?? 0;
@@ -1732,6 +1832,11 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
               ? html`<em>${counts.waiting} ждут тебя</em>`
               : null}
             ${counts.blocked ? html`<em>${counts.blocked} блокер</em>` : null}
+            <button
+              onClick=${() => setMapDensity(dense ? "comfortable" : "dense")}
+            >
+              ${dense ? "comfortable" : "dense"}
+            </button>
             <button onClick=${onRefresh}>refresh</button>
             <button onClick=${copyMap} disabled=${!events.length}>copy</button>
           </div>`
@@ -1767,6 +1872,15 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
                 <button onClick=${() => rejectDel(item.id)}>reject</button>
               </span>`,
           )}
+        </div>`
+      : null}
+    ${onlyOrchestratorLane
+      ? html`<div class="exec-map-warning">
+          <b>карта неполная</b>
+          <span>
+            Сейчас видна только ветка оркестратора. Проектные агенты не дали
+            events в текущий scope или еще не дошли до делегации.
+          </span>
         </div>`
       : null}
     <div class="exec-map-body">
@@ -1978,6 +2092,7 @@ function ChatSidebar() {
   const [viewportMode, setViewportMode] = useState("following");
   const [unreadLive, setUnreadLive] = useState(0);
   const [routeChangeNote, setRouteChangeNote] = useState("");
+  const [composerText, setComposerText] = useState("");
   const lastLiveMarker = useRef("");
   const duoEnabled = chatCollabMode.value === "duo";
   const duoView = duoEnabled ? normalizeDuoView(activeRoomTab.value) : "chat";
@@ -2058,6 +2173,7 @@ function ChatSidebar() {
     if (!target) return;
     const current = target.value.trim();
     target.value = current ? `${current}\n${text}` : text;
+    setComposerText(target.value);
     target.dispatchEvent(new Event("input", { bubbles: true }));
     target.focus();
   };
@@ -2339,13 +2455,10 @@ function ChatSidebar() {
     );
   }, []);
   useEffect(() => {
-    loadExecutionTimeline(
-      currentProject.value || "",
-      activeDualSession.value || null,
-      80,
-    ).catch((e) => console.warn("execution timeline load failed:", e));
+    loadExecutionTimeline("", activeDualSession.value || null, 80).catch((e) =>
+      console.warn("execution timeline load failed:", e),
+    );
   }, [
-    currentProject.value,
     activeDualSession.value,
     dualBusy.value,
     activeRun.value?.status,
@@ -2355,13 +2468,10 @@ function ChatSidebar() {
     Object.keys(delegations.value || {}).length,
   ]);
   useEffect(() => {
-    loadExecutionMap(
-      currentProject.value || "",
-      activeDualSession.value || null,
-      120,
-    ).catch((e) => console.warn("execution map load failed:", e));
+    loadExecutionMap("", activeDualSession.value || null, 120).catch((e) =>
+      console.warn("execution map load failed:", e),
+    );
   }, [
-    currentProject.value,
     activeDualSession.value,
     dualBusy.value,
     activeRun.value?.status,
@@ -2477,11 +2587,13 @@ function ChatSidebar() {
       execSlash(v.trim())
     ) {
       inputRef.current.value = "";
+      setComposerText("");
       return;
     }
     const msg = v.trim();
     inputRef.current.value = "";
     inputRef.current.style.height = "36px";
+    setComposerText("");
     inpHist.unshift(v);
     hIdx = -1;
     if (pastedImg.value) {
@@ -2714,6 +2826,15 @@ function ChatSidebar() {
       scopeProject: scope.project || scope.target_project || "",
     },
   };
+  const composerPreview = buildComposerPreview({
+    route,
+    draft: composerText,
+    duoEnabled,
+    duoAction: duoComposerAction,
+    target: roomTarget?.label || activeOrchestrator?.label || "",
+    contextCount: (contextAttachments.value || []).length,
+    fileCount: attFiles.value.length,
+  });
   return html`<div
     class="chat-side"
     style=${chatWidth ? `width:${chatWidth}px` : ""}
@@ -3304,6 +3425,7 @@ function ChatSidebar() {
               clrDr();
               const ta = document.querySelector(".ch-inp textarea");
               if (ta) ta.value = "";
+              setComposerText("");
             }}
             >discard</span
           >
@@ -3356,6 +3478,7 @@ function ChatSidebar() {
         </div>`
       : null}
     <div class="ch-inp">
+      <${ComposerPreview} preview=${composerPreview} />
       <button
         class="attach-btn"
         onClick=${() => fileRef.current?.click()}
@@ -3419,6 +3542,7 @@ function ChatSidebar() {
         onInput=${(e) => {
           e.target.style.height = "auto";
           e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px";
+          setComposerText(e.target.value);
           handleSlash(e.target.value);
           clearTimeout(draftT);
           draftT = setTimeout(saveDr, 2000);

@@ -53,6 +53,51 @@ import {
 import { App } from "/views.js";
 import { normalizeProjectKey, projectParam } from "/route-state.js";
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderStartupError(error, phase = "render") {
+  const stack =
+    error?.stack || error?.message || String(error || "Unknown error");
+  const report = {
+    phase,
+    version: window.__AGENTOS_VERSION__ || "unknown",
+    route: {
+      project: currentProject.value || "_orchestrator",
+      strategy: !!showStrategy.value,
+      plans: !!showPlans.value,
+      graph: !!showGraph.value,
+      duo: chatCollabMode.value || "solo",
+      roomTab: activeRoomTab.value || "chat",
+    },
+    activeRun: activeRun.value || null,
+    error: stack,
+    ts: new Date().toISOString(),
+  };
+  const encodedReport = escapeHtml(JSON.stringify(report, null, 2));
+  document.body.innerHTML = `
+    <div style="min-height:100vh;padding:32px;background:#070b11;color:#f4f7fb;font-family:ui-monospace,SFMono-Regular,Consolas,monospace">
+      <h1 style="margin:0 0 8px 0;font-size:22px">Agent OS startup error</h1>
+      <div style="color:#9fb2c7;margin-bottom:16px">Phase: ${escapeHtml(phase)}. The broken view can be bypassed without losing chat files.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        <button onclick="location.reload()">Reload</button>
+        <button onclick="localStorage.removeItem('agentos_current_project');localStorage.setItem('agentos_active_room_tab','chat');location.reload()">Open main</button>
+        <button onclick="navigator.clipboard&&navigator.clipboard.writeText(document.querySelector('#boot-report').textContent)">Copy report</button>
+        <button onclick="localStorage.setItem('agentos_active_room_tab','chat');localStorage.removeItem('agentos_workspace_tab');location.reload()">Disable broken view</button>
+      </div>
+      <pre style="white-space:pre-wrap;word-break:break-word;background:#0d1520;border:1px solid #223247;padding:16px;border-radius:10px;max-height:42vh;overflow:auto">${escapeHtml(stack)}</pre>
+      <details style="margin-top:16px" open>
+        <summary style="cursor:pointer;color:#9fd0ff">diagnostic report</summary>
+        <pre id="boot-report" style="white-space:pre-wrap;word-break:break-word;background:#0d1520;border:1px solid #223247;padding:16px;border-radius:10px;max-height:32vh;overflow:auto">${encodedReport}</pre>
+      </details>
+    </div>`;
+}
+
 function syncRecoveredActiveRun() {
   const projectKey = normalizeProjectKey(currentProject.value || "");
   const act = activities.value?.[projectKey];
@@ -253,6 +298,7 @@ try {
 } catch (e) {
   console.error("AgentOS init failed:", e);
   showDualAgents.value = false;
+  window.__AGENTOS_INIT_ERROR__ = e?.stack || e?.message || String(e);
 } finally {
   isLoading.value = false;
 }
@@ -273,10 +319,7 @@ if (!window._sessionMarked) {
 try {
   render(html`<${App} />`, document.body);
 } catch (e) {
-  document.body.innerHTML =
-    '<div style="padding:40px;font-family:monospace;color:#fff;background:#0a0a0f"><h1>Agent OS Error</h1><pre>' +
-    e.message +
-    '</pre><button onclick="location.reload()">Reload</button></div>';
+  renderStartupError(e, "render");
 }
 
 // Polling

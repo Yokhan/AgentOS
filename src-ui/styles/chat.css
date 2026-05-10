@@ -785,6 +785,25 @@
     font-size: var(--fs-s);
     cursor: pointer;
 }
+.exec-map-warning {
+    border: 1px solid color-mix(in srgb, var(--yellow) 45%, var(--border));
+    background: color-mix(in srgb, var(--yellow) 8%, var(--bg));
+    color: var(--t2);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-xs);
+    padding: 6px 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.exec-map-warning b {
+    color: var(--yellow);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+.exec-map-warning span {
+    color: var(--t2);
+}
 .exec-map-body {
     display: grid;
     grid-template-columns: 170px minmax(0, 1fr);
@@ -794,10 +813,12 @@
 }
 .exec-map-card.stage .exec-map-body {
     flex: 1 1 auto;
-    min-height: min(58vh, 620px);
-    max-height: min(72vh, 760px);
+    height: clamp(520px, 64vh, 820px);
+    min-height: 520px;
+    max-height: none;
     overflow: auto;
     align-items: start;
+    grid-template-columns: minmax(160px, 190px) minmax(0, 1fr);
 }
 .exec-map-rail {
     border-right: 1px solid var(--border);
@@ -859,6 +880,7 @@
 }
 .exec-map-card.stage .exec-map-scroll {
     overflow: visible;
+    min-width: max-content;
 }
 .exec-map-track {
     position: relative;
@@ -1462,6 +1484,69 @@
     flex-shrink: 0;
     align-items: flex-end;
     background: var(--sf);
+    flex-wrap: wrap;
+}
+.composer-preview {
+    flex: 1 0 100%;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 82%, var(--sf));
+    padding: 6px 8px;
+    display: grid;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    color: var(--t2);
+}
+.composer-preview.warn {
+    border-color: color-mix(in srgb, var(--yellow) 60%, var(--border));
+}
+.composer-preview-main {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-s);
+}
+.composer-route {
+    color: var(--text);
+    font-weight: 700;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.composer-detail {
+    color: var(--t3);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.composer-preview-chips,
+.composer-preview-warnings {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+.composer-preview-chips span,
+.composer-preview-warnings span {
+    border: 1px solid var(--border);
+    background: var(--sf);
+    color: var(--t3);
+    padding: 2px 6px;
+}
+.composer-preview-chips .command {
+    color: var(--cyan);
+    border-color: color-mix(in srgb, var(--cyan) 45%, var(--border));
+}
+.composer-preview-chips .recovered {
+    color: var(--green);
+    border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+}
+.composer-preview-chips .write,
+.composer-preview-warnings span {
+    color: var(--yellow);
+    border-color: color-mix(in srgb, var(--yellow) 55%, var(--border));
 }
 .chat-empty-actions button {
     background: transparent;

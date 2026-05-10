@@ -32,6 +32,13 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Run UI checks
+        run: npm run check:ui
+
+      - name: Run Rust tests
+        shell: pwsh
+        run: cargo test --manifest-path src-tauri\Cargo.toml --lib
+
       - name: Build signed Tauri bundles
         shell: pwsh
         run: |

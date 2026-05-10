@@ -64,6 +64,8 @@ import {
   loadExecutionMap,
   loadOrchestrationMap,
   loadDelegations,
+  approveDel,
+  rejectDel,
   ensureDualSession,
   sendMessage,
 } from "/api.js";
@@ -875,6 +877,20 @@ async function executeRouteCommand(text, label = "command") {
   }
 }
 
+async function approveRouteDelegation(id, action) {
+  if (!id) return;
+  if (action === "reject") {
+    await rejectDel(id);
+  } else {
+    await approveDel(id);
+  }
+  await Promise.allSettled([
+    loadDelegations(),
+    loadExecutionMap("", activeDualSession.value || null, 180),
+    loadOrchestrationMap("", activeDualSession.value || null),
+  ]);
+}
+
 function RouteDecisionPanel({ map, execution }) {
   const routes = (map?.project_agent_routes || [])
     .filter(routeNeedsDecision)
@@ -960,43 +976,56 @@ function RouteDecisionPanel({ map, execution }) {
           </div>
         </article>`;
       })}
-      ${!routes.length
-        ? waiting.map(
-            (item) =>
-              html`<article class="route-decision-card">
-                <div class="route-decision-title">
-                  <b>${item.project || "project"}</b>
-                  <span>${item.status || item.action || "waiting"}</span>
-                </div>
-                <p>${item.task || "Delegation waits for a decision"}</p>
-                <div class="route-decision-meta">
-                  <code>${item.id}</code>
-                  <span>${item.action || "review"}</span>
-                </div>
-                <div class="route-decision-actions">
-                  <button
-                    onClick=${() =>
-                      executeRouteCommand(statusCommand(item.id), "status")}
+      ${waiting.map((item) => {
+        const canApprove =
+          item.action === "approve" ||
+          item.status === "pending" ||
+          item.status === "needs_permission";
+        return html`<article class="route-decision-card">
+          <div class="route-decision-title">
+            <b>${item.project || "project"}</b>
+            <span>${item.status || item.action || "waiting"}</span>
+          </div>
+          <p>${item.task || "Delegation waits for a decision"}</p>
+          <div class="route-decision-meta">
+            <code>${item.id}</code>
+            <span>${item.action || "review"}</span>
+          </div>
+          <div class="route-decision-actions">
+            ${canApprove
+              ? html`<button
+                    class="primary"
+                    onClick=${() => approveRouteDelegation(item.id, "approve")}
                   >
-                    статус
+                    approve
                   </button>
                   <button
-                    disabled=${!item.id || item.action === "approve"}
-                    onClick=${() =>
-                      executeRouteCommand(retryCommand(item.id), "retry")}
+                    onClick=${() => approveRouteDelegation(item.id, "reject")}
                   >
-                    повторить
-                  </button>
-                  <button
-                    onClick=${() =>
-                      executeRouteCommand(cleanupCommand, "cleanup")}
-                  >
-                    архив terminal
-                  </button>
-                </div>
-              </article>`,
-          )
-        : null}
+                    reject
+                  </button>`
+              : null}
+            <button
+              onClick=${() =>
+                executeRouteCommand(statusCommand(item.id), "status")}
+            >
+              статус
+            </button>
+            <button
+              disabled=${!item.id || canApprove}
+              onClick=${() =>
+                executeRouteCommand(retryCommand(item.id), "retry")}
+            >
+              повторить
+            </button>
+            <button
+              onClick=${() => executeRouteCommand(cleanupCommand, "cleanup")}
+            >
+              архив terminal
+            </button>
+          </div>
+        </article>`;
+      })}
     </div>
   </section>`;
 }

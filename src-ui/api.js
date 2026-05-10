@@ -69,6 +69,7 @@ import {
 } from "/store.js";
 import { normalizeSoloSelection } from "/provider-caps.js";
 import { normalizeProjectKey, projectParam } from "/route-state.js";
+import { isTerminalRun, quietWaitEvent } from "/run-state.js";
 // ===== API =====
 
 async function loadAppInfo() {
@@ -278,6 +279,68 @@ function updateActiveRun(patch) {
   };
 }
 
+function liveDraftKey(projectKey) {
+  return "agentos_live_draft_" + (projectKey || "_orchestrator");
+}
+
+function persistLiveDraft(projectKey, text, chain, run) {
+  const hasContent =
+    String(text || "").trim() ||
+    (chain || []).some((block) => block?.text || block?.content || block?.tool);
+  if (!hasContent) return;
+  try {
+    localStorage.setItem(
+      liveDraftKey(projectKey),
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        project: projectKey || "_orchestrator",
+        text: text || "",
+        chain: (chain || []).slice(-80),
+        run: run || null,
+      }),
+    );
+  } catch {}
+}
+
+function clearLiveDraft(projectKey) {
+  try {
+    localStorage.removeItem(liveDraftKey(projectKey));
+  } catch {}
+}
+
+function readLiveDraft(projectKey) {
+  try {
+    const raw = localStorage.getItem(liveDraftKey(projectKey));
+    if (!raw) return null;
+    const draft = JSON.parse(raw);
+    const ts = Date.parse(draft.ts || "");
+    if (ts && Date.now() - ts > 12 * 60 * 60 * 1000) {
+      clearLiveDraft(projectKey);
+      return null;
+    }
+    const chain = Array.isArray(draft.chain) ? draft.chain : [];
+    const text = String(draft.text || "");
+    if (!text.trim() && !chain.length) return null;
+    return { ...draft, text, chain };
+  } catch {
+    clearLiveDraft(projectKey);
+    return null;
+  }
+}
+
+function draftWasPersisted(draft, msgs) {
+  const probe = String(draft?.text || "")
+    .trim()
+    .slice(0, 160);
+  if (!probe) return false;
+  return (msgs || []).some(
+    (m) =>
+      m.role === "assistant" &&
+      typeof m.msg === "string" &&
+      (m.msg.trim() === draft.text.trim() || m.msg.includes(probe)),
+  );
+}
+
 function appendActiveRunEvent(evt) {
   const current = activeRun.value || {};
   const events = [
@@ -351,7 +414,7 @@ function reconcilePolledActivity(projectKey, poll) {
       .join(": ");
     if (
       activeRun.value?.project === projectKey &&
-      !["done", "failed", "cancelled"].includes(activeRun.value.status || "") &&
+      !isTerminalRun(activeRun.value.status) &&
       detail &&
       detail !== activeRun.value.detail
     ) {
@@ -557,6 +620,52 @@ async function loadChat(p) {
       msgs.push(m);
     }
     sideMessages.value = msgs;
+    const chatProjectKey = normalizeProjectKey(p || "_orchestrator");
+    const liveDraft = readLiveDraft(chatProjectKey);
+    if (!isStreaming.value && liveDraft) {
+      if (draftWasPersisted(liveDraft, msgs)) {
+        clearLiveDraft(chatProjectKey);
+      } else {
+        const recoveredChain = liveDraft.chain.length
+          ? liveDraft.chain
+          : [{ type: "text", text: liveDraft.text }];
+        const hasRecoveryLabel = recoveredChain.some(
+          (block) =>
+            block?.type === "system" &&
+            String(block.label || "").includes("Recovered live output"),
+        );
+        streamText.value = liveDraft.text || "";
+        streamChain.value = hasRecoveryLabel
+          ? recoveredChain
+          : [
+              {
+                type: "system",
+                label:
+                  "Recovered live output from local draft; backend history did not contain it yet.",
+              },
+              ...recoveredChain,
+            ];
+        if (liveDraft.run) {
+          activeRun.value = {
+            ...liveDraft.run,
+            project: chatProjectKey,
+            recovered: true,
+          };
+        }
+        const draftTs = Date.parse(liveDraft.ts || "");
+        thinkStart.value = draftTs || Date.now();
+      }
+    } else if (!isStreaming.value) {
+      const runProject = normalizeProjectKey(activeRun.value?.project || "");
+      if (
+        streamChain.value.length &&
+        runProject &&
+        runProject !== chatProjectKey
+      ) {
+        streamText.value = "";
+        streamChain.value = [];
+      }
+    }
     chatPageInfo.value = {
       project: p,
       total: Number(d.total || 0),
@@ -1517,7 +1626,9 @@ async function sendMessage(msg) {
       let done = false;
       let pollCount = 0;
       let lastEventAt = Date.now();
+      let lastQuietNoticeAt = 0;
       const MAX_POLLS = 7200; // 30 min max; long agent/tool runs should not require user nudges
+      clearLiveDraft(projectKey);
       // Tauri mode: start stream_chat, then poll the per-chat file-based buffer.
       const streamStart = __invoke("stream_chat", {
         project: proj,
@@ -1575,6 +1686,12 @@ async function sendMessage(msg) {
                 (Date.now() - thinkStart.value) / 1000,
               );
               curActivity.value = `waiting for agent/tool output... ${elapsed}s`;
+              if (Date.now() - lastQuietNoticeAt > 8000) {
+                const waitEvt = quietWaitEvent(elapsed);
+                appendActiveRunEvent(waitEvt);
+                updateActiveRun(waitEvt);
+                lastQuietNoticeAt = Date.now();
+              }
             }
             for (const evt of poll.events) {
               if (
@@ -1793,9 +1910,17 @@ async function sendMessage(msg) {
               }
             }
             offset = poll.offset;
+            persistLiveDraft(projectKey, full, chain, activeRun.value);
           }
         } catch (e) {
           console.warn("poll_stream:", e);
+          updateActiveRun({
+            status: "failed",
+            outcome: "poll_error",
+            phase: "poll",
+            detail: String(e),
+          });
+          persistLiveDraft(projectKey, full, chain, activeRun.value);
           done = true;
         }
       }
@@ -1893,6 +2018,7 @@ async function sendMessage(msg) {
     if (persisted || !hasLive) {
       streamText.value = "";
       streamChain.value = [];
+      clearLiveDraft(projectKey);
     } else {
       streamText.value = liveText;
       const recoveredChain = liveChain.length
@@ -1911,10 +2037,17 @@ async function sendMessage(msg) {
         "info",
         5000,
       );
+      persistLiveDraft(projectKey, liveText, recoveredChain, activeRun.value);
     }
     loadFeed();
   } catch (e) {
     isStreaming.value = false;
+    persistLiveDraft(
+      normalizeProjectKey(currentProject.value || ""),
+      streamText.value,
+      streamChain.value,
+      activeRun.value,
+    );
     updateActiveRun({
       status: "failed",
       outcome: "failed",

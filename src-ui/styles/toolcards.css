@@ -275,6 +275,15 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.live-run-trace {
+    margin-top: 2px;
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .live-run-badges {
     display: flex;
     align-items: center;
@@ -327,6 +336,23 @@
 .live-run-events span.final {
     color: var(--green);
     border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+}
+.live-run-stuck {
+    margin: 0 var(--sp-m) var(--sp-s) calc(var(--sp-m) + 18px);
+    border: 1px solid color-mix(in srgb, var(--yellow) 55%, var(--border));
+    background: color-mix(in srgb, var(--yellow) 7%, var(--bg));
+    padding: 6px 8px;
+    display: grid;
+    gap: 2px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.live-run-stuck b {
+    color: var(--yellow);
+    font-weight: 700;
+}
+.live-run-stuck span {
+    color: var(--t2);
 }
 @keyframes live-run-pulse {
     0%,

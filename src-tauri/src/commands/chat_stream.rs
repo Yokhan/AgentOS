@@ -182,13 +182,15 @@ pub async fn stream_chat(
         return Ok(json!({"status": "error", "error": "Empty message"}));
     }
 
-    let (cwd, chat_key, chat_file) = match super::chat_core::resolve_chat_context(&state, &project)
-    {
-        Ok(ctx) => ctx,
-        Err(e) => return Ok(json!({"status": "error", "error": e})),
-    };
+    let normalized_project = super::chat_core::normalize_chat_project(&project);
+    let is_orchestrator = normalized_project.is_empty();
+    let (cwd, chat_key, chat_file) =
+        match super::chat_core::resolve_chat_context(&state, &normalized_project) {
+            Ok(ctx) => ctx,
+            Err(e) => return Ok(json!({"status": "error", "error": e})),
+        };
     let prompt =
-        super::chat_core::prepare_chat(&state, &chat_key, &chat_file, &message, project.is_empty());
+        super::chat_core::prepare_chat(&state, &chat_key, &chat_file, &message, is_orchestrator);
     let plan_mode = matches!(
         run_mode
             .as_deref()
@@ -226,7 +228,7 @@ pub async fn stream_chat(
     let (provider, resolved_model, resolved_effort) =
         super::provider_runner::resolve_single_chat_settings(
             &state,
-            &project,
+            &normalized_project,
             provider.as_deref(),
             model.as_deref(),
             reasoning_effort.as_deref(),
@@ -262,7 +264,6 @@ pub async fn stream_chat(
         "stream run started",
     );
 
-    let is_orchestrator = project.is_empty();
     let allow_pa_loop = is_orchestrator && !plan_mode;
 
     if matches!(provider, super::provider_runner::ProviderKind::Codex) {
@@ -901,9 +902,25 @@ fn execute_pa_commands_for_agent_loop(
     response: &str,
     label_prefix: &str,
 ) -> PaLoopFeedback {
-    let commands = super::pa_commands::parse_pa_commands(response, state);
-    let warnings = super::pa_commands::detect_malformed_commands(response);
+    let command_text = super::pa_commands::recover_bare_readonly_commands(response);
+    let recovered_readonly = super::pa_commands::recoverable_bare_readonly_commands(response);
+    let commands = super::pa_commands::parse_pa_commands(&command_text, state);
+    let warnings = super::pa_commands::detect_malformed_commands(&command_text);
     let mut feedback = PaLoopFeedback::default();
+    if !recovered_readonly.is_empty() && !commands.is_empty() {
+        append_pa_feedback(
+            state,
+            chat_file,
+            stream_buf,
+            "pa_status",
+            &format!(
+                "Recovered read-only AgentOS commands from inline code: {}. Write commands are not inferred from prose.",
+                recovered_readonly.join(", ")
+            ),
+            None,
+            &format!("{} recovered readonly cmds", label_prefix),
+        );
+    }
 
     for parsed in &commands {
         if !parsed.valid {
@@ -1048,11 +1065,29 @@ fn run_pa_agent_loop(
         );
         if feedback.is_empty() {
             if wait_context_sent {
+                append_pa_feedback(
+                    state,
+                    chat_file,
+                    stream_buf,
+                    "pa_status",
+                    "Автоцикл остановлен: новых AgentOS-команд нет, wait-context уже был отправлен.",
+                    None,
+                    &format!("{} auto idle stop", label_prefix),
+                );
                 break;
             }
             let Some(wait_snapshot) =
                 super::coordinator_wait::build_wait_coordinator_snapshot(state, None, None, 4)
             else {
+                append_pa_feedback(
+                    state,
+                    chat_file,
+                    stream_buf,
+                    "pa_status",
+                    "Автоцикл остановлен: агент не выдал AgentOS-команд, готовых маршрутов для продолжения нет.",
+                    None,
+                    &format!("{} auto no commands", label_prefix),
+                );
                 break;
             };
             append_pa_feedback(
