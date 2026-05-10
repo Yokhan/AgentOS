@@ -113,6 +113,25 @@ fn is_terminal_feedback(status: &str, kind: &str) -> bool {
     ) || matches!(kind, "done" | "tool_result" | "review_verdict")
 }
 
+fn is_provider_state_sample(row: &Value) -> bool {
+    let kind = field(row, "kind");
+    if kind != "progress" {
+        return false;
+    }
+
+    let status = field(row, "status").to_ascii_lowercase();
+    let title = field(row, "title").to_ascii_lowercase();
+    let detail = field(row, "detail").to_ascii_lowercase();
+    let volatile_status = matches!(status.as_str(), "running" | "waiting" | "info" | "");
+    let provider_phase = matches!(title.as_str(), "provider" | "heartbeat" | "stream");
+    let provider_detail = detail.contains("provider")
+        || detail.contains("subprocess")
+        || detail.contains("waiting for")
+        || detail.contains("still running");
+
+    volatile_status && (provider_phase || provider_detail)
+}
+
 fn delegation_provider_by_project(state: &AppState) -> HashMap<String, String> {
     state
         .delegations
@@ -273,12 +292,33 @@ pub fn build_execution_map(
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
+    let raw_fallback_ts = rows
+        .first()
+        .and_then(|row| row.get("ts"))
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string());
+    let mut latest_state_samples: HashMap<String, Value> = HashMap::new();
+    let mut state_sample_count = 0usize;
+    let rows: Vec<Value> = rows
+        .into_iter()
+        .filter_map(|row| {
+            if is_provider_state_sample(&row) {
+                state_sample_count += 1;
+                latest_state_samples.insert(lane_id_for(&row), row);
+                None
+            } else {
+                Some(row)
+            }
+        })
+        .collect();
     let providers = delegation_provider_by_project(state);
+    let has_activity = !rows.is_empty() || state_sample_count > 0;
     let fallback_ts = rows
         .first()
         .and_then(|row| row.get("ts"))
         .and_then(|v| v.as_str())
         .map(|v| v.to_string())
+        .or(raw_fallback_ts)
         .unwrap_or_else(|| state.now_iso());
 
     let root_event = json!({
@@ -287,9 +327,15 @@ pub fn build_execution_map(
         "branch_id": "orchestrator",
         "source": "system",
         "kind": "root",
-        "status": if rows.is_empty() { "idle" } else { "running" },
+        "status": if has_activity { "running" } else { "idle" },
         "title": "Orchestrator context",
-        "detail": if rows.is_empty() { "No recent execution events." } else { "Execution map projection started." },
+        "detail": if rows.is_empty() && state_sample_count > 0 {
+            "Provider heartbeat is active; no semantic execution event yet."
+        } else if rows.is_empty() {
+            "No recent execution events."
+        } else {
+            "Execution map projection started."
+        },
         "project": if project_filter.trim().is_empty() { "_orchestrator" } else { project_filter.as_str() },
         "provider": "orchestrator",
         "model": "",
@@ -313,7 +359,7 @@ pub fn build_execution_map(
             "kind": "orchestrator",
             "label": "Orchestrator",
             "project": "_orchestrator",
-            "status": if rows.is_empty() { "idle" } else { "running" },
+            "status": if has_activity { "running" } else { "idle" },
             "provider": "orchestrator",
             "model": "",
             "order": 0
@@ -321,7 +367,7 @@ pub fn build_execution_map(
     );
     lane_status.insert(
         "orchestrator".to_string(),
-        if rows.is_empty() { "idle" } else { "running" }.to_string(),
+        if has_activity { "running" } else { "idle" }.to_string(),
     );
     lane_order.insert("orchestrator".to_string(), 0);
 
@@ -499,6 +545,18 @@ pub fn build_execution_map(
                         .cloned()
                         .unwrap_or_else(|| "evt-root".to_string())),
                 );
+                if let Some(sample) = latest_state_samples.get(&id) {
+                    obj.insert("last_state_kind".to_string(), json!(field(sample, "kind")));
+                    obj.insert(
+                        "last_state_title".to_string(),
+                        json!(field(sample, "title")),
+                    );
+                    obj.insert(
+                        "last_state_detail".to_string(),
+                        json!(field(sample, "detail")),
+                    );
+                    obj.insert("last_state_ts".to_string(), json!(field(sample, "ts")));
+                }
             }
             lane
         })
@@ -542,6 +600,7 @@ pub fn build_execution_map(
             "lanes": lane_values.len(),
             "events": events.len(),
             "edges": edges.len(),
+            "state_samples": state_sample_count,
             "waiting": waiting.len() + waiting_lanes,
             "blocked": blocked
         },
@@ -723,6 +782,60 @@ mod tests {
             .find(|event| event["project"] == "RABproject")
             .expect("archived project event");
         assert_eq!(archived_event["detail"], "Привет из архива");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn provider_heartbeats_are_lane_state_not_event_nodes() {
+        let root = test_root("provider-heartbeats");
+        let state = AppState::new(root.clone());
+        let chat_path = root.join("tasks").join(".stream-_orchestrator.jsonl");
+        append_jsonl_logged(
+            &chat_path,
+            &json!({"type":"run_started","provider":"codex","model":"gpt-5.5","mode":"act","ts":"2026-04-28T08:00:00Z"}),
+            "test run started",
+        );
+        for idx in 1..=3 {
+            append_jsonl_logged(
+                &chat_path,
+                &json!({
+                    "type":"run_heartbeat",
+                    "status":"running",
+                    "phase":"provider",
+                    "detail": format!("Codex subprocess is still running; waiting for provider output ({}s).", idx * 10),
+                    "ts": format!("2026-04-28T08:00:0{}Z", idx)
+                }),
+                "test provider heartbeat",
+            );
+        }
+        append_jsonl_logged(
+            &chat_path,
+            &json!({"type":"tool_use","tool":"PA command","status":"started","ts":"2026-04-28T08:00:04Z"}),
+            "test semantic tool event",
+        );
+
+        let result = build_execution_map(&state, Some("_orchestrator".to_string()), None, 50);
+        let events = result["events"].as_array().expect("events");
+        assert!(!events.iter().any(|event| {
+            event.get("kind").and_then(|v| v.as_str()) == Some("progress")
+                && event.get("title").and_then(|v| v.as_str()) == Some("provider")
+        }));
+        assert!(events
+            .iter()
+            .any(|event| { event.get("kind").and_then(|v| v.as_str()) == Some("tool") }));
+        assert_eq!(result["counts"]["state_samples"], 3);
+        let orchestrator = result["lanes"]
+            .as_array()
+            .expect("lanes")
+            .iter()
+            .find(|lane| lane["id"] == "orchestrator")
+            .expect("orchestrator lane");
+        assert_eq!(orchestrator["last_state_title"], "provider");
+        assert!(orchestrator["last_state_detail"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("waiting for provider output"));
 
         let _ = std::fs::remove_dir_all(root);
     }

@@ -49,10 +49,58 @@ function runPhaseLabel(run) {
   return phase || status || "работает";
 }
 
+function isProviderStateSampleEvent(evt) {
+  const type = String(evt?.type || "");
+  const phase = String(evt?.phase || "").toLowerCase();
+  const status = String(evt?.status || "").toLowerCase();
+  const detail = String(evt?.detail || "").toLowerCase();
+  const volatileStatus = ["running", "waiting", "info", ""].includes(status);
+  const providerPhase = ["provider", "heartbeat", "stream"].includes(phase);
+  const providerDetail =
+    detail.includes("provider") ||
+    detail.includes("subprocess") ||
+    detail.includes("waiting for") ||
+    detail.includes("still running");
+  return (
+    (type === "run_heartbeat" || type === "run_progress") &&
+    volatileStatus &&
+    (providerPhase || providerDetail)
+  );
+}
+
+function formatRunDuration(seconds) {
+  const safe = Math.max(0, Math.round(Number(seconds) || 0));
+  if (safe < 60) return `${safe}с`;
+  const minutes = Math.floor(safe / 60);
+  const rest = safe % 60;
+  if (minutes < 60) return rest ? `${minutes}м ${rest}с` : `${minutes}м`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins ? `${hours}ч ${mins}м` : `${hours}ч`;
+}
+
 function runStuckHint(run, now = Date.now()) {
   if (!run || isTerminalRun(run.status)) return null;
   const ageMs = run.startedAt ? now - Number(run.startedAt) : 0;
   const quietMs = run.updatedAt ? now - Number(run.updatedAt) : ageMs;
+  const semanticMs = run.lastSemanticAt
+    ? now - Number(run.lastSemanticAt)
+    : ageMs;
+  const heartbeatMs = run.heartbeatAt ? now - Number(run.heartbeatAt) : quietMs;
+  if (heartbeatMs > 45000 && String(run.phase || "") === "provider") {
+    return {
+      severity: "warn",
+      title: "Нет heartbeat от процесса",
+      text: `Последний heartbeat был ${formatRunDuration(heartbeatMs / 1000)} назад. Это уже похоже не на долгий ответ модели, а на зависший subprocess.`,
+    };
+  }
+  if (semanticMs > 45000 && String(run.phase || "") === "provider") {
+    return {
+      severity: ageMs > 180000 ? "warn" : "info",
+      title: "Модель молчит, процесс жив",
+      text: `Heartbeat приходит, но смыслового output нет ${formatRunDuration(semanticMs / 1000)}. Это ожидание ответа провайдера, не выполнение tool.`,
+    };
+  }
   if (String(run.phase || "") === "waiting_output") {
     return {
       severity: "warn",
@@ -157,7 +205,9 @@ export {
   extractBacktickedReadonlyCommands,
   extractPaCommands,
   extractWriteCommands,
+  formatRunDuration,
   isTerminalRun,
+  isProviderStateSampleEvent,
   quietWaitEvent,
   runPhaseLabel,
   runStuckHint,

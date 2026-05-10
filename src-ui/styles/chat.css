@@ -865,6 +865,16 @@
     font-size: var(--fs-s);
     font-style: normal;
 }
+.exec-map-lane-label small {
+    color: var(--t4);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    line-height: 1.25;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .exec-map-lane-label.live em {
     color: var(--cyan);
 }

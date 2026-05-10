@@ -74,6 +74,7 @@ import {
 } from "/route-state.js";
 import {
   buildComposerPreview,
+  formatRunDuration,
   runPhaseLabel,
   runStuckHint,
   runTraceLabel,
@@ -1109,6 +1110,15 @@ function LiveStatusStrip() {
     : 0;
   const events = runMatches ? (run.events || []).slice(-6) : [];
   const stuck = runStuckHint(runMatches ? run : null);
+  const now = Date.now();
+  const semanticQuiet =
+    runMatches && run.lastSemanticAt
+      ? Math.max(0, Math.round((now - Number(run.lastSemanticAt)) / 1000))
+      : elapsed;
+  const heartbeatQuiet =
+    runMatches && run.heartbeatAt
+      ? Math.max(0, Math.round((now - Number(run.heartbeatAt)) / 1000))
+      : null;
   const statusLabel =
     runMatches && run.status === "done"
       ? "done"
@@ -1144,6 +1154,19 @@ function LiveStatusStrip() {
         <div class="live-run-detail">${phase}: ${detail}</div>
         ${runMatches
           ? html`<div class="live-run-trace">${runTraceLabel(run)}</div>`
+          : null}
+        ${runMatches
+          ? html`<div class="live-run-health">
+              <span>output: ${formatRunDuration(semanticQuiet)} назад</span>
+              ${heartbeatQuiet !== null
+                ? html`<span
+                    >heartbeat: ${formatRunDuration(heartbeatQuiet)} назад</span
+                  >`
+                : html`<span>heartbeat: нет</span>`}
+              ${run.heartbeatBeat !== null && run.heartbeatBeat !== undefined
+                ? html`<span>beat #${run.heartbeatBeat}</span>`
+                : null}
+            </div>`
           : null}
       </div>
       <div class="live-run-badges">
@@ -1701,6 +1724,22 @@ function executionKindLabel(kind) {
   return labels[kind] || kind || "event";
 }
 
+function isProviderStateEvent(event) {
+  const kind = String(event?.kind || "").toLowerCase();
+  if (kind !== "progress") return false;
+  const status = String(event?.status || "").toLowerCase();
+  const title = String(event?.title || "").toLowerCase();
+  const detail = String(event?.detail || "").toLowerCase();
+  const volatileStatus = ["running", "waiting", "info", ""].includes(status);
+  const providerPhase = ["provider", "heartbeat", "stream"].includes(title);
+  const providerDetail =
+    detail.includes("provider") ||
+    detail.includes("subprocess") ||
+    detail.includes("waiting for") ||
+    detail.includes("still running");
+  return volatileStatus && (providerPhase || providerDetail);
+}
+
 function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const [selectedId, setSelectedId] = useState("");
   const [density, setDensity] = useState(() => {
@@ -1718,11 +1757,15 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const big = map.big_plan || {};
   const lanes = map.lanes || [];
   const rawEvents = map.events || [];
+  const visibleRawEvents = rawEvents.filter(
+    (event) => !isProviderStateEvent(event),
+  );
+  const uiHiddenStateSamples = rawEvents.length - visibleRawEvents.length;
   const finiteNumber = (value, fallback = 0) => {
     const num = Number(value);
     return Number.isFinite(num) ? num : fallback;
   };
-  const events = rawEvents.map((event, index) => {
+  const events = visibleRawEvents.map((event, index) => {
     const eventIndex = finiteNumber(
       event.event_index,
       finiteNumber(event.sequence, index),
@@ -1741,6 +1784,8 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const edges = map.edges || [];
   const waiting = map.waiting_for_user || [];
   const counts = map.counts || {};
+  const hiddenStateSamples =
+    Number(counts.state_samples || 0) + uiHiddenStateSamples;
   const eventById = new Map(events.map((event) => [event.id, event]));
   const laneIndex = new Map(lanes.map((lane, index) => [lane.id, index]));
   const selected = selectedId ? eventById.get(selectedId) : null;
@@ -1827,7 +1872,10 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
           </div>
           <div class="exec-map-stage-actions">
             <span>${counts.lanes || lanes.length} веток</span>
-            <span>${counts.events || events.length} событий</span>
+            <span>${events.length} событий</span>
+            ${hiddenStateSamples
+              ? html`<span>${hiddenStateSamples} heartbeat скрыто</span>`
+              : null}
             ${counts.waiting
               ? html`<em>${counts.waiting} ждут тебя</em>`
               : null}
@@ -1886,17 +1934,20 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
     <div class="exec-map-body">
       <div class="exec-map-rail" style=${`height:${mapH}px`}>
         <div class="exec-map-rail-time">ветки</div>
-        ${lanes.map(
-          (lane) =>
-            html`<div
-              class=${`exec-map-lane-label ${timelineStatusClass(lane.status)}`}
-              style=${`height:${rowH}px`}
-            >
-              <b>${lane.label}</b>
-              <span>${lane.provider || lane.kind}</span>
-              <em>${executionStatusLabel(lane.status)}</em>
-            </div>`,
-        )}
+        ${lanes.map((lane) => {
+          const stateLine = [lane.last_state_title, lane.last_state_detail]
+            .filter(Boolean)
+            .join(": ");
+          return html`<div
+            class=${`exec-map-lane-label ${timelineStatusClass(lane.status)}`}
+            style=${`height:${rowH}px`}
+          >
+            <b>${lane.label}</b>
+            <span>${lane.provider || lane.kind}</span>
+            <em>${executionStatusLabel(lane.status)}</em>
+            ${stateLine ? html`<small>${stateLine}</small>` : null}
+          </div>`;
+        })}
       </div>
       <div class="exec-map-scroll">
         <div class="exec-map-track" style=${`width:${mapW}px;height:${mapH}px`}>

@@ -69,7 +69,11 @@ import {
 } from "/store.js";
 import { normalizeSoloSelection } from "/provider-caps.js";
 import { normalizeProjectKey, projectParam } from "/route-state.js";
-import { isTerminalRun, quietWaitEvent } from "/run-state.js";
+import {
+  isProviderStateSampleEvent,
+  isTerminalRun,
+  quietWaitEvent,
+} from "/run-state.js";
 // ===== API =====
 
 async function loadAppInfo() {
@@ -270,12 +274,17 @@ function normalizedSoloProviderSelection() {
   };
 }
 
-function updateActiveRun(patch) {
+function updateActiveRun(patch, options = {}) {
   const current = activeRun.value || {};
+  const now = Date.now();
+  const semantic = options.semantic !== false;
   activeRun.value = {
     ...current,
     ...patch,
-    updatedAt: Date.now(),
+    updatedAt: now,
+    lastSemanticAt: semantic
+      ? now
+      : current.lastSemanticAt || current.startedAt || now,
   };
 }
 
@@ -341,16 +350,34 @@ function draftWasPersisted(draft, msgs) {
   );
 }
 
-function appendActiveRunEvent(evt) {
+function appendActiveRunEvent(evt, options = {}) {
   const current = activeRun.value || {};
-  const events = [
-    ...(current.events || []),
-    { ...evt, receivedAt: Date.now() },
-  ].slice(-40);
+  const now = Date.now();
+  const stateSample = isProviderStateSampleEvent(evt);
+  const nextEvent = { ...evt, receivedAt: now };
+  const previous = stateSample
+    ? (current.events || []).filter(
+        (event) => !isProviderStateSampleEvent(event),
+      )
+    : current.events || [];
+  const events = [...previous, nextEvent].slice(-40);
+  const semantic = options.semantic !== false && !stateSample;
   activeRun.value = {
     ...current,
     events,
-    updatedAt: Date.now(),
+    updatedAt: now,
+    lastSemanticAt: semantic
+      ? now
+      : current.lastSemanticAt || current.startedAt || now,
+    ...(stateSample
+      ? {
+          heartbeatAt: now,
+          heartbeatDetail: evt.detail || current.heartbeatDetail || "",
+          heartbeatBeat: evt.beat ?? current.heartbeatBeat ?? null,
+          heartbeatElapsedMs:
+            evt.elapsed_ms ?? current.heartbeatElapsedMs ?? null,
+        }
+      : {}),
   };
 }
 
@@ -371,18 +398,34 @@ function handleRunLifecycleEvent(evt, fallback = {}) {
       outcome: "",
       startedAt: Date.now(),
       updatedAt: Date.now(),
+      lastSemanticAt: Date.now(),
+      heartbeatAt: null,
       events: [{ ...evt, receivedAt: Date.now() }],
     };
     return;
   }
   if (!activeRun.value) return;
-  appendActiveRunEvent(evt);
+  const stateSample = isProviderStateSampleEvent(evt);
+  appendActiveRunEvent(evt, { semantic: !stateSample });
   if (type === "run_progress" || type === "run_heartbeat") {
-    updateActiveRun({
-      status: evt.status || activeRun.value.status || "running",
-      phase: evt.phase || activeRun.value.phase || "running",
-      detail: evt.detail || activeRun.value.detail || "",
-    });
+    updateActiveRun(
+      {
+        status: evt.status || activeRun.value.status || "running",
+        phase: evt.phase || activeRun.value.phase || "running",
+        detail: evt.detail || activeRun.value.detail || "",
+        ...(stateSample
+          ? {
+              heartbeatAt: Date.now(),
+              heartbeatDetail:
+                evt.detail || activeRun.value.heartbeatDetail || "",
+              heartbeatBeat: evt.beat ?? activeRun.value.heartbeatBeat ?? null,
+              heartbeatElapsedMs:
+                evt.elapsed_ms ?? activeRun.value.heartbeatElapsedMs ?? null,
+            }
+          : {}),
+      },
+      { semantic: !stateSample },
+    );
     return;
   }
   if (type === "run_done") {
@@ -418,16 +461,22 @@ function reconcilePolledActivity(projectKey, poll) {
       detail &&
       detail !== activeRun.value.detail
     ) {
-      appendActiveRunEvent({
-        type: "activity",
-        phase: poll.activity.action || "backend",
-        detail,
-      });
-      updateActiveRun({
-        status: "running",
-        phase: poll.activity.action || "backend",
-        detail,
-      });
+      appendActiveRunEvent(
+        {
+          type: "activity",
+          phase: poll.activity.action || "backend",
+          detail,
+        },
+        { semantic: false },
+      );
+      updateActiveRun(
+        {
+          status: "running",
+          phase: poll.activity.action || "backend",
+          detail,
+        },
+        { semantic: false },
+      );
     }
     return;
   }
@@ -1620,6 +1669,8 @@ async function sendMessage(msg) {
         outcome: "",
         startedAt: Date.now(),
         updatedAt: Date.now(),
+        lastSemanticAt: Date.now(),
+        heartbeatAt: null,
         events: [],
       };
       let offset = 0;
@@ -1688,8 +1739,8 @@ async function sendMessage(msg) {
               curActivity.value = `waiting for agent/tool output... ${elapsed}s`;
               if (Date.now() - lastQuietNoticeAt > 8000) {
                 const waitEvt = quietWaitEvent(elapsed);
-                appendActiveRunEvent(waitEvt);
-                updateActiveRun(waitEvt);
+                appendActiveRunEvent(waitEvt, { semantic: false });
+                updateActiveRun(waitEvt, { semantic: false });
                 lastQuietNoticeAt = Date.now();
               }
             }
@@ -1716,11 +1767,18 @@ async function sendMessage(msg) {
                     evt.type === "run_heartbeat") &&
                   evt.detail
                 ) {
-                  curActivity.value = evt.detail;
+                  curActivity.value = isProviderStateSampleEvent(evt)
+                    ? "provider жив; ждём смысловой output модели"
+                    : evt.detail;
                 }
               }
               // Text (complete block from assistant event)
               if (evt.type === "text") {
+                updateActiveRun({
+                  status: "running",
+                  phase: "model_output",
+                  detail: "получаем текст ответа",
+                });
                 full = evt.text;
                 streamText.value = full;
                 // Merge with last text block if exists (text_deltas already created it)
@@ -1734,6 +1792,11 @@ async function sendMessage(msg) {
               }
               // Text delta (streaming partial) — update last text block in chain or create new one
               if (evt.type === "text_delta") {
+                updateActiveRun({
+                  status: "running",
+                  phase: "model_output",
+                  detail: "стримится текст ответа",
+                });
                 const newFull = evt.full || full;
                 streamText.value = newFull;
                 full = newFull;
@@ -1747,11 +1810,21 @@ async function sendMessage(msg) {
               }
               // Thinking events
               if (evt.type === "thinking_start") {
+                updateActiveRun({
+                  status: "running",
+                  phase: "thinking",
+                  detail: "модель думает",
+                });
                 chain.push({ type: "thinking", text: "", streaming: true });
                 curActivity.value = "thinking...";
                 streamChain.value = [...chain];
               }
               if (evt.type === "thinking_delta") {
+                updateActiveRun({
+                  status: "running",
+                  phase: "thinking",
+                  detail: "стримится reasoning",
+                });
                 const lt = chain.findLast((b) => b.type === "thinking");
                 if (lt) lt.text += evt.text || "";
                 streamChain.value = [...chain];
@@ -1799,6 +1872,11 @@ async function sendMessage(msg) {
               }
               // Tool result — attach to last tool without result, or push standalone
               if (evt.type === "tool_result") {
+                updateActiveRun({
+                  status: evt.is_error ? "warning" : "running",
+                  phase: "tool_result",
+                  detail: evt.is_error ? "tool вернул ошибку" : "tool завершён",
+                });
                 const lt = chain.findLast(
                   (b) => b.type === "tool" && !b.result,
                 );

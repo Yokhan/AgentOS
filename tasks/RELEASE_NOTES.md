@@ -1,3 +1,12 @@
+# Agent OS 0.3.17
+
+- Fixed Live Execution Flow spam where provider heartbeats were rendered as repeated `progress/provider/running` event cards.
+- Split execution telemetry into semantic events and volatile provider state samples: heartbeats remain visible as lane state/counts, but no longer pollute the branch timeline.
+- Added a frontend guard so stale/raw map responses cannot draw provider heartbeat cards even if backend data is old.
+- Made long provider waits understandable: the live run HUD now shows last semantic output time, last heartbeat time, heartbeat beat number, and a persistent “model is silent, process is alive” hint.
+- Stopped heartbeat updates from resetting the “last meaningful output” clock, so a live subprocess no longer hides a stuck model response.
+- Added run-state checks covering provider heartbeat classification and persistent stuck-hint behavior.
+
 # Agent OS 0.3.16
 
 - Made the chat execution route more explicit: the composer now previews provider, model, access, context attachments, recoverable read-only AgentOS commands, and risky write commands before send.

@@ -284,6 +284,20 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.live-run-health {
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.live-run-health span {
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--bg) 65%, transparent);
+    color: var(--t3);
+    padding: 2px 6px;
+    white-space: nowrap;
+}
 .live-run-badges {
     display: flex;
     align-items: center;
