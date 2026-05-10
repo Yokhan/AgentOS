@@ -1,3 +1,10 @@
+# Agent OS 0.3.21
+
+- Reworked Settings provider routing so the top visible cards show the actual operational choices: orchestrator provider, delegation provider, reviewer provider, and effective route labels.
+- Hid Claude-only `opus` / `sonnet` model fields when Claude is disabled or when delegations are routed through Codex.
+- Moved `delegation_provider` into the visible Delegation Defaults card instead of burying it lower in legacy Duo settings.
+- Clarified Codex-only behavior in Settings: Codex delegation uses the Codex model/effort card, while Claude defaults are only shown when Claude is active for that role.
+
 # Agent OS 0.3.20
 
 - Removed the remaining hardcoded Claude execution paths from sync chat, HTTP `/api/chat`, strategy generation, inbox processing, critical-signal auto-trigger, and L3 delegation escalation.
