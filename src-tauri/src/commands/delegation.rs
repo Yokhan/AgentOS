@@ -108,6 +108,7 @@ pub fn get_delegations(state: State<Arc<AppState>>) -> Value {
 pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
     crate::log_info!("[delegation] approving id={}", id);
     let started_at = state.now_iso();
+    let deleg_provider = super::provider_runner::delegation_provider(state);
     // Atomic check-and-update
     let d = {
         let mut delegations = match state.delegations.lock() {
@@ -121,12 +122,26 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
             {
                 d
             }
-            _ => {
-                return json!({"status": "error", "error": "Delegation not found or already executed"})
+            Some(d) => {
+                let current_status = d.status.to_string();
+                let action = match current_status.as_str() {
+                    "failed" => "retry_or_archive",
+                    "rejected" | "cancelled" => "review_or_archive",
+                    "done" => "already_done",
+                    _ => "not_approvable",
+                };
+                return json!({
+                    "status": "error",
+                    "error": format!("Delegation is {}, not approvable from approve button", current_status),
+                    "current_status": current_status,
+                    "action": action
+                });
             }
+            None => return json!({"status": "error", "error": "Delegation not found"}),
         };
         del.status = crate::commands::status::DelegationStatus::Running;
         del.started_at = Some(started_at);
+        del.executor_provider = Some(deleg_provider);
         del.clone()
     };
     state.save_delegations();
@@ -207,18 +222,9 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
         json!({"ts": ts, "role": "user", "msg": format!("[via PA] {}", enriched_task)});
     super::jsonl::append_jsonl_logged(&chat_file, &user_entry, "delegation user msg");
 
-    // Read delegation model/effort from config
-    let cfg_val = state.config();
-    let deleg_model: Option<String> = cfg_val
-        .get("delegation_model")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .map(String::from);
-    let deleg_effort: Option<String> = cfg_val
-        .get("delegation_effort")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .map(String::from);
+    let deleg_model = super::provider_runner::resolve_delegation_model(state, deleg_provider);
+    let deleg_effort = super::provider_runner::resolve_delegation_effort(state, deleg_provider);
+    let delegation_chat_key = format!("deleg-{}", id);
 
     // Acquire per-project lock: prevents two claude processes in same directory
     state.acquire_dir_lock(&d.project);
@@ -235,8 +241,9 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
     let perm_path =
         super::claude_runner::get_delegation_permission_path(state, &d.project, "balanced");
     crate::log_info!(
-        "[delegation:{}] L1 executing with balanced{}",
+        "[delegation:{}] L1 executing provider={} with balanced{}",
         d.project,
+        deleg_provider,
         deleg_model
             .as_deref()
             .map(|m| format!(" model={}", m))
@@ -245,12 +252,14 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
     super::delegation_stream::emit_stage(&stream_buf, "L1", "balanced permissions");
     let (response, is_perm) = super::delegation_stream::run_delegation_streaming(
         state,
+        deleg_provider,
         &project_dir,
         &enriched_task,
         &perm_path,
         deleg_model.as_deref(),
         deleg_effort.as_deref(),
         &stream_buf,
+        Some(&delegation_chat_key),
     );
 
     // Check response: error first, then permission request
@@ -260,6 +269,8 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
     if response.starts_with("Error:")
         || response.starts_with("Error running")
         || response.starts_with("Error waiting")
+        || response.starts_with("Provider error:")
+        || response.contains("does not have access to Claude")
     {
         crate::log_error!(
             "[delegation:{}] L1 error: {}",
@@ -305,12 +316,14 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
         super::delegation_stream::emit_stage(&stream_buf, "L2", "permissive retry");
         let (response2, is_perm2) = super::delegation_stream::run_delegation_streaming(
             state,
+            deleg_provider,
             &project_dir,
             &enriched_task,
             &perm_path_perm,
             deleg_model.as_deref(),
             deleg_effort.as_deref(),
             &stream_buf,
+            Some(&delegation_chat_key),
         );
 
         if is_perm2 {
@@ -358,12 +371,14 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
                 );
                 let (resp3, is_perm3) = super::delegation_stream::run_delegation_streaming(
                     state,
+                    deleg_provider,
                     &project_dir,
                     &enriched_task,
                     &perm_path_perm,
                     deleg_model.as_deref(),
                     deleg_effort.as_deref(),
                     &stream_buf,
+                    Some(&delegation_chat_key),
                 );
                 final_response = resp3;
                 if is_perm3 {

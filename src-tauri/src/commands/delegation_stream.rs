@@ -8,17 +8,60 @@ use std::path::Path;
 use std::sync::Arc;
 use tauri::State;
 
-/// Run claude with streaming output for a delegation step.
+/// Run the selected provider for a delegation step.
 /// Writes events to stream_buf as JSONL. Returns (response_text, is_permission_request).
 pub fn run_delegation_streaming(
     state: &AppState,
+    provider: super::provider_runner::ProviderKind,
     project_dir: &Path,
     task: &str,
     perm_path: &str,
     model: Option<&str>,
     effort: Option<&str>,
     stream_buf: &Path,
+    chat_key: Option<&str>,
 ) -> (String, bool) {
+    if provider == super::provider_runner::ProviderKind::Codex {
+        super::jsonl::append_jsonl_logged(
+            stream_buf,
+            &json!({
+                "type": "provider",
+                "provider": provider.as_str(),
+                "model": model.unwrap_or(""),
+                "effort": effort.unwrap_or("")
+            }),
+            "deleg provider",
+        );
+        let response = super::provider_runner::run_provider_with_chat_control(
+            state,
+            provider,
+            project_dir,
+            task,
+            Some(perm_path),
+            model,
+            effort,
+            chat_key,
+        );
+        let is_perm = super::claude_runner::is_permission_request(&response);
+        if !response.trim().is_empty() {
+            super::jsonl::append_jsonl_logged(
+                stream_buf,
+                &json!({
+                    "type": "text_delta",
+                    "text": response.chars().take(400).collect::<String>()
+                }),
+                "deleg provider response",
+            );
+        }
+        crate::log_info!(
+            "[deleg-stream] provider={} finished: {} chars, perm_request={}",
+            provider,
+            response.len(),
+            is_perm
+        );
+        return (response, is_perm);
+    }
+
     let tmp = super::claude_runner::unique_tmp("deleg-stream");
     if std::fs::write(&tmp, task).is_err() {
         return ("Error: could not write temp file".to_string(), false);

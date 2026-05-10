@@ -1912,14 +1912,42 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
     ${waiting.length
       ? html`<div class="exec-map-waiting">
           <b>нужен ты</b>
-          ${waiting.slice(0, 4).map(
-            (item) =>
-              html`<span>
-                ${item.project}: ${item.task || item.status}
-                <button onClick=${() => approveDel(item.id)}>approve</button>
-                <button onClick=${() => rejectDel(item.id)}>reject</button>
-              </span>`,
-          )}
+          ${waiting.slice(0, 4).map((item) => {
+            const action = String(item.action || "");
+            const status = String(item.status || "");
+            const canApprove =
+              action === "approve" ||
+              status === "pending" ||
+              status === "needs_permission";
+            const canRetry =
+              action.includes("retry") ||
+              ["failed", "rejected", "cancelled"].includes(status);
+            return html`<span>
+              ${item.project}: ${item.task || item.status}
+              ${canApprove
+                ? html`<button onClick=${() => approveDel(item.id)}>
+                      approve
+                    </button>
+                    <button onClick=${() => rejectDel(item.id)}>reject</button>`
+                : null}
+              ${canRetry
+                ? html`<button
+                      onClick=${() => {
+                        composerDraftText.value = `[DELEGATE_RETRY:${item.id}]Retry this delegation through the currently available provider. If Claude is unavailable, use Codex. Report exact blocker/result.[/DELEGATE_RETRY]`;
+                      }}
+                    >
+                      retry
+                    </button>
+                    <button
+                      onClick=${() => {
+                        composerDraftText.value = `[DELEGATE_STATUS:${item.id}]\n[DELEGATE_CLEANUP:1]`;
+                      }}
+                    >
+                      status/archive
+                    </button>`
+                : null}
+            </span>`;
+          })}
         </div>`
       : null}
     ${onlyOrchestratorLane

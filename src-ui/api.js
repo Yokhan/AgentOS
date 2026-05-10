@@ -2159,6 +2159,18 @@ async function approveDel(id) {
     });
     const res = await r.json();
     clearInterval(timer);
+    if (res.status === "error") {
+      const d2 = { ...delegations.value };
+      d2[id] = {
+        ...d2[id],
+        status: res.current_status || "error",
+        action: res.action || d2[id]?.action,
+      };
+      delegations.value = d2;
+      showToast(res.error || "Delegation approval failed", "error", 5000);
+      await loadDelegations();
+      return res;
+    }
     const finalStatus =
       res.status === "complete"
         ? "done"
@@ -2179,6 +2191,7 @@ async function approveDel(id) {
     const active = normalizeProjectKey(currentProject.value || "");
     await loadChat(active);
     await loadDelegations();
+    return res;
   } catch (e) {
     clearInterval(timer);
     const d2 = { ...delegations.value };

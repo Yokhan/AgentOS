@@ -147,6 +147,17 @@ pub fn technical_reviewer_provider(state: &AppState) -> ProviderKind {
     )
 }
 
+pub fn delegation_provider(state: &AppState) -> ProviderKind {
+    let cfg = state.config();
+    provider_with_fallback(
+        state,
+        parse_provider(
+            cfg.get("delegation_provider").and_then(|v| v.as_str()),
+            orchestrator_provider(state),
+        ),
+    )
+}
+
 pub fn single_chat_provider(state: &AppState, explicit_provider: Option<&str>) -> ProviderKind {
     let default = orchestrator_provider(state);
     let explicit = explicit_provider.filter(|value| !value.trim().is_empty());
@@ -178,6 +189,50 @@ pub fn resolve_single_chat_settings(
         resolve_provider_model(state, provider, explicit_model, None),
         resolve_provider_effort(state, provider, explicit_effort, None),
     )
+}
+
+pub fn resolve_delegation_model(state: &AppState, provider: ProviderKind) -> Option<String> {
+    let cfg = state.config();
+    match provider {
+        ProviderKind::Claude => cfg
+            .get("delegation_model")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(String::from),
+        ProviderKind::Codex => cfg
+            .get("delegation_codex_model")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .or_else(|| {
+                cfg.get("codex_model")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+            }),
+    }
+}
+
+pub fn resolve_delegation_effort(state: &AppState, provider: ProviderKind) -> Option<String> {
+    let cfg = state.config();
+    match provider {
+        ProviderKind::Claude => cfg
+            .get("delegation_effort")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(String::from),
+        ProviderKind::Codex => cfg
+            .get("delegation_codex_effort")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .or_else(|| {
+                cfg.get("codex_effort")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+            }),
+    }
 }
 
 pub fn resolve_provider_model(
@@ -1539,6 +1594,7 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
         "roles": {
             "orchestrator_provider": orchestrator.as_str(),
             "technical_reviewer_provider": technical.as_str(),
+            "delegation_provider": delegation_provider(state).as_str(),
         },
         "providers": {
             "claude": {
@@ -1867,6 +1923,40 @@ user
         assert_eq!(
             status["providers"]["claude"]["available"].as_bool(),
             Some(false)
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn disabled_claude_delegation_routes_to_codex_and_ignores_claude_model() {
+        let root = temp_path("disabled-claude-delegation-routes");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("n8n")).unwrap();
+        std::fs::write(
+            root.join("n8n").join("config.json"),
+            serde_json::to_string(&json!({
+                "claude_enabled": "false",
+                "orchestrator_provider": "claude",
+                "delegation_model": "sonnet",
+                "delegation_effort": "high",
+                "codex_model": "gpt-5.5",
+                "codex_effort": "xhigh"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let state = crate::state::AppState::new(root.clone());
+        let provider = delegation_provider(&state);
+
+        assert_eq!(provider, ProviderKind::Codex);
+        assert_eq!(
+            resolve_delegation_model(&state, provider).as_deref(),
+            Some("gpt-5.5")
+        );
+        assert_eq!(
+            resolve_delegation_effort(&state, provider).as_deref(),
+            Some("xhigh")
         );
 
         let _ = std::fs::remove_dir_all(&root);

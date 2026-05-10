@@ -1,3 +1,12 @@
+# Agent OS 0.3.19
+
+- Fixed delegation approval routing when Claude is disabled or unavailable: project delegations now use the resolved delegation provider and fall back to Codex instead of hardcoding Claude/Sonnet.
+- Added provider-specific delegation model resolution so legacy `delegation_model=sonnet` is not accidentally passed to Codex; Codex delegations use `delegation_codex_model` or `codex_model`.
+- Marked the chosen executor provider on each delegation before execution, so the UI can explain who actually runs the project agent.
+- Made repeated approve clicks on terminal delegations return the current state and action hint instead of a generic red `error`.
+- Fixed the execution-map waiting panel: failed/rejected/cancelled delegations now show retry/status/archive actions instead of invalid approve/reject buttons.
+- Added regression coverage for disabled-Claude delegation routing.
+
 # Agent OS 0.3.18
 
 - Fixed a provider-runner hang where the tracked Codex subprocess could disappear while `wait_with_output()` kept waiting on an unclosed output pipe, leaving AgentOS in endless heartbeat.
