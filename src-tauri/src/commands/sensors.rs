@@ -7,6 +7,7 @@ use crate::state::AppState;
 /// Action a sensor can request.
 pub enum SensorAction {
     /// Trigger a delegation approval
+    #[allow(dead_code)]
     Trigger { delegation_id: String },
     /// Pause auto-approve for a project (incident)
     Pause { project: String, reason: String },

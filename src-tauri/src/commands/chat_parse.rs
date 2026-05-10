@@ -13,13 +13,14 @@ pub fn build_full_pa_prompt(state: &AppState, user_message: &str) -> String {
     let history = build_chat_history(state);
     let deleg_status = build_delegation_status(state);
     let strategies = super::strategy_models::build_strategy_context(state);
+    let plans = super::plans::build_plans_context(state);
     let queue = build_queue_context(state);
     let gates = super::gate::build_gate_context(state);
     let signals = super::signals::build_signals_context(state);
     let memory = build_pa_memory(state);
 
     format!(
-        "{policy}\n{template_policy}\n{identity}\n{context}\n{categories}\n{deleg_status}\n{strategies}\n{gates}\n{signals}\n{queue}\n{memory}\n{history}\n[USER MESSAGE]\n{user_message}",
+        "{policy}\n{template_policy}\n{identity}\n{context}\n{categories}\n{deleg_status}\n{strategies}\n{plans}\n{gates}\n{signals}\n{queue}\n{memory}\n{history}\n[USER MESSAGE]\n{user_message}",
     )
 }
 

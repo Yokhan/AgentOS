@@ -43,4 +43,25 @@ if (!hint || !String(hint.title || "").includes("Модель молчит")) {
   throw new Error("long provider wait must produce a persistent stuck hint");
 }
 
+const disappearedHint = runStuckHint(
+  {
+    status: "running",
+    phase: "provider",
+    startedAt: now - 2 * 60 * 1000,
+    updatedAt: now,
+    heartbeatAt: now - 1000,
+    lastSemanticAt: now - 2 * 60 * 1000,
+    heartbeatDetail:
+      "Codex subprocess pid=21876 disappeared; waiting for provider cleanup (120s).",
+  },
+  now,
+);
+
+if (
+  !disappearedHint ||
+  !String(disappearedHint.title || "").includes("Provider-процесс исчез")
+) {
+  throw new Error("disappeared provider pid must produce a clear warning");
+}
+
 console.log("run state checks ok");

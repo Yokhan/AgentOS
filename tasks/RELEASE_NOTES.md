@@ -1,3 +1,12 @@
+# Agent OS 0.3.18
+
+- Fixed a provider-runner hang where the tracked Codex subprocess could disappear while `wait_with_output()` kept waiting on an unclosed output pipe, leaving AgentOS in endless heartbeat.
+- The backend now probes the tracked provider PID while waiting; if the process is gone and output cleanup does not complete, the run ends with a clear provider error instead of staying active forever.
+- Chat live heartbeat now distinguishes "process is still running" from "process disappeared, waiting for cleanup", so the UI can show the real failure stage.
+- Added a persistent frontend warning for disappeared provider processes instead of presenting the run as a normal long model response.
+- Restored bounded active-plan context in the PA/orchestrator prompt so planning state is visible to the active route without flooding context.
+- Added regression checks for provider process probing and disappeared-provider run-state warnings.
+
 # Agent OS 0.3.17
 
 - Fixed Live Execution Flow spam where provider heartbeats were rendered as repeated `progress/provider/running` event cards.

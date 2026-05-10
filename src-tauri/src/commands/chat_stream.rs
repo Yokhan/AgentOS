@@ -70,10 +70,17 @@ fn spawn_provider_heartbeat(
             let detail = if cancelled {
                 "Stop requested; waiting for provider process to exit.".to_string()
             } else if let Some(pid) = pid {
-                format!(
-                    "Codex subprocess pid={} is still running; waiting for provider output ({}s).",
-                    pid, elapsed
-                )
+                if super::provider_runner::process_exists(pid) {
+                    format!(
+                        "Codex subprocess pid={} is still running; waiting for provider output ({}s).",
+                        pid, elapsed
+                    )
+                } else {
+                    format!(
+                        "Codex subprocess pid={} disappeared; waiting for provider cleanup ({}s).",
+                        pid, elapsed
+                    )
+                }
             } else {
                 format!(
                     "Provider call is active; waiting for process registration/output ({}s).",

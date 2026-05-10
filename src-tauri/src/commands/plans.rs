@@ -323,7 +323,8 @@ pub fn build_plans_context(state: &AppState) -> String {
     }
 
     let mut lines = vec!["[ACTIVE PLANS]".to_string()];
-    for plan in active {
+    let active_count = active.len();
+    for plan in active.into_iter().take(5) {
         let done = plan
             .steps
             .iter()
@@ -339,7 +340,7 @@ pub fn build_plans_context(state: &AppState) -> String {
             "Plan: \"{}\" ({}/{} done, {} failed)",
             plan.title, done, total, failed
         ));
-        for (i, step) in plan.steps.iter().enumerate() {
+        for (i, step) in plan.steps.iter().take(12).enumerate() {
             let icon = step.status.icon();
             let res: String = step
                 .result
@@ -361,6 +362,18 @@ pub fn build_plans_context(state: &AppState) -> String {
                 }
             ));
         }
+        if plan.steps.len() > 12 {
+            lines.push(format!(
+                "  ... {} more step(s) omitted",
+                plan.steps.len() - 12
+            ));
+        }
+    }
+    if active_count > 5 {
+        lines.push(format!(
+            "... {} more active plan(s) omitted",
+            active_count - 5
+        ));
     }
     lines.push("[END PLANS]".to_string());
     lines.join("\n") + "\n"

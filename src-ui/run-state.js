@@ -87,6 +87,17 @@ function runStuckHint(run, now = Date.now()) {
     ? now - Number(run.lastSemanticAt)
     : ageMs;
   const heartbeatMs = run.heartbeatAt ? now - Number(run.heartbeatAt) : quietMs;
+  const heartbeatDetail = String(run.heartbeatDetail || run.detail || "");
+  if (
+    String(run.phase || "") === "provider" &&
+    /disappeared|exited but output pipe/i.test(heartbeatDetail)
+  ) {
+    return {
+      severity: "warn",
+      title: "Provider-процесс исчез",
+      text: "Родительский процесс уже не найден, но cleanup/output pipe ещё не завершились. AgentOS должен завершить run явной ошибкой, а не продолжать бесконечный heartbeat.",
+    };
+  }
   if (heartbeatMs > 45000 && String(run.phase || "") === "provider") {
     return {
       severity: "warn",

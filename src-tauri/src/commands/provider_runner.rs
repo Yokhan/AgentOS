@@ -1043,6 +1043,10 @@ fn wait_with_optional_pid_tracking(
 
     let started = Instant::now();
     let timeout = provider_timeout(state);
+    let mut missing_since: Option<Instant> = None;
+    let mut last_process_probe = Instant::now()
+        .checked_sub(Duration::from_secs(1))
+        .unwrap_or_else(Instant::now);
     let output = loop {
         match rx.recv_timeout(Duration::from_millis(250)) {
             Ok(output) => break output,
@@ -1061,6 +1065,25 @@ fn wait_with_optional_pid_tracking(
                         io::ErrorKind::Interrupted,
                         "provider cancelled by user",
                     ));
+                }
+                if last_process_probe.elapsed() >= Duration::from_secs(1) {
+                    last_process_probe = Instant::now();
+                    if process_exists(pid) {
+                        missing_since = None;
+                    } else {
+                        let since = missing_since.get_or_insert_with(Instant::now);
+                        if since.elapsed() >= Duration::from_secs(3) {
+                            crate::log_warn!(
+                                "[provider:{}] pid={} disappeared but wait thread did not return",
+                                chat_key.unwrap_or("_unknown"),
+                                pid
+                            );
+                            break Err(io::Error::new(
+                                io::ErrorKind::BrokenPipe,
+                                "provider process exited but output pipe did not close",
+                            ));
+                        }
+                    }
                 }
                 if started.elapsed() >= timeout {
                     crate::log_warn!(
@@ -1088,6 +1111,32 @@ fn wait_with_optional_pid_tracking(
         untrack_pid_if_match(state, key, pid);
     }
     output
+}
+
+pub(crate) fn process_exists(pid: u32) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let filter = format!("PID eq {}", pid);
+        let Ok(output) = super::claude_runner::silent_cmd("tasklist")
+            .args(["/FI", &filter, "/FO", "CSV", "/NH"])
+            .output()
+        else {
+            return true;
+        };
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        output.status.success()
+            && stdout
+                .lines()
+                .any(|line| line.contains(&format!("\",\"{}\",", pid)))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        super::claude_runner::silent_cmd("kill")
+            .args(["-0", &pid.to_string()])
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(true)
+    }
 }
 
 fn kill_pid_tree(pid: u32) {
@@ -1873,6 +1922,12 @@ user
         assert_eq!(provider_timeout(&state).as_secs(), 120);
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn process_exists_reports_current_process_and_missing_pid() {
+        assert!(process_exists(std::process::id()));
+        assert!(!process_exists(u32::MAX - 123));
     }
 }
 
