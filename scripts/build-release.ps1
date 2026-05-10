@@ -7,8 +7,11 @@
 param(
     [string]$Tag = "",
     [string]$Repo = "Yokhan/AgentOS",
+    [double]$MaxBuildCacheGB = 30,
+    [double]$MinFreeSpaceGB = 12,
     [switch]$UseMsi,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$SkipCacheGuard
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,6 +39,13 @@ $env:CI = "true"
 
 if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
     throw "Set TAURI_SIGNING_PRIVATE_KEY before building updater artifacts."
+}
+
+if (-not $SkipCacheGuard) {
+    $cacheGuard = Join-Path $PSScriptRoot "clean-build-cache.ps1"
+    if (Test-Path $cacheGuard) {
+        & $cacheGuard -MaxTargetGB $MaxBuildCacheGB -MinFreeGB $MinFreeSpaceGB
+    }
 }
 
 function Invoke-TauriBuild {
