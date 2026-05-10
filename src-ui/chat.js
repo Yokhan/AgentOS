@@ -1933,7 +1933,7 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
               ${canRetry
                 ? html`<button
                       onClick=${() => {
-                        composerDraftText.value = `[DELEGATE_RETRY:${item.id}]Retry this delegation through the currently available provider. If Claude is unavailable, use Codex. Report exact blocker/result.[/DELEGATE_RETRY]`;
+                        composerDraftText.value = `[DELEGATE_RETRY:${item.id}]Retry this delegation through the selected available provider. Report exact blocker/result.[/DELEGATE_RETRY]`;
                       }}
                     >
                       retry

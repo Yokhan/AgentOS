@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tauri::State;
 
-use super::claude_runner::{get_permission_path, log_chat_event, run_claude_with_opts};
+use super::claude_runner::{get_permission_path, log_chat_event};
 use super::process_manager::{clear_activity, set_activity};
 
 #[tauri::command]
@@ -59,25 +59,15 @@ pub async fn send_chat(
             reasoning_effort.as_deref(),
         );
 
-    let response = if matches!(provider, super::provider_runner::ProviderKind::Codex) {
-        super::provider_runner::run_provider_with_opts(
-            &state,
-            provider,
-            &cwd,
-            &prompt,
-            Some(&perm_path),
-            resolved_model.as_deref(),
-            resolved_effort.as_deref(),
-        )
-    } else {
-        run_claude_with_opts(
-            &cwd,
-            &prompt,
-            &perm_path,
-            resolved_model.as_deref(),
-            resolved_effort.as_deref(),
-        )
-    };
+    let response = super::provider_runner::run_provider_with_opts(
+        &state,
+        provider,
+        &cwd,
+        &prompt,
+        Some(&perm_path),
+        resolved_model.as_deref(),
+        resolved_effort.as_deref(),
+    );
 
     clear_activity(&state, &chat_key);
 

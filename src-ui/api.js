@@ -250,14 +250,21 @@ function clrDr() {
 }
 
 function normalizedSoloProviderSelection() {
+  const claudeEnabled =
+    permData.value?.provider_status?.providers?.claude?.enabled !== false;
   const configuredProvider =
-    permData.value?.provider_status?.roles?.orchestrator_provider || "claude";
+    permData.value?.provider_status?.roles?.orchestrator_provider ||
+    (claudeEnabled ? "claude" : "codex");
   const explicitProvider = ["claude", "codex"].includes(
     selectedSoloProvider.value,
   )
     ? selectedSoloProvider.value
     : "";
-  const soloProvider = explicitProvider || configuredProvider;
+  const requestedProvider = explicitProvider || configuredProvider;
+  const soloProvider =
+    !claudeEnabled && requestedProvider === "claude"
+      ? "codex"
+      : requestedProvider;
   return {
     provider: soloProvider,
     runMode: chatRunMode.value === "plan" ? "plan" : "act",

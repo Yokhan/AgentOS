@@ -162,6 +162,16 @@ async fn send_chat(
         .and_then(|p| p.as_str())
         .unwrap_or("")
         .to_string();
+    let provider = body
+        .get("provider")
+        .and_then(|p| p.as_str())
+        .map(String::from);
+    let model = body.get("model").and_then(|m| m.as_str()).map(String::from);
+    let reasoning_effort = body
+        .get("reasoning_effort")
+        .or_else(|| body.get("effort"))
+        .and_then(|e| e.as_str())
+        .map(String::from);
 
     if message.is_empty() {
         return (
@@ -170,24 +180,41 @@ async fn send_chat(
         );
     }
 
+    let normalized_project = crate::commands::chat_core::normalize_chat_project(&project);
     let (cwd, chat_key, chat_file) =
-        match crate::commands::chat_core::resolve_chat_context(&state, &project) {
+        match crate::commands::chat_core::resolve_chat_context(&state, &normalized_project) {
             Ok(ctx) => ctx,
             Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({"error": e}))),
         };
-    let _ = crate::commands::chat_core::prepare_chat(
+    let prompt = crate::commands::chat_core::prepare_chat(
         &state,
         &chat_key,
         &chat_file,
         &message,
-        project.is_empty(),
+        normalized_project.is_empty(),
     );
 
     let perm_path = crate::commands::claude_runner::get_permission_path(&state, &chat_key);
     let cwd_owned = cwd.to_path_buf();
-    let msg_owned = message.clone();
+    let (provider, resolved_model, resolved_effort) =
+        crate::commands::provider_runner::resolve_single_chat_settings(
+            &state,
+            &normalized_project,
+            provider.as_deref(),
+            model.as_deref(),
+            reasoning_effort.as_deref(),
+        );
+    let state_for_run = Arc::clone(&state);
     let response = tokio::task::spawn_blocking(move || {
-        crate::commands::claude_runner::run_claude(&cwd_owned, &msg_owned, &perm_path)
+        crate::commands::provider_runner::run_provider_with_opts(
+            &state_for_run,
+            provider,
+            &cwd_owned,
+            &prompt,
+            Some(&perm_path),
+            resolved_model.as_deref(),
+            resolved_effort.as_deref(),
+        )
     })
     .await
     .unwrap_or_else(|e| format!("Task failed: {}", e));

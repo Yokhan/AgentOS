@@ -245,9 +245,20 @@ pub fn resolve_provider_model(
         return Some(model.to_string());
     }
     let cfg = state.config();
-    if let Some(key) = role_key {
+    if provider == ProviderKind::Claude {
+        if let Some(key) = role_key {
+            if let Some(model) = cfg
+                .get(key)
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                return Some(model.to_string());
+            }
+        }
+    } else if let Some(key) = role_key {
+        let codex_role_key = key.replace("_model", "_codex_model");
         if let Some(model) = cfg
-            .get(key)
+            .get(codex_role_key.as_str())
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
         {
@@ -274,9 +285,20 @@ pub fn resolve_provider_effort(
         return Some(effort.to_string());
     }
     let cfg = state.config();
-    if let Some(key) = role_key {
+    if provider == ProviderKind::Claude {
+        if let Some(key) = role_key {
+            if let Some(effort) = cfg
+                .get(key)
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                return Some(effort.to_string());
+            }
+        }
+    } else if let Some(key) = role_key {
+        let codex_role_key = key.replace("_effort", "_codex_effort");
         if let Some(effort) = cfg
-            .get(key)
+            .get(codex_role_key.as_str())
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
         {
@@ -1448,6 +1470,47 @@ pub fn run_provider_with_opts(
     )
 }
 
+pub fn resolve_orchestrator_settings(
+    state: &AppState,
+) -> (ProviderKind, Option<String>, Option<String>) {
+    let provider = orchestrator_provider(state);
+    (
+        provider,
+        resolve_provider_model(state, provider, None, Some("orchestrator_model")),
+        resolve_provider_effort(state, provider, None, Some("orchestrator_effort")),
+    )
+}
+
+pub fn run_orchestrator_once(
+    state: &AppState,
+    cwd: &Path,
+    prompt: &str,
+    perm_path: Option<&str>,
+) -> String {
+    let (provider, model, effort) = resolve_orchestrator_settings(state);
+    crate::log_info!(
+        "[provider:_orchestrator] running provider={}{}{}",
+        provider,
+        model
+            .as_deref()
+            .map(|m| format!(" model={}", m))
+            .unwrap_or_default(),
+        effort
+            .as_deref()
+            .map(|e| format!(" effort={}", e))
+            .unwrap_or_default()
+    );
+    run_provider_with_opts(
+        state,
+        provider,
+        cwd,
+        prompt,
+        perm_path,
+        model.as_deref(),
+        effort.as_deref(),
+    )
+}
+
 pub fn run_provider_with_chat_control(
     state: &AppState,
     provider: ProviderKind,
@@ -1501,6 +1564,10 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
     let cfg = state.config();
     let orchestrator = orchestrator_provider(state);
     let technical = technical_reviewer_provider(state);
+    let delegation = delegation_provider(state);
+    let (_, orchestrator_model, orchestrator_effort) = resolve_orchestrator_settings(state);
+    let delegation_model = resolve_delegation_model(state, delegation);
+    let delegation_effort = resolve_delegation_effort(state, delegation);
 
     let claude_is_enabled = claude_enabled(state);
     let claude_binary = if claude_is_enabled {
@@ -1594,7 +1661,19 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
         "roles": {
             "orchestrator_provider": orchestrator.as_str(),
             "technical_reviewer_provider": technical.as_str(),
-            "delegation_provider": delegation_provider(state).as_str(),
+            "delegation_provider": delegation.as_str(),
+        },
+        "role_settings": {
+            "orchestrator": {
+                "provider": orchestrator.as_str(),
+                "model": orchestrator_model.unwrap_or_default(),
+                "effort": orchestrator_effort.unwrap_or_default(),
+            },
+            "delegation": {
+                "provider": delegation.as_str(),
+                "model": delegation_model.unwrap_or_default(),
+                "effort": delegation_effort.unwrap_or_default(),
+            },
         },
         "providers": {
             "claude": {
@@ -1958,6 +2037,41 @@ user
             resolve_delegation_effort(&state, provider).as_deref(),
             Some("xhigh")
         );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn disabled_claude_orchestrator_routes_to_codex_model_not_legacy_opus() {
+        let root = temp_path("disabled-claude-orchestrator-model");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("n8n")).unwrap();
+        std::fs::write(
+            root.join("n8n").join("config.json"),
+            serde_json::to_string(&json!({
+                "claude_enabled": "false",
+                "orchestrator_provider": "claude",
+                "orchestrator_model": "opus",
+                "orchestrator_effort": "max",
+                "codex_model": "gpt-5.5",
+                "codex_effort": "xhigh"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let state = crate::state::AppState::new(root.clone());
+
+        let (provider, model, effort) = resolve_orchestrator_settings(&state);
+
+        assert_eq!(provider, ProviderKind::Codex);
+        assert_eq!(model.as_deref(), Some("gpt-5.5"));
+        assert_eq!(effort.as_deref(), Some("xhigh"));
+
+        let (chat_provider, chat_model, chat_effort) =
+            resolve_single_chat_settings(&state, "", None, None, None);
+        assert_eq!(chat_provider, ProviderKind::Codex);
+        assert_eq!(chat_model.as_deref(), Some("gpt-5.5"));
+        assert_eq!(chat_effort.as_deref(), Some("xhigh"));
 
         let _ = std::fs::remove_dir_all(&root);
     }

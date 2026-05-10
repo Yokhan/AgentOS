@@ -116,7 +116,7 @@ pub fn get_strategies(state: State<Arc<AppState>>) -> Value {
     json!({"strategies": load_strategies(&state)})
 }
 
-/// Generate a strategy via PA (claude -p)
+/// Generate a strategy via the configured orchestrator provider.
 /// PA analyzes goal + projects → creates multi-project plan
 #[tauri::command]
 pub async fn generate_strategy(
@@ -152,20 +152,14 @@ pub async fn generate_strategy(
 
     let perm_path = super::claude_runner::get_permission_path(&state, "_orchestrator");
     let pa_dir_owned = pa_dir.to_path_buf();
+    let state_arc = Arc::clone(&state);
     let text = tokio::task::spawn_blocking(move || -> Result<String, String> {
-        let tmp = super::claude_runner::unique_tmp("strategy");
-        std::fs::write(&tmp, &prompt).map_err(|e| e.to_string())?;
-        let stdin_file = std::fs::File::open(&tmp).map_err(|e| e.to_string())?;
-        let claude_bin = super::claude_runner::find_claude();
-        let output = super::claude_runner::silent_cmd(&claude_bin)
-            .args(["-p", "--settings", &perm_path])
-            .current_dir(&pa_dir_owned)
-            .stdin(std::process::Stdio::from(stdin_file))
-            .env("PYTHONIOENCODING", "utf-8")
-            .output()
-            .map_err(|e| e.to_string())?;
-        let _ = std::fs::remove_file(&tmp);
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        Ok(super::provider_runner::run_orchestrator_once(
+            &state_arc,
+            &pa_dir_owned,
+            &prompt,
+            Some(&perm_path),
+        ))
     })
     .await
     .map_err(|e| e.to_string())??;

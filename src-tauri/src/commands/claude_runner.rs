@@ -97,10 +97,7 @@ pub fn find_bash() -> String {
         .clone()
 }
 
-/// Run claude with optional model and reasoning effort
-pub fn run_claude(cwd: &std::path::Path, prompt: &str, perm_path: &str) -> String {
-    run_claude_with_opts(cwd, prompt, perm_path, None, None)
-}
+/// Run claude with optional model and reasoning effort.
 pub fn run_claude_with_opts(
     cwd: &std::path::Path,
     prompt: &str,

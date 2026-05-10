@@ -263,7 +263,7 @@ function SettingsPage() {
       style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-l);margin-bottom:var(--sp-xl)"
     >
       <div class="panel">
-        <h3>Claude Orchestrator</h3>
+        <h3>Provider Routing</h3>
         <div style="display:flex;flex-direction:column;gap:var(--sp-s)">
           <div
             style="display:flex;justify-content:space-between;gap:var(--sp-s);align-items:flex-start;padding:var(--sp-s);border:1px solid var(--border);background:var(--bg-soft)"
@@ -276,8 +276,8 @@ function SettingsPage() {
               </div>
               <div style="font-size:var(--fs-s);color:var(--t2);margin-top:4px">
                 ${claudeEnabled
-                  ? "Claude can be selected for orchestration and delegation."
-                  : "Claude is hidden from routing. Old Claude routes fall back to Codex."}
+                  ? "Claude is available as an optional route. Codex-only mode works without it."
+                  : "Claude is disabled. Orchestrator, delegation, inbox and strategy routes fall back to Codex."}
               </div>
             </div>
             <button
@@ -301,7 +301,7 @@ function SettingsPage() {
           <div>
             <label
               style="display:block;font-family:var(--font-mono);font-size:var(--fs-s);color:var(--t3);margin-bottom:var(--sp-xs)"
-              >model</label
+              >Claude orchestrator model</label
             >
             <select
               style="width:100%;background:var(--sf);border:1px solid var(--border);color:var(--text);padding:var(--sp-s);font-family:var(--font-mono);font-size:var(--fs-s)"
@@ -325,7 +325,7 @@ function SettingsPage() {
           <div>
             <label
               style="display:block;font-family:var(--font-mono);font-size:var(--fs-s);color:var(--t3);margin-bottom:var(--sp-xs)"
-              >effort</label
+              >Claude orchestrator effort</label
             >
             <select
               style="width:100%;background:var(--sf);border:1px solid var(--border);color:var(--text);padding:var(--sp-s);font-family:var(--font-mono);font-size:var(--fs-s)"
@@ -350,12 +350,18 @@ function SettingsPage() {
         </div>
       </div>
       <div class="panel">
-        <h3>Claude Delegation</h3>
+        <h3>Delegation Defaults</h3>
         <div style="display:flex;flex-direction:column;gap:var(--sp-s)">
+          <div style="font-size:var(--fs-s);color:var(--t2);line-height:1.45">
+            Active delegation provider:
+            <code>${ps?.roles?.delegation_provider || "auto"}</code>. Claude
+            settings below are used only when delegation provider is Claude.
+            Codex delegation uses Codex model/effort.
+          </div>
           <div>
             <label
               style="display:block;font-family:var(--font-mono);font-size:var(--fs-s);color:var(--t3);margin-bottom:var(--sp-xs)"
-              >model</label
+              >Claude delegation model</label
             >
             <select
               style="width:100%;background:var(--sf);border:1px solid var(--border);color:var(--text);padding:var(--sp-s);font-family:var(--font-mono);font-size:var(--fs-s)"
@@ -379,7 +385,7 @@ function SettingsPage() {
           <div>
             <label
               style="display:block;font-family:var(--font-mono);font-size:var(--fs-s);color:var(--t3);margin-bottom:var(--sp-xs)"
-              >effort</label
+              >Claude delegation effort</label
             >
             <select
               style="width:100%;background:var(--sf);border:1px solid var(--border);color:var(--text);padding:var(--sp-s);font-family:var(--font-mono);font-size:var(--fs-s)"
@@ -546,6 +552,33 @@ function SettingsPage() {
               onChange=${(e) => {
                 __invoke("set_config", {
                   key: "technical_reviewer_provider",
+                  value: e.target.value,
+                }).then(() => {
+                  showToast("Saved", "success");
+                  loadPerms();
+                });
+              }}
+            >
+              ${providerOptions.map(
+                ([value, label]) =>
+                  html`<option value=${value}>${label}</option>`,
+              )}
+            </select>
+          </div>
+          <div>
+            <label
+              style="display:block;font-family:var(--font-mono);font-size:var(--fs-s);color:var(--t3);margin-bottom:var(--sp-xs)"
+              >delegation provider</label
+            >
+            <select
+              style="width:100%;background:var(--sf);border:1px solid var(--border);color:var(--text);padding:var(--sp-s);font-family:var(--font-mono);font-size:var(--fs-s)"
+              value=${ps?.roles?.delegation_provider ||
+              pd?.config?.delegation_provider ||
+              ps?.roles?.orchestrator_provider ||
+              "codex"}
+              onChange=${(e) => {
+                __invoke("set_config", {
+                  key: "delegation_provider",
                   value: e.target.value,
                 }).then(() => {
                   showToast("Saved", "success");

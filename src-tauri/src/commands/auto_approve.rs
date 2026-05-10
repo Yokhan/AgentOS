@@ -416,19 +416,10 @@ fn auto_trigger_pa(state: &AppState) {
         "auto-trigger system",
     );
 
-    // Send to PA via sync chat (build prompt + run claude)
+    // Send to PA via the configured orchestrator provider.
     let prompt = super::chat_parse::build_full_pa_prompt(state, &trigger_msg);
     let perm_path =
         super::claude_runner::get_delegation_permission_path(state, "_orchestrator", "balanced");
-    let cfg = state.config();
-    let model = cfg
-        .get("orchestrator_model")
-        .and_then(|v| v.as_str())
-        .unwrap_or("sonnet");
-    let effort = cfg
-        .get("orchestrator_effort")
-        .and_then(|v| v.as_str())
-        .unwrap_or("high");
 
     // Non-blocking lock (#6): skip auto-trigger if PA is busy (user chatting)
     {
@@ -439,17 +430,9 @@ fn auto_trigger_pa(state: &AppState) {
         }
     }
     state.acquire_dir_lock("_orchestrator");
-    let response = super::claude_runner::run_claude_with_opts(
-        &state.docs_dir.join(
-            cfg.get("orchestrator_project")
-                .and_then(|v| v.as_str())
-                .unwrap_or("PersonalAssistant"),
-        ),
-        &prompt,
-        &perm_path,
-        Some(model),
-        Some(effort),
-    );
+    let (_, pa_dir) = state.get_orch_dir();
+    let response =
+        super::provider_runner::run_orchestrator_once(state, &pa_dir, &prompt, Some(&perm_path));
     state.release_dir_lock("_orchestrator");
 
     // Save response + process PA commands

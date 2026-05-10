@@ -97,7 +97,7 @@ effect(() => {
     );
   } catch {}
 });
-const subModel = signal("sonnet"); // model for orchestrator's sub-project calls
+const subModel = signal(""); // provider router owns sub-project model defaults
 const isRec = signal(false);
 const attFiles = signal([]);
 const isOn = signal(true);

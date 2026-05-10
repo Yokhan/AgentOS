@@ -355,7 +355,12 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
             let pa_perm = super::claude_runner::get_permission_path(state, "_orchestrator");
             crate::log_info!("[delegation:{}] L3 asking PA for decision", d.project);
             super::delegation_stream::emit_stage(&stream_buf, "L3", "PA deciding GRANT/ABORT");
-            let pa_decision = super::claude_runner::run_claude(&pa_dir, &pa_prompt, &pa_perm);
+            let pa_decision = super::provider_runner::run_orchestrator_once(
+                state,
+                &pa_dir,
+                &pa_prompt,
+                Some(&pa_perm),
+            );
 
             // Log PA decision in orchestrator chat
             let orch_file = state.chats_dir.join("_orchestrator.jsonl");

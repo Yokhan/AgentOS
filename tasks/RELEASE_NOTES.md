@@ -1,3 +1,13 @@
+# Agent OS 0.3.20
+
+- Removed the remaining hardcoded Claude execution paths from sync chat, HTTP `/api/chat`, strategy generation, inbox processing, critical-signal auto-trigger, and L3 delegation escalation.
+- Added a single orchestrator provider runner so Codex-only mode is a first-class route, not a fallback hack.
+- Fixed role model resolution: when Claude is disabled and a role falls back to Codex, legacy `orchestrator_model=opus` / `orchestrator_effort=max` are no longer passed to Codex; Codex uses `orchestrator_codex_*` overrides or `codex_model` / `codex_effort`.
+- Exposed effective role settings in provider status, including orchestrator and delegation provider/model/effort.
+- Added a Settings control for `delegation_provider` and clarified that Claude model fields are Claude-only while Codex delegation uses Codex settings.
+- Updated retry copy to avoid telling the user to manually reason about Claude fallback.
+- Added regression coverage for disabled-Claude orchestrator routing with legacy Claude model values.
+
 # Agent OS 0.3.19
 
 - Fixed delegation approval routing when Claude is disabled or unavailable: project delegations now use the resolved delegation provider and fall back to Codex instead of hardcoding Claude/Sonnet.

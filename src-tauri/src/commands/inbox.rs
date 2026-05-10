@@ -126,10 +126,15 @@ pub async fn process_inbox(state: State<'_, Arc<AppState>>) -> Result<Value, Str
     let item_count = items.len();
     let response = tokio::task::spawn_blocking(move || {
         let (orch_name, pa_dir) = state_arc.get_orch_dir();
-        // Lock PA directory to prevent concurrent claude sessions
+        // Lock the orchestrator directory to prevent concurrent provider sessions.
         state_arc.acquire_dir_lock(&orch_name);
         let perm_path = super::claude_runner::get_permission_path(&state_arc, "_orchestrator");
-        let response = super::claude_runner::run_claude(&pa_dir, &batch_prompt, &perm_path);
+        let response = super::provider_runner::run_orchestrator_once(
+            &state_arc,
+            &pa_dir,
+            &batch_prompt,
+            Some(&perm_path),
+        );
 
         // Save to orchestrator chat
         let orch_file = state_arc.chats_dir.join("_orchestrator.jsonl");
