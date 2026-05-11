@@ -693,11 +693,31 @@ function appendPaFeedbackTo(prev, type, text, command = "") {
 }
 
 async function loadChat(p) {
+  const chatProjectKey = normalizeProjectKey(p || "_orchestrator");
+  const activeProjectKey = normalizeProjectKey(currentProject.value || "");
+  if (chatProjectKey !== activeProjectKey) {
+    return;
+  }
   const myId = ++_chatLoadId;
+  if (chatPageInfo.value.project !== chatProjectKey) {
+    sideMessages.value = [];
+    chatPageInfo.value = {
+      project: chatProjectKey,
+      total: 0,
+      loaded: 0,
+      nextBefore: null,
+      hasMore: false,
+    };
+  }
   try {
-    const r = await fetch("/api/chat/" + encodeURIComponent(p) + "?limit=200");
+    const r = await fetch(
+      "/api/chat/" + encodeURIComponent(chatProjectKey) + "?limit=200",
+    );
     if (myId !== _chatLoadId) return; // stale — another loadChat started
     const d = await r.json();
+    if (chatProjectKey !== normalizeProjectKey(currentProject.value || "")) {
+      return;
+    }
     const rawMsgs = (d.messages || []).map((m) => {
       if (m.tools && m.tools.length && !m.chain) {
         const chain = [];
@@ -745,7 +765,6 @@ async function loadChat(p) {
       msgs.push(m);
     }
     sideMessages.value = msgs;
-    const chatProjectKey = normalizeProjectKey(p || "_orchestrator");
     const liveDraft = readLiveDraft(chatProjectKey);
     if (!isStreaming.value && liveDraft) {
       if (draftWasPersisted(liveDraft, msgs)) {
@@ -792,7 +811,7 @@ async function loadChat(p) {
       }
     }
     chatPageInfo.value = {
-      project: p,
+      project: chatProjectKey,
       total: Number(d.total || 0),
       loaded: msgs.length,
       nextBefore:
@@ -825,7 +844,12 @@ async function loadChat(p) {
 
 async function loadOlderChat() {
   const page = chatPageInfo.value || {};
-  const project = page.project || currentProject.value || "_orchestrator";
+  const project = normalizeProjectKey(
+    page.project || currentProject.value || "_orchestrator",
+  );
+  if (project !== normalizeProjectKey(currentProject.value || "")) {
+    return false;
+  }
   if (!page.hasMore || page.nextBefore === null || chatHistoryLoading.value) {
     return false;
   }
@@ -837,6 +861,9 @@ async function loadOlderChat() {
         "?limit=200&before=" +
         encodeURIComponent(String(page.nextBefore)),
     );
+    if (project !== normalizeProjectKey(currentProject.value || "")) {
+      return false;
+    }
     const d = await r.json();
     const rawMsgs = (d.messages || []).map((m) => {
       if (m.tools && m.tools.length && !m.chain) {

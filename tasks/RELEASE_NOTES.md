@@ -1,3 +1,9 @@
+# Agent OS 0.3.27
+
+- Fixed project selection in the left navigation so the right chat switches to the selected project instead of keeping stale orchestrator history on screen.
+- Made chat history route-bound: stale `_orchestrator` loads and older-history requests can no longer overwrite the active project chat after a route change.
+- Added UI wiring checks that fail if project route switching no longer clears stale chat or allows stale chat loads to overwrite the active route.
+
 # Agent OS 0.3.26
 
 - Fixed orchestrator auto-loop recovery when an agent claims it launched/delegated work but no executable AgentOS command tag was emitted.

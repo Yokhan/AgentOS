@@ -65,6 +65,23 @@ const checks = [
       views.includes('e.key === "Escape"'),
   },
   {
+    name: "project route switch clears stale chat immediately",
+    ok:
+      api.includes("const chatProjectKey = normalizeProjectKey") &&
+      api.includes("sideMessages.value = []") &&
+      api.includes("chatProjectKey !== activeProjectKey"),
+  },
+  {
+    name: "stale chat loads cannot overwrite active project route",
+    ok:
+      api.includes(
+        'chatProjectKey !== normalizeProjectKey(currentProject.value || "")',
+      ) &&
+      api.includes(
+        'project !== normalizeProjectKey(currentProject.value || "")',
+      ),
+  },
+  {
     name: "risky bulk actions require confirmation",
     ok:
       chat.includes("Approve ${pending.length} pending delegation") &&

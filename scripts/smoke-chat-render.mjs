@@ -69,6 +69,7 @@ globalThis.setInterval = (...args) => {
 };
 
 const storeModuleUrl = pathToFileURL(path.join(tempDir, "store.js")).href;
+const apiModuleUrl = pathToFileURL(path.join(tempDir, "api.js")).href;
 const chatModuleUrl = pathToFileURL(path.join(tempDir, "chat.js")).href;
 const viewsModuleUrl = pathToFileURL(path.join(tempDir, "views.js")).href;
 const pagesModuleUrl = pathToFileURL(path.join(tempDir, "pages.js")).href;
@@ -89,11 +90,15 @@ const {
   queueTasks,
   searchQuery,
   activeFilter,
+  chatPageInfo,
+  currentProject,
   sortBy,
+  sideMessages,
   goals,
   strategies,
   activeStrategy,
 } = await import(storeModuleUrl);
+const { loadChat } = await import(apiModuleUrl);
 const { DetailView, ExecutionTimelineCard } = await import(chatModuleUrl);
 const { DashboardWorkbenchView } = await import(viewsModuleUrl);
 const { StrategyView } = await import(pagesModuleUrl);
@@ -154,6 +159,37 @@ strategies.value = [
   },
 ];
 activeStrategy.value = null;
+
+sideMessages.value = [{ role: "assistant", msg: "orchestrator stale message" }];
+chatPageInfo.value = {
+  project: "_orchestrator",
+  total: 1,
+  loaded: 1,
+  nextBefore: null,
+  hasMore: false,
+};
+currentProject.value = "AgentOS";
+globalThis.fetch = async (url) => ({
+  ok: true,
+  json: async () => ({
+    project: "AgentOS",
+    total: 1,
+    messages: [{ role: "assistant", msg: `project chat from ${url}` }],
+  }),
+  text: async () => "",
+});
+await loadChat("AgentOS");
+if (chatPageInfo.value.project !== "AgentOS") {
+  throw new Error("loadChat did not switch chatPageInfo to selected project");
+}
+if (!String(sideMessages.value[0]?.msg || "").includes("AgentOS")) {
+  throw new Error("project chat did not replace stale orchestrator history");
+}
+sideMessages.value = [{ role: "assistant", msg: "project chat stays" }];
+await loadChat("_orchestrator");
+if (sideMessages.value[0]?.msg !== "project chat stays") {
+  throw new Error("stale orchestrator load overwrote selected project chat");
+}
 
 DetailView();
 DashboardWorkbenchView();
