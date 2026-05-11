@@ -1,3 +1,13 @@
+# Agent OS 0.3.22
+
+- Fixed stale chat stream races by moving provider output from a shared chat buffer to per-run stream files keyed by `run_id`.
+- Frontend stream polling now follows the active provider run and ignores late events from older cancelled or completed runs.
+- Stop/cancel now targets the active run buffer, so cancelled output does not erase or finish the next request by accident.
+- Added backend OperationState telemetry for chat runs, PA commands, provider heartbeats, model output, auto-continue, and delegation lifecycle events.
+- Added a live operation bar in chat so the user can see whether AgentOS is waiting on provider output, running commands, auto-continuing, or settling a delegation.
+- Live Execution Flow now prefers semantic operation events over raw heartbeat samples, reducing repeated `provider работает` cards.
+- Runtime audit and signal logs are ignored by git so generated observability files do not keep dirtying the repo.
+
 # Agent OS 0.3.21
 
 - Reworked Settings provider routing so the top visible cards show the actual operational choices: orchestrator provider, delegation provider, reviewer provider, and effective route labels.
