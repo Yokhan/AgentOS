@@ -147,6 +147,12 @@ pub async fn auto_approve_loop(state: Arc<AppState>) {
 
         // Auto-trigger PA on critical signals (max once per 5 min)
         auto_trigger_pa(&state);
+        {
+            let state_c = Arc::clone(&state);
+            tokio::task::spawn_blocking(move || {
+                super::inbox::auto_process_inbox(&state_c);
+            });
+        }
         let mut paused_projects: std::collections::HashSet<String> =
             std::collections::HashSet::new();
         let pause_all = should_pause_all(&sensor_actions, &mut paused_projects);

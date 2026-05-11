@@ -1,3 +1,12 @@
+# Agent OS 0.3.26
+
+- Fixed orchestrator auto-loop recovery when an agent claims it launched/delegated work but no executable AgentOS command tag was emitted.
+- Added a recovery turn before stopping repeated diagnostic loops, so the orchestrator is pushed to choose a new action or state the real blocker.
+- Auto-processes successful delegation inbox results in the background so completed project-agent work is summarized by the orchestrator without manual poking.
+- Keeps inbox items queued when the provider errors or times out, preventing silent loss of completed child-agent results.
+- Adds one-time chat attention messages for inbox results that genuinely require a user decision.
+- Added regression coverage for missing-command claims, repeat-loop prompt guidance, inbox batching, and provider-error retention.
+
 # Agent OS 0.3.25
 
 - Added a committed overflow plan for chat and Live Execution Flow so this UX pass has explicit dependencies and verification criteria.

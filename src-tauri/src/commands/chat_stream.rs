@@ -1300,6 +1300,8 @@ fn build_auto_continue_prompt(turn: usize, feedback: &PaLoopFeedback) -> String 
          Results / context:\n{}\n\n\
          Continue autonomously from these results. Stop by returning a final status with no PA command tags when the task is complete or blocked. \
          If a ready route offers [WORK_ITEM_QUEUE:id] and it is still priority, emit that command instead of idling on running projects. \
+         If the context says you claimed an action but AgentOS executed no command, correct it now: emit the exact command tag or explicitly say that no action was launched. \
+         If the context says you repeated the same diagnostic command, do not run it again; pick a different next action or give a final blocked status. \
          Emit the next PA command tags only when another AgentOS action is actually required. \
          Do not ask the user to type continue. Continue in the same user-facing language as the conversation; if recent user messages are Russian/Cyrillic, reply in Russian.\n\
          Auto-continue turn: {}/{} safety ceiling. Actionable commands: {}. Warnings: {}.",
@@ -1314,6 +1316,101 @@ fn build_auto_continue_prompt(turn: usize, feedback: &PaLoopFeedback) -> String 
         feedback.actionable,
         feedback.warnings
     )
+}
+
+fn claims_agentos_action_without_command(response: &str) -> bool {
+    let text = response.to_lowercase();
+    if text.trim().is_empty() {
+        return false;
+    }
+
+    let negated = [
+        "не отправил",
+        "не отправлял",
+        "не запустил",
+        "не запускал",
+        "не делегировал",
+        "ничего не отправил",
+        "ничего не запускал",
+        "did not delegate",
+        "didn't delegate",
+        "did not send",
+        "didn't send",
+        "no action was launched",
+    ];
+    if negated.iter().any(|needle| text.contains(needle)) {
+        return false;
+    }
+
+    let action_verbs = [
+        "отправил",
+        "отправляю",
+        "запустил",
+        "запускаю",
+        "сделегировал",
+        "делегировал",
+        "поставил задачу",
+        "создал делегацию",
+        "sent delegation",
+        "queued delegation",
+        "started delegation",
+        "delegated",
+        "launched",
+    ];
+    let action_targets = [
+        "делегац",
+        "agentos",
+        "delegate",
+        "delegation",
+        "route",
+        "work item",
+        "задачу на",
+    ];
+
+    action_verbs.iter().any(|needle| text.contains(needle))
+        && action_targets.iter().any(|needle| text.contains(needle))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        build_auto_continue_prompt, claims_agentos_action_without_command, PaLoopFeedback,
+    };
+
+    #[test]
+    fn detects_claimed_delegation_without_command() {
+        assert!(claims_agentos_action_without_command(
+            "Отправил точечную делегацию на Avilex и жду результата."
+        ));
+        assert!(claims_agentos_action_without_command(
+            "Sent delegation to AgentOS and queued the next route."
+        ));
+    }
+
+    #[test]
+    fn ignores_negated_delegation_claim() {
+        assert!(!claims_agentos_action_without_command(
+            "Не отправил делегацию, потому что нет валидной команды."
+        ));
+        assert!(!claims_agentos_action_without_command(
+            "I did not delegate anything; no action was launched."
+        ));
+    }
+
+    #[test]
+    fn auto_continue_prompt_tells_agent_to_correct_missing_commands() {
+        let mut feedback = PaLoopFeedback::default();
+        feedback
+            .items
+            .push("Agent claimed an action but no command was executed.".to_string());
+        feedback.warnings = 1;
+
+        let prompt = build_auto_continue_prompt(1, &feedback);
+
+        assert!(prompt.contains("claimed an action"));
+        assert!(prompt.contains("emit the exact command tag"));
+        assert!(prompt.contains("repeated the same diagnostic command"));
+    }
 }
 
 fn run_pa_agent_loop(
@@ -1336,6 +1433,8 @@ fn run_pa_agent_loop(
     let mut last_signature = String::new();
     let mut repeat_count = 0usize;
     let mut wait_context_sent = false;
+    let mut missing_command_recovery_sent = false;
+    let mut repeat_recovery_sent = false;
 
     for turn in 1..=MAX_AUTO_CONTINUE_TURNS {
         if is_cancelled(state, chat_key) {
@@ -1361,7 +1460,38 @@ fn run_pa_agent_loop(
             operation_id,
         );
         if feedback.is_empty() {
-            if wait_context_sent {
+            if !missing_command_recovery_sent && claims_agentos_action_without_command(&response) {
+                let text = "Агент заявил, что запустил действие, но AgentOS не получил ни одной исполняемой команды. Исправь это следующим ответом: выдай точный тег команды, например [DELEGATE:Project]...[/DELEGATE], или явно напиши, что действие не было запущено.";
+                append_pa_feedback(
+                    state,
+                    chat_file,
+                    stream_buf,
+                    "warning",
+                    text,
+                    None,
+                    &format!("{} missing command recovery", label_prefix),
+                );
+                if let Some(operation_id) = operation_id {
+                    super::operation_state::emit(
+                        state,
+                        super::operation_state::OperationEventInput::new(
+                            operation_id.to_string(),
+                            "agentos",
+                            chat_key.to_string(),
+                            "pa_command_missing",
+                            "command",
+                            "needs_user",
+                            "Claimed action without executable AgentOS command",
+                        )
+                        .blocked_by("missing_agentos_command")
+                        .payload(json!({"response_preview": feedback_preview(&response)})),
+                    );
+                }
+                feedback.warnings += 1;
+                feedback.items.push(text.to_string());
+                missing_command_recovery_sent = true;
+                wait_context_sent = false;
+            } else if wait_context_sent {
                 append_pa_feedback(
                     state,
                     chat_file,
@@ -1373,10 +1503,11 @@ fn run_pa_agent_loop(
                 );
                 break;
             }
-            let Some(wait_snapshot) =
-                super::coordinator_wait::build_wait_coordinator_snapshot(state, None, None, 4)
-            else {
-                append_pa_feedback(
+            if feedback.is_empty() {
+                let Some(wait_snapshot) =
+                    super::coordinator_wait::build_wait_coordinator_snapshot(state, None, None, 4)
+                else {
+                    append_pa_feedback(
                     state,
                     chat_file,
                     stream_buf,
@@ -1385,21 +1516,23 @@ fn run_pa_agent_loop(
                     None,
                     &format!("{} auto no commands", label_prefix),
                 );
-                break;
-            };
-            append_pa_feedback(
-                state,
-                chat_file,
-                stream_buf,
-                "pa_status",
-                &format!("Waiting coordinator: {}", wait_snapshot.summary),
-                None,
-                &format!("{} wait coordinator", label_prefix),
-            );
-            feedback = wait_snapshot.into();
-            wait_context_sent = true;
+                    break;
+                };
+                append_pa_feedback(
+                    state,
+                    chat_file,
+                    stream_buf,
+                    "pa_status",
+                    &format!("Waiting coordinator: {}", wait_snapshot.summary),
+                    None,
+                    &format!("{} wait coordinator", label_prefix),
+                );
+                feedback = wait_snapshot.into();
+                wait_context_sent = true;
+            }
         } else {
             wait_context_sent = false;
+            missing_command_recovery_sent = false;
         }
 
         let signature = feedback.signature();
@@ -1410,16 +1543,36 @@ fn run_pa_agent_loop(
             repeat_count = 1;
         }
         if repeat_count >= AUTO_CONTINUE_REPEAT_LIMIT {
-            append_pa_feedback(
-                state,
-                chat_file,
-                stream_buf,
-                "warning",
-                "Auto-run stopped because the agent repeated the same command result loop.",
-                None,
-                &format!("{} auto repeat stop", label_prefix),
-            );
-            break;
+            if !repeat_recovery_sent {
+                let text = "Агент повторил тот же диагностический результат. Не запускай эту же команду снова: выбери другой следующий шаг, поставь точную делегацию, проверь другой блокер или дай финальный статус, если дальнейшего действия нет.";
+                append_pa_feedback(
+                    state,
+                    chat_file,
+                    stream_buf,
+                    "warning",
+                    text,
+                    None,
+                    &format!("{} auto repeat recovery", label_prefix),
+                );
+                feedback.warnings += 1;
+                feedback.items.push(text.to_string());
+                repeat_recovery_sent = true;
+                last_signature.clear();
+                repeat_count = 0;
+            } else {
+                append_pa_feedback(
+                    state,
+                    chat_file,
+                    stream_buf,
+                    "warning",
+                    "Auto-run stopped because the agent repeated the same command result loop.",
+                    None,
+                    &format!("{} auto repeat stop", label_prefix),
+                );
+                break;
+            }
+        } else {
+            repeat_recovery_sent = false;
         }
 
         if is_cancelled(state, chat_key) {
