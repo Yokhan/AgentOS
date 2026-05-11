@@ -238,6 +238,41 @@
     color: var(--text);
     border-color: var(--accent) !important;
 }
+.chat-render-window {
+    align-self: stretch;
+    border: 1px dashed var(--border);
+    background: color-mix(in srgb, var(--sf) 72%, transparent);
+    color: var(--t2);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+    padding: 7px 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.chat-render-window b {
+    color: var(--yellow);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+.chat-render-window span {
+    color: var(--t3);
+}
+.chat-render-window button {
+    margin-left: auto;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--cyan);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 3px 8px;
+    cursor: pointer;
+}
+.chat-render-window button:hover {
+    border-color: var(--cyan);
+    color: var(--text);
+}
 .transcript-bar {
     border-bottom: 1px solid var(--border);
     background: color-mix(in srgb, var(--bg) 82%, var(--sf));
@@ -895,25 +930,76 @@
     border: 1px solid color-mix(in srgb, var(--yellow) 50%, var(--border));
     background: color-mix(in srgb, var(--yellow) 7%, transparent);
     color: var(--yellow);
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: 1fr;
     gap: var(--sp-xs);
-    flex-wrap: wrap;
     padding: 6px 8px;
     font-family: var(--font-mono);
     font-size: var(--fs-s);
 }
-.exec-map-waiting b {
+.exec-map-waiting > b {
+    display: none;
+}
+.exec-map-waiting-head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-xs);
+    flex-wrap: wrap;
+}
+.exec-map-waiting-head b {
     text-transform: uppercase;
     letter-spacing: 1px;
 }
-.exec-map-waiting span {
-    border-left: 1px dashed color-mix(in srgb, var(--yellow) 45%, var(--border));
-    padding-left: var(--sp-xs);
+.exec-map-waiting-head span,
+.exec-map-waiting-head em {
+    border: 1px solid color-mix(in srgb, var(--yellow) 42%, var(--border));
+    background: color-mix(in srgb, var(--bg) 64%, transparent);
+    padding: 2px 7px;
     color: var(--t2);
+    font-style: normal;
+}
+.exec-map-waiting-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 6px;
+}
+.exec-map-waiting-item {
+    border: 1px solid color-mix(in srgb, var(--yellow) 34%, var(--border));
+    background: color-mix(in srgb, var(--bg) 74%, transparent);
+    padding: 7px 8px;
+    min-width: 0;
+}
+.exec-map-waiting-item-top,
+.exec-map-waiting-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+.exec-map-waiting-item-top b {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.exec-map-waiting-item-top span,
+.exec-map-waiting-item-top em {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--yellow);
+    padding: 1px 5px;
+    font-style: normal;
+    text-transform: uppercase;
+}
+.exec-map-waiting-item p {
+    margin: 4px 0 6px;
+    color: var(--t2);
+    line-height: 1.35;
+    max-height: 2.7em;
+    overflow: hidden;
 }
 .exec-map-waiting button {
-    margin-left: 5px;
     border: 1px solid var(--border);
     background: var(--bg);
     color: var(--yellow);
@@ -956,7 +1042,7 @@
 }
 .exec-map-card.stage .exec-map-body {
     flex: 1 1 auto;
-    height: clamp(520px, 64vh, 820px);
+    height: clamp(560px, calc(100vh - 260px), 880px);
     min-height: 520px;
     max-height: none;
     overflow: auto;

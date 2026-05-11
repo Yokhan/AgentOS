@@ -388,6 +388,15 @@
     border-radius: 3px;
     overflow: hidden;
 }
+.run-card.compact {
+    background: color-mix(in srgb, var(--sf) 72%, transparent);
+}
+.run-card.compact .run-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: color-mix(in srgb, var(--sf) 92%, var(--bg));
+}
 .run-head {
     display: flex;
     align-items: center;
@@ -460,6 +469,9 @@
     flex-direction: column;
     max-height: min(420px, 48vh);
     overflow: auto;
+}
+.run-card.compact .run-table {
+    max-height: 190px;
 }
 .run-row {
     border: 0;
@@ -561,6 +573,21 @@
     color: var(--t3);
     font-family: var(--font-mono);
     font-size: var(--fs-s);
+}
+.run-show-more {
+    border: 0;
+    border-top: 1px dashed var(--border);
+    background: color-mix(in srgb, var(--bg) 75%, transparent);
+    color: var(--cyan);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 7px var(--sp-s);
+    text-align: left;
+    cursor: pointer;
+}
+.run-show-more:hover {
+    color: var(--text);
+    background: var(--sf2);
 }
 .command-draft-card,
 .diagnostic-dump-card {

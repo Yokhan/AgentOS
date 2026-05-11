@@ -1,3 +1,12 @@
+# Agent OS 0.3.25
+
+- Added a committed overflow plan for chat and Live Execution Flow so this UX pass has explicit dependencies and verification criteria.
+- Collapsed older PA command run cards by default while keeping the latest batches readable and expandable.
+- Added a transcript render window: long chat histories keep their data, but old loaded messages are summarized to avoid DOM overload and UI stalls.
+- Grouped `needs_user` execution-map blockers by project/status/action with an overflow counter instead of rendering every blocked delegation as a full-width card.
+- Enlarged and bounded the Live Execution Flow stage viewport so dense maps scroll inside the stage instead of leaking or clipping unpredictably.
+- Added `check-ui-overflow.mjs` to the UI release gate to protect the compact PA trace, transcript cap, grouped waiting panel, and bounded map viewport.
+
 # Agent OS 0.3.24
 
 - Reworked chat streaming performance: desktop polling now uses byte offsets and reads only new JSONL bytes instead of reparsing the whole stream buffer.

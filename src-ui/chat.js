@@ -127,6 +127,10 @@ import {
 const inpHist = [];
 let hIdx = -1;
 let draftT = null;
+const CHAT_RENDER_RECENT_LIMIT = 90;
+const PA_TRACE_FULL_RECENT_COUNT = 3;
+const PA_TRACE_COMPACT_ROW_LIMIT = 3;
+const EXEC_WAITING_VISIBLE_LIMIT = 4;
 const APPROVAL_DELEGATION_STATUSES = new Set(["pending", "needs_permission"]);
 const ACTIVE_DELEGATION_STATUSES = new Set([
   "pending",
@@ -1872,6 +1876,40 @@ function isRenderableMapEvent(event) {
   return true;
 }
 
+function waitingPriority(item) {
+  const status = String(item?.status || "");
+  if (status === "pending" || status === "needs_permission") return 0;
+  if (status === "failed") return 1;
+  if (status === "cancelled" || status === "rejected") return 2;
+  return 3;
+}
+
+function groupWaitingItems(waiting) {
+  const groups = new Map();
+  for (const item of waiting || []) {
+    const project = item?.project || "unknown";
+    const status = item?.status || "review";
+    const action = item?.action || "review";
+    const key = [project, status, action].join("|");
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        project,
+        status,
+        action,
+        task: item?.task || status,
+        items: [],
+      });
+    }
+    groups.get(key).items.push(item);
+  }
+  return [...groups.values()].sort((a, b) => {
+    const byPriority = waitingPriority(a) - waitingPriority(b);
+    if (byPriority !== 0) return byPriority;
+    return String(a.project).localeCompare(String(b.project));
+  });
+}
+
 function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const [selectedId, setSelectedId] = useState("");
   const [density, setDensity] = useState(() => {
@@ -1913,6 +1951,15 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   });
   const edges = map.edges || [];
   const waiting = map.waiting_for_user || [];
+  const waitingGroups = groupWaitingItems(waiting);
+  const visibleWaitingGroups = waitingGroups.slice(
+    0,
+    EXEC_WAITING_VISIBLE_LIMIT,
+  );
+  const waitingOverflow = Math.max(
+    0,
+    waitingGroups.length - visibleWaitingGroups.length,
+  );
   const counts = map.counts || {};
   const hiddenStateSamples =
     Number(counts.state_samples || 0) + uiHiddenStateSamples;
@@ -2057,45 +2104,68 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
             <button onClick=${copyMap} disabled=${!events.length}>copy</button>
           </div>
         </div>`}
-    ${waiting.length
+    ${waitingGroups.length
       ? html`<div class="exec-map-waiting">
           <b>нужен ты</b>
-          ${waiting.slice(0, 4).map((item) => {
-            const action = String(item.action || "");
-            const status = String(item.status || "");
-            const canApprove =
-              action === "approve" ||
-              status === "pending" ||
-              status === "needs_permission";
-            const canRetry =
-              action.includes("retry") ||
-              ["failed", "rejected", "cancelled"].includes(status);
-            return html`<span>
-              ${item.project}: ${item.task || item.status}
-              ${canApprove
-                ? html`<button onClick=${() => approveDel(item.id)}>
-                      approve
-                    </button>
-                    <button onClick=${() => rejectDel(item.id)}>reject</button>`
-                : null}
-              ${canRetry
-                ? html`<button
-                      onClick=${() => {
-                        composerDraftText.value = `[DELEGATE_RETRY:${item.id}]Retry this delegation through the selected available provider. Report exact blocker/result.[/DELEGATE_RETRY]`;
-                      }}
-                    >
-                      retry
-                    </button>
-                    <button
-                      onClick=${() => {
-                        composerDraftText.value = `[DELEGATE_STATUS:${item.id}]\n[DELEGATE_CLEANUP:1]`;
-                      }}
-                    >
-                      status/archive
-                    </button>`
-                : null}
-            </span>`;
-          })}
+          <div class="exec-map-waiting-head">
+            <b>нужен ты</b>
+            <span
+              >${waiting.length} решений / ${waitingGroups.length} групп</span
+            >
+            ${waitingOverflow
+              ? html`<em>еще ${waitingOverflow} групп скрыто</em>`
+              : null}
+          </div>
+          <div class="exec-map-waiting-grid">
+            ${visibleWaitingGroups.map((group) => {
+              const item = group.items[0] || group;
+              const action = String(item.action || "");
+              const status = String(item.status || "");
+              const canApprove =
+                action === "approve" ||
+                status === "pending" ||
+                status === "needs_permission";
+              const canRetry =
+                action.includes("retry") ||
+                ["failed", "rejected", "cancelled"].includes(status);
+              return html`<div class="exec-map-waiting-item">
+                <div class="exec-map-waiting-item-top">
+                  <b>${group.project}</b>
+                  <span>${group.status}</span>
+                  ${group.items.length > 1
+                    ? html`<em>${group.items.length}x</em>`
+                    : null}
+                </div>
+                <p>${group.task || group.status}</p>
+                <div class="exec-map-waiting-actions">
+                  ${canApprove
+                    ? html`<button onClick=${() => approveDel(item.id)}>
+                          approve
+                        </button>
+                        <button onClick=${() => rejectDel(item.id)}>
+                          reject
+                        </button>`
+                    : null}
+                  ${canRetry
+                    ? html`<button
+                          onClick=${() => {
+                            composerDraftText.value = `[DELEGATE_RETRY:${item.id}]Retry this delegation through the selected available provider. Report exact blocker/result.[/DELEGATE_RETRY]`;
+                          }}
+                        >
+                          retry
+                        </button>
+                        <button
+                          onClick=${() => {
+                            composerDraftText.value = `[DELEGATE_STATUS:${item.id}]\n[DELEGATE_CLEANUP:1]`;
+                          }}
+                        >
+                          status/archive
+                        </button>`
+                    : null}
+                </div>
+              </div>`;
+            })}
+          </div>
         </div>`
       : null}
     ${!events.length && hiddenStateSamples
@@ -2329,6 +2399,7 @@ function ChatSidebar() {
   const [unreadLive, setUnreadLive] = useState(0);
   const [routeChangeNote, setRouteChangeNote] = useState("");
   const [composerText, setComposerText] = useState("");
+  const [showAllRenderedMessages, setShowAllRenderedMessages] = useState(false);
   const lastLiveMarker = useRef("");
   const duoEnabled = chatCollabMode.value === "duo";
   const duoView = duoEnabled ? normalizeDuoView(activeRoomTab.value) : "chat";
@@ -2656,6 +2727,7 @@ function ChatSidebar() {
     stickToBottom.current = true;
     setViewportMode("following");
     setUnreadLive(0);
+    setShowAllRenderedMessages(false);
     setTimeout(() => {
       maybeScrollToBottom(true);
     }, 100);
@@ -3065,6 +3137,17 @@ function ChatSidebar() {
     contextCount: (contextAttachments.value || []).length,
     fileCount: attFiles.value.length,
   });
+  const allChatMessages = sideMessages.value || [];
+  const renderedHiddenCount = showAllRenderedMessages
+    ? 0
+    : Math.max(0, allChatMessages.length - CHAT_RENDER_RECENT_LIMIT);
+  const renderedMessages = renderedHiddenCount
+    ? allChatMessages.slice(renderedHiddenCount)
+    : allChatMessages;
+  const compactPaTraceBeforeIndex = Math.max(
+    0,
+    allChatMessages.length - PA_TRACE_FULL_RECENT_COUNT,
+  );
   return html`<div
     class="chat-side"
     style=${chatWidth ? `width:${chatWidth}px` : ""}
@@ -3543,7 +3626,25 @@ function ChatSidebar() {
               : `load older (${sideMessages.value.length}/${chatPageInfo.value.total})`}
           </button>`
         : null}
-      ${sideMessages.value.map((m, i) => html`<${ChatMsg} key=${i} m=${m} />`)}
+      ${renderedHiddenCount
+        ? html`<div class="chat-render-window">
+            <b>${renderedHiddenCount} старых сообщений свернуто</b>
+            <span
+              >История не потеряна. DOM сокращен, чтобы чат не подвисал.</span
+            >
+            <button onClick=${() => setShowAllRenderedMessages(true)}>
+              показать все загруженные
+            </button>
+          </div>`
+        : null}
+      ${renderedMessages.map((m, i) => {
+        const absoluteIndex = renderedHiddenCount + i;
+        return html`<${ChatMsg}
+          key=${absoluteIndex}
+          m=${m}
+          compactPaTrace=${absoluteIndex < compactPaTraceBeforeIndex}
+        />`;
+      })}
       ${duoCollaborateMode
         ? html`<${DuoLiveStatus} session=${duoSession} />`
         : null}
@@ -4300,10 +4401,16 @@ ${row.output}</pre
   </details>`;
 }
 
-function PaTrace({ blocks, commands }) {
-  const [filter, setFilter] = useState("all");
+function PaTrace({ blocks, commands, compact = false }) {
   const [expanded, setExpanded] = useState(false);
   const rows = buildPaTraceRows(blocks, commands);
+  const [filter, setFilter] = useState(() =>
+    compact &&
+    rows.some((row) => row.status === "warning" || row.status === "running")
+      ? "problems"
+      : "all",
+  );
+  const [showRows, setShowRows] = useState(!compact);
   if (!rows.length) return null;
   const commandCount = rows.length;
   const warningCount = rows.filter((row) => row.status === "warning").length;
@@ -4319,12 +4426,17 @@ function PaTrace({ blocks, commands }) {
     if (filter === "outputs") return row.output && !isNoiseResult(row.output);
     return true;
   });
+  const compactRows =
+    compact && !showRows
+      ? visibleRows.slice(0, PA_TRACE_COMPACT_ROW_LIMIT)
+      : visibleRows;
+  const hiddenRowCount = Math.max(0, visibleRows.length - compactRows.length);
   const headline = runningCount
     ? `${runningCount} running`
     : warningCount
       ? `${warningCount} warning${warningCount === 1 ? "" : "s"}`
       : `${doneCount}/${commandCount} complete`;
-  return html`<div class="run-card">
+  return html`<div class=${`run-card ${compact ? "compact" : ""}`}>
     <div class="run-head">
       <div class="run-head-main">
         <span class="run-kicker">run</span>
@@ -4363,12 +4475,17 @@ function PaTrace({ blocks, commands }) {
         <button type="button" onClick=${() => setExpanded(!expanded)}>
           ${expanded ? "collapse" : "expand"}
         </button>
+        ${compact
+          ? html`<button type="button" onClick=${() => setShowRows(!showRows)}>
+              ${showRows ? "hide rows" : "show rows"}
+            </button>`
+          : null}
         <button type="button" onClick=${() => copyTraceRows(rows)}>copy</button>
       </div>
     </div>
     <div class="run-table">
-      ${visibleRows.length
-        ? visibleRows.map(
+      ${compactRows.length
+        ? compactRows.map(
             (row, i) =>
               html`<${PaTraceRow}
                 row=${row}
@@ -4378,6 +4495,11 @@ function PaTrace({ blocks, commands }) {
               />`,
           )
         : html`<div class="run-empty-filter">No rows for this filter.</div>`}
+      ${hiddenRowCount
+        ? html`<button class="run-show-more" onClick=${() => setShowRows(true)}>
+            show ${hiddenRowCount} more row${hiddenRowCount === 1 ? "" : "s"}
+          </button>`
+        : null}
     </div>
   </div>`;
 }
@@ -4421,7 +4543,7 @@ function DuoLiveStatus({ session }) {
     </div>`;
   })}`;
 }
-function ChatMsg({ m }) {
+function ChatMsg({ m, compactPaTrace = false }) {
   if (!m.msg && !m.chain?.length) return null;
   // System messages — enhanced styling
   if (m.role === "system") {
@@ -4519,6 +4641,7 @@ function ChatMsg({ m }) {
               key=${"pat" + i}
               blocks=${b.blocks}
               commands=${b.commands}
+              compact=${compactPaTrace}
             />`;
           if (b.type === "system")
             return html`<div
