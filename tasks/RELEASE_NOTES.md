@@ -1,3 +1,14 @@
+# Agent OS 0.3.24
+
+- Reworked chat streaming performance: desktop polling now uses byte offsets and reads only new JSONL bytes instead of reparsing the whole stream buffer.
+- Stopped writing the full accumulated assistant text into every Claude `text_delta`; stream files now store deltas plus length metadata, preventing quadratic file growth on long answers.
+- Batched frontend stream rendering so text/tool/thinking events update chat once per poll cycle instead of mutating global signals for every stream line.
+- Throttled live-draft persistence and provider heartbeat UI updates, reducing synchronous `localStorage` writes and full sidebar rerenders during long silent provider waits.
+- Decoupled execution-map refresh from every stream block and reduced active-run polling pressure while keeping delegations and operation state live.
+- Compact operation snapshots now return bounded operation/event payloads, while heartbeat state remains available for the execution map without filling `.operations.jsonl`.
+- Added `check-stream-performance.mjs` to the UI release gate so the stream contract cannot silently regress back to full-buffer polling or full-text deltas.
+- Updater `latest.json` now includes only the current release notes section instead of the full release history.
+
 # Agent OS 0.3.23
 
 - Stopped Live Execution Flow from rendering lifecycle noise as timeline nodes: `run_started`, `provider_started`, `provider_heartbeat`, and `model_output_delta` are now lane state, not map events.

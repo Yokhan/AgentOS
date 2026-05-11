@@ -212,6 +212,41 @@ fn operation_rows(state: &AppState, project_filter: &str, limit: usize) -> Vec<V
             })
         })
         .collect();
+    for operation in operations.values() {
+        let Some(heartbeat_ts) = operation.heartbeat_ts.clone() else {
+            continue;
+        };
+        let project = clean_project(&operation.project);
+        if !project_filter.trim().is_empty() && project != project_filter {
+            continue;
+        }
+        let stored_current_heartbeat = operation
+            .events
+            .iter()
+            .any(|event| event.kind == "provider_heartbeat" && event.ts == heartbeat_ts);
+        if stored_current_heartbeat {
+            continue;
+        }
+        rows.push(json!({
+            "source": if operation.actor == "project_agent" { "delegation" } else { "chat" },
+            "kind": "provider_heartbeat",
+            "status": operation.status.clone(),
+            "title": operation.phase.clone(),
+            "detail": operation.current_action.clone(),
+            "project": project,
+            "provider": operation.provider.clone().unwrap_or_else(|| operation.actor.clone()),
+            "model": operation.model.clone().unwrap_or_default(),
+            "ts": heartbeat_ts,
+            "semantic": false,
+            "operation_id": operation.operation_id.clone(),
+            "parent_id": operation.parent_id.clone(),
+            "root_id": operation.root_id.clone(),
+            "event_id": format!("state-heartbeat-{}", safe_id(&operation.operation_id)),
+            "waiting_for": operation.waiting_for.clone(),
+            "blocked_by": operation.blocked_by.clone(),
+            "heartbeat_beat": operation.heartbeat_beat
+        }));
+    }
     rows.sort_by(|a, b| {
         field(a, "ts")
             .cmp(&field(b, "ts"))

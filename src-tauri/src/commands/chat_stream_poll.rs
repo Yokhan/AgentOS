@@ -4,6 +4,7 @@
 use super::process_manager::{clear_activity, is_cancelled, kill_existing, request_cancel};
 use crate::state::AppState;
 use serde_json::{json, Value};
+use std::io::{Read, Seek, SeekFrom};
 use std::sync::Arc;
 use tauri::State;
 
@@ -70,27 +71,50 @@ pub fn poll_stream(
         .map(|pids| pids.contains_key(&chat_key))
         .unwrap_or(false);
     let running = pid_running || activity.is_some();
-    let content = std::fs::read_to_string(&buf_path).unwrap_or_default();
-    let lines: Vec<&str> = content.lines().collect();
+    let file_len = std::fs::metadata(&buf_path)
+        .map(|meta| meta.len() as usize)
+        .unwrap_or(0);
+    let safe_offset = if offset <= file_len { offset } else { 0 };
 
-    if offset >= lines.len() {
-        return json!({
+    let empty = |offset_value: usize, read_bytes: usize| {
+        json!({
             "events": [],
-            "offset": offset,
+            "offset": offset_value,
+            "byte_offset": offset_value,
+            "size": file_len,
+            "read_bytes": read_bytes,
             "done": false,
             "running": running,
             "cancelled": is_cancelled(&state, &chat_key),
             "project": chat_key,
             "run_id": run_id,
             "activity": activity
-        });
+        })
+    };
+
+    if safe_offset >= file_len {
+        return empty(safe_offset, 0);
     }
 
-    let new_lines = &lines[offset..];
+    let mut file = match std::fs::File::open(&buf_path) {
+        Ok(file) => file,
+        Err(_) => return empty(safe_offset, 0),
+    };
+    let _ = file.seek(SeekFrom::Start(safe_offset as u64));
+    let mut content = String::new();
+    if file.read_to_string(&mut content).is_err() {
+        return empty(safe_offset, 0);
+    }
+
+    let Some(last_newline) = content.rfind('\n') else {
+        return empty(safe_offset, 0);
+    };
+    let complete_content = &content[..last_newline];
+    let next_offset = safe_offset + last_newline + 1;
     let mut events: Vec<Value> = Vec::new();
     let mut done = false;
 
-    for line in new_lines {
+    for line in complete_content.lines() {
         if let Ok(evt) = serde_json::from_str::<Value>(line) {
             if evt.get("type").and_then(|t| t.as_str()) == Some("done") {
                 done = true;
@@ -101,7 +125,10 @@ pub fn poll_stream(
 
     json!({
         "events": events,
-        "offset": lines.len(),
+        "offset": next_offset,
+        "byte_offset": next_offset,
+        "size": file_len,
+        "read_bytes": next_offset.saturating_sub(safe_offset),
         "done": done,
         "running": running,
         "cancelled": is_cancelled(&state, &chat_key),

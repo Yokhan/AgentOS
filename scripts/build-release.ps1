@@ -121,6 +121,26 @@ function Read-NormalizedText {
     return [string]::Concat((Get-Content $Path -Raw))
 }
 
+function Read-ReleaseNotesForVersion {
+    param(
+        [string]$Path,
+        [string]$Version
+    )
+
+    $text = Read-NormalizedText -Path $Path
+    $escapedVersion = [regex]::Escape($Version)
+    $match = [regex]::Match(
+        $text,
+        "(?ms)^#\s+Agent OS\s+$escapedVersion\b.*?(?=^#\s+Agent OS\s+\d|\z)"
+    )
+
+    if ($match.Success) {
+        return $match.Value.TrimEnd() + "`n"
+    }
+
+    return $text
+}
+
 function Write-Utf8NoBom {
     param(
         [string]$Path,
@@ -168,7 +188,7 @@ if (-not $UseMsi -and $nsisInstaller) {
 $notes = ""
 $releaseNotesPath = Join-Path $root "tasks\RELEASE_NOTES.md"
 if (Test-Path $releaseNotesPath) {
-    $notes = Read-NormalizedText -Path $releaseNotesPath
+    $notes = Read-ReleaseNotesForVersion -Path $releaseNotesPath -Version $version
 }
 
 $json = [ordered]@{

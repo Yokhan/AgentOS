@@ -6,6 +6,8 @@ use tauri::State;
 
 const MAX_EVENTS_PER_OPERATION: usize = 200;
 const MAX_OPERATION_EVENTS_RESPONSE: usize = 250;
+const MAX_OPERATIONS_IN_SNAPSHOT: usize = 40;
+const MAX_EVENTS_IN_SNAPSHOT_OPERATION: usize = 16;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OperationEvent {
@@ -202,6 +204,14 @@ fn event_id(ts: &str, operation_id: &str, kind: &str, len: usize) -> String {
     )
 }
 
+fn should_store_event(input: &OperationEventInput) -> bool {
+    if input.kind != "provider_heartbeat" {
+        return true;
+    }
+    let beat = input.payload.get("beat").and_then(|value| value.as_u64());
+    matches!(beat, None | Some(0 | 1)) || beat.is_some_and(|value| value % 15 == 0)
+}
+
 pub fn emit(state: &AppState, input: OperationEventInput) {
     let ts = state.now_iso();
     let root_id = input
@@ -209,6 +219,7 @@ pub fn emit(state: &AppState, input: OperationEventInput) {
         .clone()
         .or_else(|| input.parent_id.clone())
         .unwrap_or_else(|| input.operation_id.clone());
+    let store_event = should_store_event(&input);
 
     let event = {
         let mut operations = match state.operations.lock() {
@@ -304,10 +315,12 @@ pub fn emit(state: &AppState, input: OperationEventInput) {
         if is_terminal(&input.status) {
             op.completed_at = Some(ts.clone());
         }
-        op.events.push(event.clone());
-        if op.events.len() > MAX_EVENTS_PER_OPERATION {
-            let drain_count = op.events.len() - MAX_EVENTS_PER_OPERATION;
-            op.events.drain(0..drain_count);
+        if store_event {
+            op.events.push(event.clone());
+            if op.events.len() > MAX_EVENTS_PER_OPERATION {
+                let drain_count = op.events.len() - MAX_EVENTS_PER_OPERATION;
+                op.events.drain(0..drain_count);
+            }
         }
 
         if let Some(parent_id) = input.parent_id.as_ref() {
@@ -319,18 +332,24 @@ pub fn emit(state: &AppState, input: OperationEventInput) {
             }
         }
 
-        event
+        if store_event {
+            Some(event)
+        } else {
+            None
+        }
     };
 
-    let audit_path = state.root.join("tasks").join(".operations.jsonl");
-    super::jsonl::append_jsonl_logged(
-        &audit_path,
-        &json!({
-            "type": "operation_event",
-            "event": event
-        }),
-        "operation event",
-    );
+    if let Some(event) = event {
+        let audit_path = state.root.join("tasks").join(".operations.jsonl");
+        super::jsonl::append_jsonl_logged(
+            &audit_path,
+            &json!({
+                "type": "operation_event",
+                "event": event
+            }),
+            "operation event",
+        );
+    }
 }
 
 pub fn chat_actor(chat_key: &str) -> &'static str {
@@ -435,10 +454,21 @@ pub fn get_operation_snapshot(state: State<Arc<AppState>>) -> Value {
         .iter()
         .filter(|op| op.status == "needs_user" || op.waiting_for.as_deref() == Some("user"))
         .count();
+    let total_count = records.len();
+    for record in records.iter_mut() {
+        if record.events.len() > MAX_EVENTS_IN_SNAPSHOT_OPERATION {
+            let drain_count = record.events.len() - MAX_EVENTS_IN_SNAPSHOT_OPERATION;
+            record.events.drain(0..drain_count);
+        }
+    }
+    if records.len() > MAX_OPERATIONS_IN_SNAPSHOT {
+        records.truncate(MAX_OPERATIONS_IN_SNAPSHOT);
+    }
     json!({
         "operations": records,
         "active_count": active_count,
         "needs_user_count": needs_user_count,
+        "total_count": total_count,
         "updated_at": state.now_iso()
     })
 }

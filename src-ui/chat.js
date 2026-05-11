@@ -2324,7 +2324,7 @@ function ChatSidebar() {
     const saved = Number(localStorage.getItem("agentos.chatWidth") || 0);
     return saved > 0 ? Math.max(360, Math.min(560, saved)) : null;
   });
-  const showScrollBtn = signal(false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [viewportMode, setViewportMode] = useState("following");
   const [unreadLive, setUnreadLive] = useState(0);
   const [routeChangeNote, setRouteChangeNote] = useState("");
@@ -2625,12 +2625,12 @@ function ChatSidebar() {
         if (!current) return;
         current.scrollTop = current.scrollHeight;
         stickToBottom.current = true;
-        showScrollBtn.value = false;
+        setShowScrollBtn(false);
         setViewportMode("following");
         setUnreadLive(0);
       });
     } else {
-      showScrollBtn.value = true;
+      setShowScrollBtn(true);
       setViewportMode("reading");
     }
   };
@@ -2638,8 +2638,8 @@ function ChatSidebar() {
     sideMessages.value.length,
     streamText.value.length,
     streamChain.value.length,
-    activeRun.value?.updatedAt || 0,
-    curActivity.value || "",
+    activeRun.value?.status || "",
+    activeRun.value?.phase || "",
   ].join(":");
   useEffect(() => {
     const changed =
@@ -2698,9 +2698,6 @@ function ChatSidebar() {
     activeDualSession.value,
     dualBusy.value,
     activeRun.value?.status,
-    activeRun.value?.phase,
-    activeRun.value?.detail,
-    streamChain.value.length,
     Object.keys(delegations.value || {}).length,
   ]);
   useEffect(() => {
@@ -2711,9 +2708,6 @@ function ChatSidebar() {
     activeDualSession.value,
     dualBusy.value,
     activeRun.value?.status,
-    activeRun.value?.phase,
-    activeRun.value?.detail,
-    streamChain.value.length,
     Object.keys(delegations.value || {}).length,
   ]);
   useEffect(() => {
@@ -2779,7 +2773,7 @@ function ChatSidebar() {
       const el = msgsRef.current;
       const near = isNearBottom(el);
       stickToBottom.current = near;
-      showScrollBtn.value = !near;
+      setShowScrollBtn(!near);
       setViewportMode(near ? "following" : "reading");
       if (near) setUnreadLive(0);
     }
@@ -2788,14 +2782,14 @@ function ChatSidebar() {
     const el = msgsRef.current;
     if (!el || isNearBottom(el, 48)) return;
     stickToBottom.current = false;
-    showScrollBtn.value = true;
+    setShowScrollBtn(true);
     setViewportMode("reading");
   };
   const scrollToBottom = () => {
     if (msgsRef.current) {
       msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
       stickToBottom.current = true;
-      showScrollBtn.value = false;
+      setShowScrollBtn(false);
       setViewportMode("following");
       setUnreadLive(0);
     }
@@ -2811,7 +2805,7 @@ function ChatSidebar() {
       current.scrollTop =
         current.scrollHeight - beforeHeight + current.scrollTop;
       stickToBottom.current = false;
-      showScrollBtn.value = true;
+      setShowScrollBtn(true);
     });
   };
   const send = async () => {
@@ -3634,7 +3628,7 @@ function ChatSidebar() {
           </details>
         </div>`
       : null}
-    ${showScrollBtn.value
+    ${showScrollBtn
       ? html`<button
           onClick=${scrollToBottom}
           class="scroll-catchup"

@@ -760,7 +760,12 @@ fn stream_reader_loop(
                                         full_text.push_str(text);
                                         write_evt(
                                             &mut buf_file,
-                                            &json!({"type": "text_delta", "text": text, "full": full_text}),
+                                            &json!({
+                                                "type": "text_delta",
+                                                "run_id": run_id,
+                                                "text": text,
+                                                "text_len": full_text.len()
+                                            }),
                                         );
                                         if event_count % 20 == 0 {
                                             super::operation_state::emit(

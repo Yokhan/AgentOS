@@ -90,6 +90,51 @@ async function loadAppInfo() {
   }
 }
 
+let _operationSnapshotSignature = "";
+let _executionMapSignature = "";
+
+function compactOperationSnapshotSignature(snapshot) {
+  const ops = Array.isArray(snapshot?.operations) ? snapshot.operations : [];
+  return ops
+    .map((op) =>
+      [
+        op.operation_id,
+        op.status,
+        op.phase,
+        op.current_action,
+        op.waiting_for,
+        op.blocked_by,
+        Math.floor(Number(op.heartbeat_beat || 0) / 15),
+        (op.events || []).map((event) => event.id || event.ts).join(","),
+      ].join("|"),
+    )
+    .join("\n");
+}
+
+function compactExecutionMapSignature(map) {
+  if (!map || map.status !== "ok") return String(map?.status || "missing");
+  return [
+    map.project || "",
+    map.room_session_id || "",
+    JSON.stringify(map.counts || {}),
+    (map.lanes || [])
+      .map((lane) =>
+        [
+          lane.id,
+          lane.status,
+          lane.last_event_id,
+          lane.last_state_kind,
+          lane.last_state_detail,
+        ].join("|"),
+      )
+      .join("\n"),
+    (map.events || []).map((event) => event.id || event.ts).join(","),
+    (map.waiting_for_user || [])
+      .map((item) => [item.id, item.project, item.status].join("|"))
+      .join(","),
+  ].join("\n---\n");
+}
+
 async function loadOperationSnapshot() {
   if (!__IS_TAURI) {
     operationSnapshot.value = { operations: [], active_count: 0 };
@@ -97,14 +142,14 @@ async function loadOperationSnapshot() {
     return operationSnapshot.value;
   }
   try {
-    const [snapshot, events] = await Promise.all([
-      __invoke("get_operation_snapshot"),
-      __invoke("get_operation_events", { limit: 120 }).catch(() => ({
-        events: [],
-      })),
-    ]);
-    operationSnapshot.value = snapshot || { operations: [], active_count: 0 };
-    operationEvents.value = Array.isArray(events?.events) ? events.events : [];
+    const snapshot = await __invoke("get_operation_snapshot");
+    const next = snapshot || { operations: [], active_count: 0 };
+    const signature = compactOperationSnapshotSignature(next);
+    if (signature !== _operationSnapshotSignature || !operationSnapshot.value) {
+      _operationSnapshotSignature = signature;
+      operationSnapshot.value = next;
+    }
+    operationEvents.value = [];
     return operationSnapshot.value;
   } catch (e) {
     console.warn("loadOperationSnapshot:", e);
@@ -1134,7 +1179,11 @@ async function loadExecutionMap(
     limit,
   });
   if (res?.status === "ok") {
-    executionMap.value = res;
+    const signature = compactExecutionMapSignature(res);
+    if (signature !== _executionMapSignature) {
+      _executionMapSignature = signature;
+      executionMap.value = res;
+    }
     return res;
   }
   throw new Error(res?.error || "Cannot load execution map");
@@ -1752,6 +1801,50 @@ async function sendMessage(msg) {
       }
       // Collect ordered chain of blocks for rendering
       const chain = [];
+      let chainDirty = false;
+      let textDirty = false;
+      let lastDraftPersistAt = 0;
+      let lastRunPulseAt = 0;
+      let lastProviderSampleAt = 0;
+      const markChainDirty = () => {
+        chainDirty = true;
+      };
+      const setLiveText = (value) => {
+        full = value || "";
+        textDirty = true;
+      };
+      const flushStreamView = () => {
+        if (textDirty) {
+          streamText.value = full;
+          textDirty = false;
+        }
+        if (chainDirty) {
+          streamChain.value = [...chain];
+          chainDirty = false;
+        }
+      };
+      const persistDraftMaybe = (force = false) => {
+        const now = Date.now();
+        if (!force && now - lastDraftPersistAt < 2000) return;
+        persistLiveDraft(projectKey, full, chain, activeRun.value);
+        lastDraftPersistAt = now;
+      };
+      const updateRunThrottled = (patch, options = { semantic: false }) => {
+        const now = Date.now();
+        if (now - lastRunPulseAt < 900) return;
+        lastRunPulseAt = now;
+        updateActiveRun(patch, options);
+      };
+      const shouldRenderProviderStateSample = (evt) => {
+        if (!isProviderStateSampleEvent(evt)) return true;
+        const beat = Number(evt.beat || 0);
+        const now = Date.now();
+        if (beat <= 1 || beat % 15 === 0 || now - lastProviderSampleAt > 5000) {
+          lastProviderSampleAt = now;
+          return true;
+        }
+        return false;
+      };
       while (!done && pollCount < MAX_POLLS) {
         pollCount++;
         await new Promise((r) => setTimeout(r, 250));
@@ -1800,15 +1893,19 @@ async function sendMessage(msg) {
                 if (evt.type === "run_done") {
                   finalOutcome = evt.outcome || finalOutcome;
                 }
-                handleRunLifecycleEvent(evt, {
-                  project: projectKey,
-                  provider: normalizedSelection.provider,
-                  model: normalizedSelection.model,
-                  effort: normalizedSelection.effort,
-                  mode: normalizedSelection.runMode,
-                  access: normalizedSelection.accessLevel,
-                });
+                const renderStateSample = shouldRenderProviderStateSample(evt);
+                if (renderStateSample) {
+                  handleRunLifecycleEvent(evt, {
+                    project: projectKey,
+                    provider: normalizedSelection.provider,
+                    model: normalizedSelection.model,
+                    effort: normalizedSelection.effort,
+                    mode: normalizedSelection.runMode,
+                    access: normalizedSelection.accessLevel,
+                  });
+                }
                 if (
+                  renderStateSample &&
                   (evt.type === "run_progress" ||
                     evt.type === "run_heartbeat") &&
                   evt.detail
@@ -1825,8 +1922,7 @@ async function sendMessage(msg) {
                   phase: "model_output",
                   detail: "получаем текст ответа",
                 });
-                full = evt.text;
-                streamText.value = full;
+                setLiveText(evt.text || "");
                 // Merge with last text block if exists (text_deltas already created it)
                 const lastT = chain[chain.length - 1];
                 if (lastT && lastT.type === "text") {
@@ -1834,25 +1930,27 @@ async function sendMessage(msg) {
                 } else {
                   chain.push({ type: "text", text: evt.text });
                 }
-                streamChain.value = [...chain];
+                markChainDirty();
               }
               // Text delta (streaming partial) — update last text block in chain or create new one
               if (evt.type === "text_delta") {
-                updateActiveRun({
+                updateRunThrottled({
                   status: "running",
                   phase: "model_output",
                   detail: "стримится текст ответа",
                 });
-                const newFull = evt.full || full;
-                streamText.value = newFull;
-                full = newFull;
+                const newFull =
+                  typeof evt.full === "string"
+                    ? evt.full
+                    : full + (evt.text || "");
+                setLiveText(newFull);
                 const last = chain[chain.length - 1];
                 if (last && last.type === "text") {
                   last.text = newFull;
                 } else {
                   chain.push({ type: "text", text: newFull });
                 }
-                streamChain.value = [...chain];
+                markChainDirty();
               }
               // Thinking events
               if (evt.type === "thinking_start") {
@@ -1863,22 +1961,22 @@ async function sendMessage(msg) {
                 });
                 chain.push({ type: "thinking", text: "", streaming: true });
                 curActivity.value = "thinking...";
-                streamChain.value = [...chain];
+                markChainDirty();
               }
               if (evt.type === "thinking_delta") {
-                updateActiveRun({
+                updateRunThrottled({
                   status: "running",
                   phase: "thinking",
                   detail: "стримится reasoning",
                 });
                 const lt = chain.findLast((b) => b.type === "thinking");
                 if (lt) lt.text += evt.text || "";
-                streamChain.value = [...chain];
+                markChainDirty();
               }
               if (evt.type === "thinking_stop") {
                 const lt = chain.findLast((b) => b.type === "thinking");
                 if (lt) lt.streaming = false;
-                streamChain.value = [...chain];
+                markChainDirty();
               }
               // Tool use (started or complete)
               if (evt.type === "tool_use") {
@@ -1914,7 +2012,7 @@ async function sendMessage(msg) {
                   chain.push(tb);
                 }
                 tools.push({ tool: evt.tool, input: evt.input || {} });
-                streamChain.value = [...chain];
+                markChainDirty();
               }
               // Tool result — attach to last tool without result, or push standalone
               if (evt.type === "tool_result") {
@@ -1936,13 +2034,13 @@ async function sendMessage(msg) {
                   });
                 }
                 curActivity.value = "";
-                streamChain.value = [...chain];
+                markChainDirty();
               }
               // System
               if (evt.type === "system" && evt.system) {
                 curActivity.value = evt.system;
                 chain.push({ type: "system", label: evt.system });
-                streamChain.value = [...chain];
+                markChainDirty();
               }
               // PA command execution feedback
               if (
@@ -1960,7 +2058,7 @@ async function sendMessage(msg) {
                   text: evt.text || "",
                   command: evt.command || "",
                 });
-                streamChain.value = [...chain];
+                markChainDirty();
               }
               // Result stats
               if (evt.type === "result") {
@@ -1975,6 +2073,7 @@ async function sendMessage(msg) {
                   duration_ms: evt.duration_ms,
                   tokens: evt.tokens,
                 });
+                markChainDirty();
               }
               // Delegation
               if (evt.type === "delegation") {
@@ -1999,6 +2098,7 @@ async function sendMessage(msg) {
                   },
                 ]);
                 loadDelegations().catch(() => {});
+                markChainDirty();
               }
               // Done
               if (evt.type === "done") {
@@ -2033,8 +2133,9 @@ async function sendMessage(msg) {
                 }
               }
             }
+            flushStreamView();
             offset = poll.offset;
-            persistLiveDraft(projectKey, full, chain, activeRun.value);
+            if (poll.events.length) persistDraftMaybe(false);
           }
         } catch (e) {
           console.warn("poll_stream:", e);
@@ -2062,6 +2163,8 @@ async function sendMessage(msg) {
           detail: "Response timed out after 30 minutes",
         });
       }
+      flushStreamView();
+      persistDraftMaybe(true);
       // Unblock chat input immediately after poll loop exits
       isStreaming.value = false;
       curActivity.value = "";

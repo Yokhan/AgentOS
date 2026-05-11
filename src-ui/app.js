@@ -365,11 +365,8 @@ setInterval(() => {
     .then(syncRecoveredActiveRun)
     .catch(() => {});
   const now = Date.now();
-  if (now - _lastLiveProjectRefresh > 3000) {
+  if (now - _lastLiveProjectRefresh > 5000) {
     _lastLiveProjectRefresh = now;
-    loadAgents().catch(() => {});
-    loadFeed().catch(() => {});
-    loadSignals().catch(() => {});
     loadDelegations().catch(() => {});
     loadExecutionMap().catch(() => {});
     loadOperationSnapshot().catch(() => {});
