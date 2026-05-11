@@ -1,3 +1,12 @@
+# Agent OS 0.3.23
+
+- Stopped Live Execution Flow from rendering lifecycle noise as timeline nodes: `run_started`, `provider_started`, `provider_heartbeat`, and `model_output_delta` are now lane state, not map events.
+- Hid the synthetic root/context node from the visual event track so heartbeat-only waits no longer draw fake progress blocks.
+- Stabilized lane state text during provider waits: heartbeat updates no longer rewrite the visible node text every two seconds.
+- Added an operation-health context block to the orchestrator prompt so it can see provider waits, heartbeat-only runs, and user-decision blockers instead of guessing from chat output.
+- Deduplicated waiting-delegation cards in the execution map and ignored generated operation/runtime temp logs in git.
+- Added regression coverage for heartbeat-only provider waits: they must show as state, not semantic execution events.
+
 # Agent OS 0.3.22
 
 - Fixed stale chat stream races by moving provider output from a shared chat buffer to per-run stream files keyed by `run_id`.

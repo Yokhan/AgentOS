@@ -1056,7 +1056,10 @@ function ExecutionFlowStage() {
     };
   }, []);
   const laneCount = (map?.lanes || []).length;
-  const eventCount = (map?.events || []).length;
+  const eventCount =
+    map?.counts?.visual_events ??
+    map?.counts?.events ??
+    (map?.events || []).length;
   return html`<section class="main-execution-stage">
     <div class="main-execution-head">
       <div>

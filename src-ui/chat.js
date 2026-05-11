@@ -1839,6 +1839,17 @@ function executionKindLabel(kind) {
 
 function isProviderStateEvent(event) {
   const kind = String(event?.kind || "").toLowerCase();
+  if (
+    [
+      "run_started",
+      "provider_started",
+      "provider_heartbeat",
+      "model_output_delta",
+    ].includes(kind)
+  ) {
+    return true;
+  }
+  if (event?.semantic === false || event?.visible === false) return true;
   if (kind !== "progress") return false;
   const status = String(event?.status || "").toLowerCase();
   const title = String(event?.title || "").toLowerCase();
@@ -1851,6 +1862,14 @@ function isProviderStateEvent(event) {
     detail.includes("waiting for") ||
     detail.includes("still running");
   return volatileStatus && (providerPhase || providerDetail);
+}
+
+function isRenderableMapEvent(event) {
+  if (!event) return false;
+  if (isProviderStateEvent(event)) return false;
+  const kind = String(event.kind || "").toLowerCase();
+  if (kind === "root" || event.synthetic === true) return false;
+  return true;
 }
 
 function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
@@ -1870,9 +1889,7 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const big = map.big_plan || {};
   const lanes = map.lanes || [];
   const rawEvents = map.events || [];
-  const visibleRawEvents = rawEvents.filter(
-    (event) => !isProviderStateEvent(event),
-  );
+  const visibleRawEvents = rawEvents.filter(isRenderableMapEvent);
   const uiHiddenStateSamples = rawEvents.length - visibleRawEvents.length;
   const finiteNumber = (value, fallback = 0) => {
     const num = Number(value);
@@ -1899,7 +1916,25 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const counts = map.counts || {};
   const hiddenStateSamples =
     Number(counts.state_samples || 0) + uiHiddenStateSamples;
-  const eventById = new Map(events.map((event) => [event.id, event]));
+  const allEventsForLayout = rawEvents.map((event, index) => {
+    const eventIndex = finiteNumber(
+      event.event_index,
+      finiteNumber(event.sequence, index),
+    );
+    const offsetMs = finiteNumber(event.offset_ms, eventIndex * 1000);
+    return {
+      ...event,
+      _eventIndex: eventIndex,
+      _offsetMs: offsetMs,
+      _timeLabel:
+        event.time_label && !String(event.time_label).startsWith("t+")
+          ? event.time_label
+          : `#${eventIndex}`,
+    };
+  });
+  const eventById = new Map(
+    allEventsForLayout.map((event) => [event.id, event]),
+  );
   const laneIndex = new Map(lanes.map((lane, index) => [lane.id, index]));
   const selected = selectedId ? eventById.get(selectedId) : null;
   const maxEventIndex = Math.max(
@@ -2061,6 +2096,15 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
                 : null}
             </span>`;
           })}
+        </div>`
+      : null}
+    ${!events.length && hiddenStateSamples
+      ? html`<div class="exec-map-warning muted">
+          <b>смысловых событий нет</b>
+          <span>
+            Процесс жив: heartbeat скрыт из карты и показан только как состояние
+            ветки. Ждём первый model/tool/delegation output.
+          </span>
         </div>`
       : null}
     ${onlyOrchestratorLane

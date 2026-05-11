@@ -115,6 +115,12 @@ fn is_terminal_feedback(status: &str, kind: &str) -> bool {
 
 fn is_provider_state_sample(row: &Value) -> bool {
     let kind = field(row, "kind");
+    if matches!(
+        kind.as_str(),
+        "run_started" | "provider_started" | "provider_heartbeat" | "model_output_delta"
+    ) {
+        return true;
+    }
     let semantic = row.get("semantic").and_then(|v| v.as_bool());
     if semantic == Some(false) {
         return true;
@@ -134,6 +140,37 @@ fn is_provider_state_sample(row: &Value) -> bool {
         || detail.contains("still running");
 
     volatile_status && (provider_phase || provider_detail)
+}
+
+fn stable_state_detail(sample: &Value) -> String {
+    let kind = field(sample, "kind");
+    let waiting_for = field(sample, "waiting_for");
+    if kind == "provider_heartbeat" {
+        if waiting_for == "provider_output" {
+            return "waiting for provider output".to_string();
+        }
+        return "provider process is alive".to_string();
+    }
+    if kind == "provider_started" {
+        return "provider call is running".to_string();
+    }
+    if kind == "run_started" {
+        return "run started".to_string();
+    }
+    if kind == "model_output_delta" {
+        return "model is streaming output".to_string();
+    }
+    field(sample, "detail")
+}
+
+fn state_sample_weight(sample: &Value) -> u8 {
+    match field(sample, "kind").as_str() {
+        "provider_heartbeat" => 5,
+        "provider_started" => 4,
+        "model_output_delta" => 3,
+        "run_started" => 1,
+        _ => 2,
+    }
 }
 
 fn operation_rows(state: &AppState, project_filter: &str, limit: usize) -> Vec<Value> {
@@ -256,9 +293,18 @@ fn waiting_delegations(state: &AppState, project: &str) -> Vec<Value> {
         })
         .unwrap_or_default();
     items.sort_by(|a, b| b.ts.cmp(&a.ts));
+    let mut seen = HashSet::new();
     items
         .into_iter()
-        .map(|delegation| {
+        .filter_map(|delegation| {
+            let key = if delegation.id.trim().is_empty() {
+                format!("{}:{}", delegation.project, delegation.ts)
+            } else {
+                delegation.id.clone()
+            };
+            if !seen.insert(key) {
+                return None;
+            }
             let status = delegation.status.to_string();
             let action = match status.as_str() {
                 "pending" | "needs_permission" => "approve",
@@ -266,7 +312,7 @@ fn waiting_delegations(state: &AppState, project: &str) -> Vec<Value> {
                 "rejected" | "cancelled" => "review_or_archive",
                 _ => "review",
             };
-            json!({
+            Some(json!({
                 "id": delegation.id,
                 "project": delegation.project,
                 "status": status,
@@ -274,7 +320,7 @@ fn waiting_delegations(state: &AppState, project: &str) -> Vec<Value> {
                 "action": action,
                 "ts": delegation.ts,
                 "started_at": delegation.started_at
-            })
+            }))
         })
         .collect()
 }
@@ -369,7 +415,14 @@ pub fn build_execution_map(
         .filter_map(|row| {
             if is_provider_state_sample(&row) {
                 state_sample_count += 1;
-                latest_state_samples.insert(lane_id_for(&row), row);
+                let lane_id = lane_id_for(&row);
+                let replace = latest_state_samples
+                    .get(&lane_id)
+                    .map(|existing| state_sample_weight(&row) >= state_sample_weight(existing))
+                    .unwrap_or(true);
+                if replace {
+                    latest_state_samples.insert(lane_id, row);
+                }
                 None
             } else {
                 Some(row)
@@ -405,7 +458,9 @@ pub fn build_execution_map(
         "provider": "orchestrator",
         "model": "",
         "ts": fallback_ts,
-        "sequence": 0
+        "sequence": 0,
+        "synthetic": true,
+        "visible": !rows.is_empty()
     });
 
     let mut lanes: HashMap<String, Value> = HashMap::new();
@@ -595,6 +650,16 @@ pub fn build_execution_map(
     }
 
     enrich_event_times(&mut events);
+    let visual_event_count = events
+        .iter()
+        .filter(|event| {
+            field(event, "kind") != "root"
+                && event
+                    .get("visible")
+                    .and_then(|value| value.as_bool())
+                    .unwrap_or(true)
+        })
+        .count();
 
     let mut lane_values: Vec<Value> = lanes
         .into_iter()
@@ -618,7 +683,7 @@ pub fn build_execution_map(
                     );
                     obj.insert(
                         "last_state_detail".to_string(),
-                        json!(field(sample, "detail")),
+                        json!(stable_state_detail(sample)),
                     );
                     obj.insert("last_state_ts".to_string(), json!(field(sample, "ts")));
                 }
@@ -664,6 +729,7 @@ pub fn build_execution_map(
         "counts": {
             "lanes": lane_values.len(),
             "events": events.len(),
+            "visual_events": visual_event_count,
             "edges": edges.len(),
             "state_samples": state_sample_count,
             "source": rows_source,
@@ -902,6 +968,73 @@ mod tests {
             .as_str()
             .unwrap_or_default()
             .contains("waiting for provider output"));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn operation_provider_wait_is_state_only_until_semantic_output() {
+        let root = test_root("operation-provider-wait-state");
+        let state = AppState::new(root.clone());
+        let operation_id = "chat:test-run".to_string();
+
+        crate::commands::operation_state::emit(
+            &state,
+            crate::commands::operation_state::OperationEventInput::new(
+                operation_id.clone(),
+                "orchestrator",
+                "_orchestrator",
+                "run_started",
+                "queued",
+                "running",
+                "Run accepted",
+            ),
+        );
+        crate::commands::operation_state::emit(
+            &state,
+            crate::commands::operation_state::OperationEventInput::new(
+                operation_id.clone(),
+                "orchestrator",
+                "_orchestrator",
+                "provider_started",
+                "provider",
+                "running",
+                "Provider call started",
+            )
+            .waiting_for("provider_output"),
+        );
+        crate::commands::operation_state::emit(
+            &state,
+            crate::commands::operation_state::OperationEventInput::new(
+                operation_id,
+                "orchestrator",
+                "_orchestrator",
+                "provider_heartbeat",
+                "provider",
+                "running",
+                "Provider process is alive",
+            )
+            .heartbeat()
+            .detail("Codex subprocess pid=42 is still running; waiting for provider output (322s).")
+            .waiting_for("provider_output")
+            .payload(json!({"beat": 12})),
+        );
+
+        let result = build_execution_map(&state, None, None, 50);
+        assert_eq!(result["counts"]["visual_events"], 0);
+        assert_eq!(result["counts"]["state_samples"], 3);
+        assert_eq!(result["events"][0]["kind"], "root");
+        assert_eq!(result["events"][0]["visible"], false);
+        let orchestrator = result["lanes"]
+            .as_array()
+            .expect("lanes")
+            .iter()
+            .find(|lane| lane["id"] == "orchestrator")
+            .expect("orchestrator lane");
+        assert_eq!(
+            orchestrator["last_state_detail"],
+            "waiting for provider output"
+        );
 
         let _ = std::fs::remove_dir_all(root);
     }

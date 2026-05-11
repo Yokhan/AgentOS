@@ -349,6 +349,79 @@ pub fn delegation_operation_id(id: &str) -> String {
     format!("delegation:{}", id)
 }
 
+pub fn build_operation_context(state: &AppState) -> String {
+    let operations = match state.operations.lock() {
+        Ok(ops) => ops,
+        Err(e) => e.into_inner(),
+    };
+    let mut active: Vec<&OperationRecord> = operations
+        .values()
+        .filter(|op| !is_terminal(&op.status))
+        .collect();
+    active.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    if active.is_empty() {
+        return String::new();
+    }
+
+    let provider_waits = active
+        .iter()
+        .filter(|op| op.waiting_for.as_deref() == Some("provider_output"))
+        .count();
+    let needs_user = active
+        .iter()
+        .filter(|op| op.status == "needs_user" || op.waiting_for.as_deref() == Some("user"))
+        .count();
+    let heartbeat_only = active
+        .iter()
+        .filter(|op| {
+            op.waiting_for.as_deref() == Some("provider_output") && op.last_semantic_event.is_none()
+        })
+        .count();
+
+    let mut lines = Vec::new();
+    for op in active.iter().take(8) {
+        let provider = op.provider.as_deref().unwrap_or(op.actor.as_str());
+        let model = op.model.as_deref().unwrap_or("auto");
+        let waiting = op.waiting_for.as_deref().unwrap_or("-");
+        let last = op
+            .last_semantic_event
+            .as_deref()
+            .unwrap_or("no semantic event yet");
+        let heartbeat = op
+            .heartbeat_beat
+            .map(|beat| format!("beat #{beat}"))
+            .unwrap_or_else(|| "no heartbeat".to_string());
+        lines.push(format!(
+            "- {} [{} {}] status={} phase={} waiting={} action=\"{}\" last=\"{}\" heartbeat={}",
+            op.project,
+            provider,
+            model,
+            op.status,
+            op.phase,
+            waiting,
+            crate::commands::claude_runner::safe_truncate(&op.current_action, 120),
+            crate::commands::claude_runner::safe_truncate(last, 120),
+            heartbeat
+        ));
+    }
+
+    format!(
+        "[OPERATION HEALTH]\n\
+         Active operations: {}. Provider waits: {}. Needs user: {}. Heartbeat-only waits: {}.\n\
+         Heartbeat is only process liveness, not meaningful progress. Do not treat heartbeat-only waits as completed work.\n\
+         If only heartbeat is changing and there is no semantic event, explicitly say the provider is still silent, then either continue an independent ready route or state the blocker.\n\
+         If needs_user > 0, summarize the exact user decision needed before starting more work.\n\
+         If the execution map looks noisy, prefer cleanup/status commands over repeating broad dashboard scans.\n\
+         {}\n\
+         [END OPERATION HEALTH]\n",
+        active.len(),
+        provider_waits,
+        needs_user,
+        heartbeat_only,
+        lines.join("\n")
+    )
+}
+
 #[tauri::command]
 pub fn get_operation_snapshot(state: State<Arc<AppState>>) -> Value {
     let operations = match state.operations.lock() {

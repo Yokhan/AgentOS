@@ -940,6 +940,13 @@
 .exec-map-warning span {
     color: var(--t2);
 }
+.exec-map-warning.muted {
+    border-color: color-mix(in srgb, var(--border) 70%, transparent);
+    background: color-mix(in srgb, var(--sf) 66%, transparent);
+}
+.exec-map-warning.muted b {
+    color: var(--t3);
+}
 .exec-map-body {
     display: grid;
     grid-template-columns: 170px minmax(0, 1fr);

@@ -15,9 +15,11 @@ tasks/.work-items.json
 tasks/.file-leases.json
 tasks/.stream-*.jsonl
 tasks/.running-tasks.json
+tasks/.running-tasks.tmp
 tasks/.delegations.json
 tasks/.delegation-log.jsonl
 tasks/.audit-log.jsonl
+tasks/.operations.jsonl
 tasks/.signals.jsonl
 tasks/.strategies.json
 tasks/agent-os.log
