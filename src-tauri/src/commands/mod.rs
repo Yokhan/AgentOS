@@ -35,6 +35,7 @@ pub mod inbox;
 pub mod jsonl;
 pub mod memory_ext;
 pub mod multi_agent;
+pub mod operation_state;
 pub mod ops;
 pub mod pa_commands;
 pub mod pa_commands_deleg;

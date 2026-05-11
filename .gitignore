@@ -17,6 +17,8 @@ tasks/.stream-*.jsonl
 tasks/.running-tasks.json
 tasks/.delegations.json
 tasks/.delegation-log.jsonl
+tasks/.audit-log.jsonl
+tasks/.signals.jsonl
 tasks/.strategies.json
 tasks/agent-os.log
 tasks/pa-memory.jsonl

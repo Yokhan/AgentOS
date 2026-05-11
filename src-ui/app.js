@@ -48,6 +48,7 @@ import {
   loadDualSession,
   loadActiveScope,
   loadExecutionMap,
+  loadOperationSnapshot,
   loadAppInfo,
 } from "/api.js";
 import { App } from "/views.js";
@@ -292,6 +293,7 @@ try {
     loadAppInfo(),
     loadDelegations(),
     loadExecutionMap(),
+    loadOperationSnapshot(),
   ]);
   syncRecoveredActiveRun();
   await loadChat(normalizeProjectKey(currentProject.value || ""));
@@ -337,6 +339,7 @@ setInterval(async () => {
   loadSignals();
   loadDelegations();
   loadExecutionMap().catch(() => {});
+  loadOperationSnapshot().catch(() => {});
   await loadInbox();
   if (inboxData.value.count > 0 && !inboxData.value.needs_user) {
     const { processInbox } = await import("/api.js");
@@ -369,5 +372,6 @@ setInterval(() => {
     loadSignals().catch(() => {});
     loadDelegations().catch(() => {});
     loadExecutionMap().catch(() => {});
+    loadOperationSnapshot().catch(() => {});
   }
 }, 1000);

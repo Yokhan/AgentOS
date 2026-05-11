@@ -65,6 +65,8 @@ import {
   executionTimeline,
   executionMap,
   eventContract,
+  operationSnapshot,
+  operationEvents,
   permData,
 } from "/store.js";
 import {
@@ -1053,6 +1055,115 @@ function LiveRunHud() {
   </div>`;
 }
 
+function isTerminalOperationStatus(status) {
+  return ["done", "failed", "cancelled"].includes(String(status || ""));
+}
+
+function ageLabel(ts) {
+  if (!ts) return "нет данных";
+  const ms = Date.now() - new Date(ts).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "только что";
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return `${sec}с назад`;
+  const min = Math.floor(sec / 60);
+  const rest = sec % 60;
+  if (min < 60) return rest ? `${min}м ${rest}с назад` : `${min}м назад`;
+  const hours = Math.floor(min / 60);
+  return `${hours}ч ${min % 60}м назад`;
+}
+
+function pickOperation() {
+  const ops = Array.isArray(operationSnapshot.value?.operations)
+    ? operationSnapshot.value.operations
+    : [];
+  return (
+    ops.find((op) => !isTerminalOperationStatus(op.status)) || ops[0] || null
+  );
+}
+
+function OperationLiveBar() {
+  clock.value;
+  const [open, setOpen] = useState(false);
+  const op = pickOperation();
+  const run = activeRun.value;
+  if (!op && !run) return null;
+  const fallback = !op && run;
+  const status = fallback ? run.status || "running" : op.status || "running";
+  const phase = fallback ? run.phase || "run" : op.phase || "run";
+  const actor = fallback ? "frontend run" : op.actor || "operation";
+  const provider = fallback ? run.provider || "" : op.provider || "";
+  const model = fallback ? run.model || "" : op.model || "";
+  const project = fallback
+    ? run.project || "_orchestrator"
+    : op.project || "_orchestrator";
+  const action = fallback
+    ? run.detail || curActivity.value || "ожидаем ответ"
+    : op.current_action || op.last_semantic_event || "операция активна";
+  const semanticTs = fallback ? run.lastSemanticAt : op.last_semantic_ts;
+  const heartbeatTs = fallback ? run.heartbeatAt : op.heartbeat_ts;
+  const semanticAge =
+    typeof semanticTs === "number"
+      ? formatRunDuration((Date.now() - semanticTs) / 1000) + " назад"
+      : ageLabel(semanticTs);
+  const heartbeatAge =
+    typeof heartbeatTs === "number"
+      ? formatRunDuration((Date.now() - heartbeatTs) / 1000) + " назад"
+      : ageLabel(heartbeatTs);
+  const waiting = fallback ? run.phase || "" : op.waiting_for || "";
+  const blocked = fallback ? "" : op.blocked_by || "";
+  const children = fallback ? 0 : (op.children || []).length;
+  const eventCount = fallback
+    ? run.events?.length || 0
+    : op.events?.length || operationEvents.value.length || 0;
+  const events = fallback
+    ? (run.events || []).slice(-8)
+    : (op.events || operationEvents.value || [])
+        .filter((evt) => evt?.semantic !== false)
+        .slice(-8);
+  const cls = isTerminalOperationStatus(status)
+    ? status
+    : status === "needs_user"
+      ? "needs-user"
+      : "running";
+  return html`<section class="operation-live-bar ${cls}">
+    <div class="operation-live-top">
+      <span class="operation-pulse"></span>
+      <strong>${actor}</strong>
+      <span>${project}</span>
+      ${provider || model
+        ? html`<span>${provider}${model ? " / " + model : ""}</span>`
+        : null}
+      <em>${phase} / ${status}</em>
+    </div>
+    <div class="operation-live-action">${action}</div>
+    <div class="operation-live-meta">
+      <span>смысл: ${semanticAge}</span>
+      <span>heartbeat: ${heartbeatAge}</span>
+      ${waiting ? html`<span>ждём: ${waiting}</span>` : null}
+      ${blocked
+        ? html`<span class="operation-blocked">блокер: ${blocked}</span>`
+        : null}
+      <span>${children} дочерних</span>
+      <span>${eventCount} событий</span>
+      <button type="button" onClick=${() => setOpen(!open)}>
+        ${open ? "скрыть" : "детали"}
+      </button>
+    </div>
+    ${open && events.length
+      ? html`<div class="operation-live-events">
+          ${events.map(
+            (evt) =>
+              html`<div class="operation-live-event" key=${evt.id || evt.ts}>
+                <b>${evt.kind || evt.type || "event"}</b>
+                <span>${evt.title || evt.detail || evt.phase || ""}</span>
+                <em>${evt.ts ? ageLabel(evt.ts) : ""}</em>
+              </div>`,
+          )}
+        </div>`
+      : null}
+  </section>`;
+}
+
 function copyLiveOutput() {
   const textParts = [];
   if (streamText.value) textParts.push(streamText.value);
@@ -1183,6 +1294,8 @@ function LiveStatusStrip() {
             if (!__invoke || !canStop) return;
             __invoke("stop_chat", {
               project: projectParam(currentProject.value || "") || null,
+              runId:
+                activeRun.value?.providerRunId || activeRun.value?.id || null,
             })
               .then((res) =>
                 showToast(
@@ -3108,7 +3221,10 @@ function ChatSidebar() {
       </span>
     </div>
     ${isDrag.value ? html`<div class="drop-zone">Drop files here</div>` : null}
-    <${LiveStatusStrip} />
+    <${OperationLiveBar} />
+    ${(operationSnapshot.value?.operations || []).length
+      ? null
+      : html`<${LiveStatusStrip} />`}
     <${ContextChips}
       items=${contextAttachments.value || []}
       onRemove=${removeContextAttachment}
@@ -3643,6 +3759,10 @@ function ChatSidebar() {
               __invoke &&
                 __invoke("stop_chat", {
                   project: projectParam(currentProject.value || "") || null,
+                  runId:
+                    activeRun.value?.providerRunId ||
+                    activeRun.value?.id ||
+                    null,
                 })
                   .then((res) => {
                     showToast(

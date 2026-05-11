@@ -49,6 +49,7 @@ fn spawn_provider_heartbeat(
     chat_key: String,
     stream_buf: std::path::PathBuf,
     run_id: String,
+    operation_id: String,
     active: Arc<AtomicBool>,
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
@@ -101,6 +102,27 @@ fn spawn_provider_heartbeat(
                     "ts": state.now_iso()
                 }),
                 "stream provider heartbeat",
+            );
+            super::operation_state::emit(
+                &state,
+                super::operation_state::OperationEventInput::new(
+                    operation_id.clone(),
+                    super::operation_state::chat_actor(&chat_key),
+                    chat_key.clone(),
+                    "provider_heartbeat",
+                    "provider",
+                    "running",
+                    "Provider process is alive",
+                )
+                .heartbeat()
+                .detail(detail)
+                .waiting_for("provider_output")
+                .payload(json!({
+                    "run_id": run_id.as_str(),
+                    "pid": pid,
+                    "beat": beat,
+                    "elapsed_ms": elapsed * 1000
+                })),
             );
         }
     })
@@ -226,12 +248,6 @@ pub async fn stream_chat(
     clear_cancel(&state, &chat_key);
 
     // Stream buffer file — per chat_key so multiple chats don't collide
-    let stream_buf = state
-        .root
-        .join("tasks")
-        .join(format!(".stream-{}.jsonl", chat_key));
-    let _ = std::fs::write(&stream_buf, ""); // Clear buffer
-
     let (provider, resolved_model, resolved_effort) =
         super::provider_runner::resolve_single_chat_settings(
             &state,
@@ -241,6 +257,9 @@ pub async fn stream_chat(
             reasoning_effort.as_deref(),
         );
     let run_id = format!("{}-{}", chat_key, unix_millis());
+    let stream_buf = super::chat_stream_poll::stream_buffer_path(&state, &chat_key, Some(&run_id));
+    let _ = std::fs::write(&stream_buf, "");
+    let operation_id = super::operation_state::chat_operation_id(&run_id);
     let run_mode_label = if plan_mode { "plan" } else { "act" };
     let access_label = if plan_mode {
         "read".to_string()
@@ -270,6 +289,26 @@ pub async fn stream_chat(
         }),
         "stream run started",
     );
+    super::operation_state::emit(
+        &state,
+        super::operation_state::OperationEventInput::new(
+            operation_id.clone(),
+            super::operation_state::chat_actor(&chat_key),
+            chat_key.clone(),
+            "run_started",
+            "queued",
+            "running",
+            "Starting provider",
+        )
+        .provider(
+            Some(provider.as_str()),
+            resolved_model.as_deref().or(Some("auto")),
+            resolved_effort.as_deref(),
+        )
+        .mode(Some(run_mode_label), Some(access_label.as_str()))
+        .waiting_for("provider_start")
+        .payload(json!({"run_id": run_id.as_str()})),
+    );
 
     let allow_pa_loop = is_orchestrator && !plan_mode;
 
@@ -283,6 +322,9 @@ pub async fn stream_chat(
         let stream_buf_bg = stream_buf.clone();
         let allow_pa_loop_bg = allow_pa_loop;
         let run_id_bg = run_id.clone();
+        let operation_id_bg = operation_id.clone();
+        let run_mode_label_bg = run_mode_label.to_string();
+        let access_label_bg = access_label.clone();
         std::thread::spawn(move || {
             append_stream_event(
                 &stream_buf_bg,
@@ -296,12 +338,36 @@ pub async fn stream_chat(
                 }),
                 "stream codex provider running",
             );
+            super::operation_state::emit(
+                &state_arc,
+                super::operation_state::OperationEventInput::new(
+                    operation_id_bg.clone(),
+                    super::operation_state::chat_actor(&chat_key_bg),
+                    chat_key_bg.clone(),
+                    "provider_started",
+                    "provider",
+                    "running",
+                    "Waiting for Codex output",
+                )
+                .provider(
+                    Some(provider.as_str()),
+                    resolved_model.as_deref(),
+                    resolved_effort.as_deref(),
+                )
+                .mode(
+                    Some(run_mode_label_bg.as_str()),
+                    Some(access_label_bg.as_str()),
+                )
+                .waiting_for("provider_output")
+                .payload(json!({"run_id": run_id_bg.as_str()})),
+            );
             let heartbeat_active = Arc::new(AtomicBool::new(true));
             let heartbeat_handle = spawn_provider_heartbeat(
                 Arc::clone(&state_arc),
                 chat_key_bg.clone(),
                 stream_buf_bg.clone(),
                 run_id_bg.clone(),
+                operation_id_bg.clone(),
                 Arc::clone(&heartbeat_active),
             );
             let response = super::provider_runner::run_provider_with_chat_control(
@@ -331,9 +397,22 @@ pub async fn stream_chat(
                     }),
                     "stream codex cancelled after provider",
                 );
+                super::operation_state::emit(
+                    &state_arc,
+                    super::operation_state::OperationEventInput::new(
+                        operation_id_bg.clone(),
+                        super::operation_state::chat_actor(&chat_key_bg),
+                        chat_key_bg.clone(),
+                        "run_cancelled",
+                        "cancelled",
+                        "cancelled",
+                        "Stopped by user",
+                    )
+                    .payload(json!({"run_id": run_id_bg.as_str()})),
+                );
                 crate::commands::jsonl::append_jsonl_logged(
                     &stream_buf_bg,
-                    &json!({"type":"done","text":"","tools":[],"outcome":"cancelled"}),
+                    &json!({"type":"done","run_id":run_id_bg.as_str(),"text":"","tools":[],"outcome":"cancelled"}),
                     "stream codex cancelled done",
                 );
                 clear_activity(&state_arc, &chat_key_bg);
@@ -349,8 +428,29 @@ pub async fn stream_chat(
             super::claude_runner::log_chat_event(&state_arc.root, &chat_key_bg, &response);
             crate::commands::jsonl::append_jsonl_logged(
                 &stream_buf_bg,
-                &json!({"type":"text","text": response}),
+                &json!({"type":"text","run_id":run_id_bg.as_str(),"text": response}),
                 "stream codex text",
+            );
+            super::operation_state::emit(
+                &state_arc,
+                super::operation_state::OperationEventInput::new(
+                    operation_id_bg.clone(),
+                    super::operation_state::chat_actor(&chat_key_bg),
+                    chat_key_bg.clone(),
+                    "model_output",
+                    "model_output",
+                    "running",
+                    "Model output received",
+                )
+                .provider(
+                    Some(provider.as_str()),
+                    resolved_model.as_deref(),
+                    resolved_effort.as_deref(),
+                )
+                .payload(json!({
+                    "run_id": run_id_bg.as_str(),
+                    "text_len": response.len()
+                })),
             );
 
             let final_response = if allow_pa_loop_bg {
@@ -366,6 +466,8 @@ pub async fn stream_chat(
                     resolved_model.as_deref(),
                     resolved_effort.as_deref(),
                     "stream codex",
+                    Some(operation_id_bg.as_str()),
+                    Some(run_id_bg.as_str()),
                 )
             } else {
                 response.clone()
@@ -389,14 +491,35 @@ pub async fn stream_chat(
                 }),
                 "stream codex run done",
             );
+            super::operation_state::emit(
+                &state_arc,
+                super::operation_state::OperationEventInput::new(
+                    operation_id_bg.clone(),
+                    super::operation_state::chat_actor(&chat_key_bg),
+                    chat_key_bg.clone(),
+                    "run_done",
+                    "done",
+                    outcome,
+                    outcome,
+                )
+                .provider(
+                    Some(provider.as_str()),
+                    resolved_model.as_deref(),
+                    resolved_effort.as_deref(),
+                )
+                .payload(json!({
+                    "run_id": run_id_bg.as_str(),
+                    "text_len": final_response.len()
+                })),
+            );
             crate::commands::jsonl::append_jsonl_logged(
                 &stream_buf_bg,
-                &json!({"type":"done","text": final_response,"tools":[],"outcome":outcome}),
+                &json!({"type":"done","run_id":run_id_bg.as_str(),"text": final_response,"tools":[],"outcome":outcome}),
                 "stream codex done",
             );
             clear_activity(&state_arc, &chat_key_bg);
         });
-        return Ok(json!({"status": "streaming", "project": chat_key}));
+        return Ok(json!({"status": "streaming", "project": chat_key, "run_id": run_id}));
     }
 
     let tmp = unique_tmp("stream");
@@ -453,6 +576,8 @@ pub async fn stream_chat(
     let perm_path_bg = perm_path.clone();
     let resolved_model_bg = resolved_model.clone();
     let resolved_effort_bg = resolved_effort.clone();
+    let operation_id_bg = operation_id.clone();
+    let run_id_bg = run_id.clone();
 
     // Spawn background thread for blocking I/O — returns immediately
     std::thread::spawn(move || {
@@ -468,12 +593,13 @@ pub async fn stream_chat(
             &perm_path_bg,
             resolved_model_bg.as_deref(),
             resolved_effort_bg.as_deref(),
-            &run_id,
+            &run_id_bg,
+            &operation_id_bg,
             allow_pa_loop,
         );
     });
 
-    Ok(json!({"status": "streaming", "project": chat_key}))
+    Ok(json!({"status": "streaming", "project": chat_key, "run_id": run_id}))
 }
 
 /// Blocking reader loop — runs on a background thread
@@ -490,6 +616,7 @@ fn stream_reader_loop(
     model: Option<&str>,
     reasoning_effort: Option<&str>,
     run_id: &str,
+    operation_id: &str,
     allow_pa_loop: bool,
 ) {
     crate::log_info!(
@@ -532,6 +659,21 @@ fn stream_reader_loop(
                 "detail": "claude stream opened",
                 "ts": state.now_iso()
             }),
+        );
+        super::operation_state::emit(
+            state,
+            super::operation_state::OperationEventInput::new(
+                operation_id.to_string(),
+                super::operation_state::chat_actor(chat_key),
+                chat_key.to_string(),
+                "provider_started",
+                "provider",
+                "running",
+                "Claude stream opened",
+            )
+            .provider(Some("claude"), model, reasoning_effort)
+            .waiting_for("provider_output")
+            .payload(json!({"run_id": run_id})),
         );
 
         for line in reader.lines() {
@@ -578,6 +720,21 @@ fn stream_reader_loop(
                                         &mut buf_file,
                                         &json!({"type": "tool_use", "tool": cur_tool_name, "input": {}, "status": "started"}),
                                     );
+                                    super::operation_state::emit(
+                                        state,
+                                        super::operation_state::OperationEventInput::new(
+                                            operation_id.to_string(),
+                                            super::operation_state::chat_actor(chat_key),
+                                            chat_key.to_string(),
+                                            "tool_started",
+                                            "tool",
+                                            "running",
+                                            format!("Tool started: {}", cur_tool_name),
+                                        )
+                                        .provider(Some("claude"), model, reasoning_effort)
+                                        .current_tool(cur_tool_name.clone())
+                                        .payload(json!({"run_id": run_id, "tool": cur_tool_name})),
+                                    );
                                     write_evt(
                                         &mut buf_file,
                                         &json!({
@@ -605,6 +762,25 @@ fn stream_reader_loop(
                                             &mut buf_file,
                                             &json!({"type": "text_delta", "text": text, "full": full_text}),
                                         );
+                                        if event_count % 20 == 0 {
+                                            super::operation_state::emit(
+                                                state,
+                                                super::operation_state::OperationEventInput::new(
+                                                    operation_id.to_string(),
+                                                    super::operation_state::chat_actor(chat_key),
+                                                    chat_key.to_string(),
+                                                    "model_output_delta",
+                                                    "model_output",
+                                                    "running",
+                                                    "Streaming model output",
+                                                )
+                                                .provider(Some("claude"), model, reasoning_effort)
+                                                .payload(json!({
+                                                    "run_id": run_id,
+                                                    "text_len": full_text.len()
+                                                })),
+                                            );
+                                        }
                                     }
                                 } else if dtype == "thinking_delta" {
                                     if let Some(text) =
@@ -638,6 +814,21 @@ fn stream_reader_loop(
                                 write_evt(
                                     &mut buf_file,
                                     &json!({"type": "tool_use", "tool": cur_tool_name, "input": input, "status": "complete"}),
+                                );
+                                super::operation_state::emit(
+                                    state,
+                                    super::operation_state::OperationEventInput::new(
+                                        operation_id.to_string(),
+                                        super::operation_state::chat_actor(chat_key),
+                                        chat_key.to_string(),
+                                        "tool_completed",
+                                        "tool_complete",
+                                        "running",
+                                        format!("Tool completed: {}", cur_tool_name),
+                                    )
+                                    .provider(Some("claude"), model, reasoning_effort)
+                                    .current_tool(cur_tool_name.clone())
+                                    .payload(json!({"run_id": run_id, "tool": cur_tool_name})),
                                 );
                                 write_evt(
                                     &mut buf_file,
@@ -833,6 +1024,8 @@ fn stream_reader_loop(
             model,
             reasoning_effort,
             "stream",
+            Some(operation_id),
+            Some(run_id),
         )
     } else {
         full_text.clone()
@@ -853,11 +1046,29 @@ fn stream_reader_loop(
         }),
         "stream run done",
     );
+    super::operation_state::emit(
+        state,
+        super::operation_state::OperationEventInput::new(
+            operation_id.to_string(),
+            super::operation_state::chat_actor(chat_key),
+            chat_key.to_string(),
+            "run_done",
+            "done",
+            outcome,
+            outcome,
+        )
+        .provider(Some("claude"), model, reasoning_effort)
+        .payload(json!({
+            "run_id": run_id,
+            "text_len": final_text.len(),
+            "exit_code": exit_code
+        })),
+    );
 
     // Always write "done" marker so frontend stops polling
     crate::commands::jsonl::append_jsonl_logged(
         stream_buf,
-        &json!({"type":"done","text":final_text.trim(),"tools":tool_blocks,"outcome":outcome}),
+        &json!({"type":"done","run_id":run_id,"text":final_text.trim(),"tools":tool_blocks,"outcome":outcome}),
         "stream done marker",
     );
 }
@@ -908,6 +1119,8 @@ fn execute_pa_commands_for_agent_loop(
     stream_buf: &Path,
     response: &str,
     label_prefix: &str,
+    chat_key: &str,
+    operation_id: Option<&str>,
 ) -> PaLoopFeedback {
     let command_text = super::pa_commands::recover_bare_readonly_commands(response);
     let recovered_readonly = super::pa_commands::recoverable_bare_readonly_commands(response);
@@ -952,6 +1165,23 @@ fn execute_pa_commands_for_agent_loop(
 
         let command_label = super::pa_commands::describe_pa_command(&parsed.cmd);
         feedback.actionable += 1;
+        if let Some(operation_id) = operation_id {
+            super::operation_state::emit(
+                state,
+                super::operation_state::OperationEventInput::new(
+                    operation_id.to_string(),
+                    "agentos",
+                    chat_key.to_string(),
+                    "pa_command_started",
+                    "command",
+                    "running",
+                    format!("Running {}", command_label),
+                )
+                .current_tool(command_label.clone())
+                .waiting_for("agentos_command")
+                .payload(json!({"command": command_label.as_str()})),
+            );
+        }
         append_pa_feedback(
             state,
             chat_file,
@@ -963,6 +1193,25 @@ fn execute_pa_commands_for_agent_loop(
         );
 
         if let Some(text) = super::pa_commands::execute_pa_command(state, &parsed.cmd) {
+            if let Some(operation_id) = operation_id {
+                super::operation_state::emit(
+                    state,
+                    super::operation_state::OperationEventInput::new(
+                        operation_id.to_string(),
+                        "agentos",
+                        chat_key.to_string(),
+                        "pa_command_result",
+                        "command",
+                        "running",
+                        format!("Completed {}", command_label),
+                    )
+                    .current_tool(command_label.clone())
+                    .payload(json!({
+                        "command": command_label.as_str(),
+                        "text_len": text.len()
+                    })),
+                );
+            }
             append_pa_feedback(
                 state,
                 chat_file,
@@ -977,6 +1226,22 @@ fn execute_pa_commands_for_agent_loop(
                 .push(format!("{} -> {}", command_label, feedback_preview(&text)));
         } else {
             let done = format!("Completed {} (no output)", command_label);
+            if let Some(operation_id) = operation_id {
+                super::operation_state::emit(
+                    state,
+                    super::operation_state::OperationEventInput::new(
+                        operation_id.to_string(),
+                        "agentos",
+                        chat_key.to_string(),
+                        "pa_command_result",
+                        "command",
+                        "running",
+                        done.clone(),
+                    )
+                    .current_tool(command_label.clone())
+                    .payload(json!({"command": command_label.as_str()})),
+                );
+            }
             append_pa_feedback(
                 state,
                 chat_file,
@@ -991,6 +1256,22 @@ fn execute_pa_commands_for_agent_loop(
     }
 
     for warning in warnings {
+        if let Some(operation_id) = operation_id {
+            super::operation_state::emit(
+                state,
+                super::operation_state::OperationEventInput::new(
+                    operation_id.to_string(),
+                    "agentos",
+                    chat_key.to_string(),
+                    "pa_command_warning",
+                    "command",
+                    "needs_user",
+                    "Malformed AgentOS command",
+                )
+                .blocked_by("malformed_command")
+                .payload(json!({"warning": warning.as_str()})),
+            );
+        }
         append_pa_feedback(
             state,
             chat_file,
@@ -1042,6 +1323,8 @@ fn run_pa_agent_loop(
     model: Option<&str>,
     reasoning_effort: Option<&str>,
     label_prefix: &str,
+    operation_id: Option<&str>,
+    run_id: Option<&str>,
 ) -> String {
     let mut response = first_response.to_string();
     let mut final_response = response.clone();
@@ -1069,6 +1352,8 @@ fn run_pa_agent_loop(
             stream_buf,
             &response,
             label_prefix,
+            chat_key,
+            operation_id,
         );
         if feedback.is_empty() {
             if wait_context_sent {
@@ -1158,6 +1443,26 @@ fn run_pa_agent_loop(
             None,
             &format!("{} auto continue", label_prefix),
         );
+        if let Some(operation_id) = operation_id {
+            super::operation_state::emit(
+                state,
+                super::operation_state::OperationEventInput::new(
+                    operation_id.to_string(),
+                    "orchestrator",
+                    chat_key.to_string(),
+                    "auto_continue",
+                    "agent_loop",
+                    "running",
+                    format!("Auto-continue turn {}", turn),
+                )
+                .waiting_for("provider_output")
+                .payload(json!({
+                    "turn": turn,
+                    "actions": feedback.items.len(),
+                    "warnings": feedback.warnings
+                })),
+            );
+        }
 
         let user_message = build_auto_continue_prompt(turn, &feedback);
         let prompt = super::chat_parse::build_full_pa_prompt(state, &user_message);
@@ -1195,7 +1500,7 @@ fn run_pa_agent_loop(
         super::claude_runner::log_chat_event(state.root.as_path(), chat_key, &response);
         append_stream_event(
             stream_buf,
-            json!({"type":"text","text": response}),
+            json!({"type":"text","run_id":run_id,"text": response}),
             &format!("{} auto text", label_prefix),
         );
     }

@@ -140,6 +140,9 @@ pub fn run() {
             commands::chat_stream_poll::poll_stream,
             commands::chat_stream_poll::stop_chat,
             commands::chat_stream_poll::is_chat_running,
+            commands::operation_state::get_operation_snapshot,
+            commands::operation_state::get_operation_events,
+            commands::operation_state::clear_terminal_operations,
             // Delegation
             commands::delegation::get_delegations,
             commands::delegation_cmds::approve_delegation,

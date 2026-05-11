@@ -7,14 +7,58 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tauri::State;
 
+fn safe_stream_segment(value: &str) -> String {
+    let safe = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    if safe.is_empty() {
+        "_orchestrator".to_string()
+    } else {
+        safe
+    }
+}
+
+pub fn stream_buffer_path(
+    state: &AppState,
+    chat_key: &str,
+    run_id: Option<&str>,
+) -> std::path::PathBuf {
+    let name = match run_id.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(run_id) => format!(
+            ".stream-{}-{}.jsonl",
+            safe_stream_segment(chat_key),
+            safe_stream_segment(run_id)
+        ),
+        None => format!(".stream-{}.jsonl", safe_stream_segment(chat_key)),
+    };
+    state.root.join("tasks").join(name)
+}
+
 /// Poll stream buffer — frontend calls this every 250ms during streaming
 #[tauri::command]
-pub fn poll_stream(state: State<Arc<AppState>>, project: Option<String>, offset: usize) -> Value {
+pub fn poll_stream(
+    state: State<Arc<AppState>>,
+    project: Option<String>,
+    offset: usize,
+    run_id: Option<String>,
+) -> Value {
     let chat_key = project.unwrap_or_else(|| "_orchestrator".to_string());
-    let buf_path = state
-        .root
-        .join("tasks")
-        .join(format!(".stream-{}.jsonl", chat_key));
+    let run_id = run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let buf_path = stream_buffer_path(&state, &chat_key, run_id);
     let activity = state
         .activities
         .lock()
@@ -37,6 +81,7 @@ pub fn poll_stream(state: State<Arc<AppState>>, project: Option<String>, offset:
             "running": running,
             "cancelled": is_cancelled(&state, &chat_key),
             "project": chat_key,
+            "run_id": run_id,
             "activity": activity
         });
     }
@@ -61,23 +106,30 @@ pub fn poll_stream(state: State<Arc<AppState>>, project: Option<String>, offset:
         "running": running,
         "cancelled": is_cancelled(&state, &chat_key),
         "project": chat_key,
+        "run_id": run_id,
         "activity": activity
     })
 }
 
 /// Stop a running chat process — kills the child process
 #[tauri::command]
-pub fn stop_chat(state: State<Arc<AppState>>, project: Option<String>) -> Value {
+pub fn stop_chat(
+    state: State<Arc<AppState>>,
+    project: Option<String>,
+    run_id: Option<String>,
+) -> Value {
     let chat_key = project.unwrap_or_else(|| "_orchestrator".to_string());
     request_cancel(&state, &chat_key);
-    let buf_path = state
-        .root
-        .join("tasks")
-        .join(format!(".stream-{}.jsonl", chat_key));
+    let run_id = run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let buf_path = stream_buffer_path(&state, &chat_key, run_id);
     let _ = super::jsonl::append_jsonl_logged(
         &buf_path,
         &json!({
             "type": "run_done",
+            "run_id": run_id,
             "status": "cancelled",
             "phase": "cancelled",
             "outcome": "cancelled",
@@ -87,7 +139,7 @@ pub fn stop_chat(state: State<Arc<AppState>>, project: Option<String>) -> Value 
     );
     let _ = super::jsonl::append_jsonl_logged(
         &buf_path,
-        &json!({"type":"done","text":"","tools":[],"outcome":"cancelled"}),
+        &json!({"type":"done","run_id":run_id,"text":"","tools":[],"outcome":"cancelled"}),
         "stream cancelled done marker",
     );
     let killed_pid = kill_existing(&state, &chat_key);

@@ -77,6 +77,142 @@
     margin-left: auto;
     color: var(--t3);
 }
+.operation-live-bar {
+    margin: var(--sp-s) var(--sp-m) 0;
+    padding: var(--sp-s);
+    border: 1px solid color-mix(in srgb, var(--cyan) 42%, var(--border));
+    background:
+        linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--cyan) 9%, transparent),
+            transparent 62%
+        ),
+        color-mix(in srgb, var(--sf) 82%, var(--bg));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--cyan) 8%, transparent);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    flex-shrink: 0;
+}
+.operation-live-bar.needs-user {
+    border-color: color-mix(in srgb, var(--yellow) 70%, var(--border));
+    background:
+        linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--yellow) 12%, transparent),
+            transparent 62%
+        ),
+        color-mix(in srgb, var(--sf) 82%, var(--bg));
+}
+.operation-live-bar.failed,
+.operation-live-bar.cancelled {
+    border-color: color-mix(in srgb, var(--red) 68%, var(--border));
+}
+.operation-live-top,
+.operation-live-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-xs);
+    min-width: 0;
+    flex-wrap: wrap;
+}
+.operation-live-top strong {
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.operation-live-top span,
+.operation-live-top em,
+.operation-live-meta span {
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    padding: 2px 6px;
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    color: var(--t2);
+    font-style: normal;
+}
+.operation-live-action {
+    margin: var(--sp-xs) 0;
+    color: var(--text);
+    font-size: var(--fs-m);
+    line-height: 1.35;
+}
+.operation-live-meta {
+    color: var(--t3);
+}
+.operation-live-meta button {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--cyan);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 2px 7px;
+    cursor: pointer;
+}
+.operation-live-meta button:hover {
+    border-color: var(--cyan);
+    color: var(--text);
+}
+.operation-live-events {
+    margin-top: var(--sp-xs);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 160px;
+    overflow: auto;
+}
+.operation-live-event {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr) auto;
+    gap: var(--sp-xs);
+    align-items: center;
+    border-top: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
+    padding-top: 3px;
+    color: var(--t2);
+}
+.operation-live-event b {
+    color: var(--cyan);
+    font-weight: 500;
+}
+.operation-live-event span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.operation-live-event em {
+    color: var(--t3);
+    font-style: normal;
+}
+.operation-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 10px var(--cyan);
+    animation: pulse 0.9s infinite;
+}
+.operation-live-bar.needs-user .operation-pulse {
+    background: var(--yellow);
+    box-shadow: 0 0 10px var(--yellow);
+}
+.operation-live-bar.done .operation-pulse {
+    background: var(--green);
+    box-shadow: none;
+    animation: none;
+}
+.operation-live-bar.failed .operation-pulse,
+.operation-live-bar.cancelled .operation-pulse {
+    background: var(--red);
+    box-shadow: none;
+    animation: none;
+}
+.operation-blocked {
+    color: var(--yellow) !important;
+    border-color: color-mix(
+        in srgb,
+        var(--yellow) 60%,
+        var(--border)
+    ) !important;
+}
 .ch-msgs {
     flex: 1;
     overflow-y: auto;

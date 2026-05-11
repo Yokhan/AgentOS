@@ -68,6 +68,23 @@ pub fn queue_delegation_internal(state: &AppState, project: &str, task: &str) ->
         delegations.insert(id.clone(), delegation);
     }
     state.save_delegations();
+    super::operation_state::emit(
+        state,
+        super::operation_state::OperationEventInput::new(
+            super::operation_state::delegation_operation_id(&id),
+            "orchestrator",
+            project.to_string(),
+            "delegation_queued",
+            "delegation",
+            "needs_user",
+            "Delegation queued for approval",
+        )
+        .waiting_for("user_approval")
+        .payload(json!({
+            "delegation_id": id.as_str(),
+            "task_preview": task.chars().take(180).collect::<String>()
+        })),
+    );
 
     id
 }
@@ -225,6 +242,26 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
     let deleg_model = super::provider_runner::resolve_delegation_model(state, deleg_provider);
     let deleg_effort = super::provider_runner::resolve_delegation_effort(state, deleg_provider);
     let delegation_chat_key = format!("deleg-{}", id);
+    let operation_id = super::operation_state::delegation_operation_id(id);
+    super::operation_state::emit(
+        state,
+        super::operation_state::OperationEventInput::new(
+            operation_id.clone(),
+            "project_agent",
+            d.project.clone(),
+            "delegation_started",
+            "delegation",
+            "running",
+            "Delegation started",
+        )
+        .provider(
+            Some(deleg_provider.as_str()),
+            deleg_model.as_deref(),
+            deleg_effort.as_deref(),
+        )
+        .waiting_for("project_agent")
+        .payload(json!({"delegation_id": id, "chat_key": delegation_chat_key.as_str()})),
+    );
 
     // Acquire per-project lock: prevents two claude processes in same directory
     state.acquire_dir_lock(&d.project);
@@ -250,6 +287,25 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
             .unwrap_or_default()
     );
     super::delegation_stream::emit_stage(&stream_buf, "L1", "balanced permissions");
+    super::operation_state::emit(
+        state,
+        super::operation_state::OperationEventInput::new(
+            operation_id.clone(),
+            "project_agent",
+            d.project.clone(),
+            "delegation_l1",
+            "delegation",
+            "running",
+            "L1 balanced permissions",
+        )
+        .provider(
+            Some(deleg_provider.as_str()),
+            deleg_model.as_deref(),
+            deleg_effort.as_deref(),
+        )
+        .waiting_for("project_agent")
+        .payload(json!({"delegation_id": id, "level": "L1"})),
+    );
     let (response, is_perm) = super::delegation_stream::run_delegation_streaming(
         state,
         deleg_provider,
@@ -314,6 +370,25 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
             d.project
         );
         super::delegation_stream::emit_stage(&stream_buf, "L2", "permissive retry");
+        super::operation_state::emit(
+            state,
+            super::operation_state::OperationEventInput::new(
+                operation_id.clone(),
+                "project_agent",
+                d.project.clone(),
+                "delegation_l2",
+                "delegation",
+                "running",
+                "L2 permissive retry",
+            )
+            .provider(
+                Some(deleg_provider.as_str()),
+                deleg_model.as_deref(),
+                deleg_effort.as_deref(),
+            )
+            .waiting_for("project_agent")
+            .payload(json!({"delegation_id": id, "level": "L2"})),
+        );
         let (response2, is_perm2) = super::delegation_stream::run_delegation_streaming(
             state,
             deleg_provider,
@@ -355,6 +430,26 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
             let pa_perm = super::claude_runner::get_permission_path(state, "_orchestrator");
             crate::log_info!("[delegation:{}] L3 asking PA for decision", d.project);
             super::delegation_stream::emit_stage(&stream_buf, "L3", "PA deciding GRANT/ABORT");
+            super::operation_state::emit(
+                state,
+                super::operation_state::OperationEventInput::new(
+                    operation_id.clone(),
+                    "orchestrator",
+                    d.project.clone(),
+                    "delegation_l3_decision",
+                    "delegation",
+                    "needs_user",
+                    "L3 needs PA decision",
+                )
+                .provider(
+                    Some(deleg_provider.as_str()),
+                    deleg_model.as_deref(),
+                    deleg_effort.as_deref(),
+                )
+                .waiting_for("orchestrator_decision")
+                .blocked_by("permission_escalation")
+                .payload(json!({"delegation_id": id, "level": "L3"})),
+            );
             let pa_decision = super::provider_runner::run_orchestrator_once(
                 state,
                 &pa_dir,
@@ -428,6 +523,25 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
             state.save_work_items();
         }
         // Run gate (outside lock — may take time)
+        super::operation_state::emit(
+            state,
+            super::operation_state::OperationEventInput::new(
+                operation_id.clone(),
+                "gate",
+                d.project.clone(),
+                "gate_started",
+                "gate",
+                "running",
+                "Gate verification started",
+            )
+            .provider(
+                Some(deleg_provider.as_str()),
+                deleg_model.as_deref(),
+                deleg_effort.as_deref(),
+            )
+            .waiting_for("gate")
+            .payload(json!({"delegation_id": id})),
+        );
         let gr = super::gate::run_gate(state, &d.project, id);
         super::signals::emit_gate_signals(state, &d.project, id, &gr);
         if let Some(session_id) = d.room_session_id.as_deref() {
@@ -467,6 +581,36 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
     };
 
     super::delegation_stream::emit_done(&stream_buf, effective_status, &final_response);
+    super::operation_state::emit(
+        state,
+        super::operation_state::OperationEventInput::new(
+            operation_id.clone(),
+            "project_agent",
+            d.project.clone(),
+            "delegation_done",
+            "done",
+            if effective_status == "complete" {
+                "done"
+            } else {
+                "failed"
+            },
+            if effective_status == "complete" {
+                "Delegation completed"
+            } else {
+                "Delegation failed"
+            },
+        )
+        .provider(
+            Some(deleg_provider.as_str()),
+            deleg_model.as_deref(),
+            deleg_effort.as_deref(),
+        )
+        .payload(json!({
+            "delegation_id": id,
+            "effective_status": effective_status,
+            "response_len": final_response.len()
+        })),
+    );
 
     let orch_file = state.chats_dir.join("_orchestrator.jsonl");
     let icon = if effective_status == "complete" {

@@ -222,6 +222,8 @@ const orchestrationMap = signal(null);
 const executionTimeline = signal(null);
 const executionMap = signal(null);
 const eventContract = signal(null);
+const operationSnapshot = signal(null);
+const operationEvents = signal([]);
 const appInfo = signal({ version: "dev" });
 
 // Clock interval (global, no cleanup needed for desktop app)
@@ -311,6 +313,8 @@ export {
   executionTimeline,
   executionMap,
   eventContract,
+  operationSnapshot,
+  operationEvents,
   appInfo,
   showToast,
 };

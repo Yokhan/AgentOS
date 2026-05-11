@@ -392,6 +392,7 @@ pub struct AppState {
     pub chat_cancellations: Mutex<HashSet<String>>,
     /// Running activities by project — in-memory, no file race conditions
     pub activities: Mutex<HashMap<String, serde_json::Value>>,
+    pub operations: Mutex<HashMap<String, crate::commands::operation_state::OperationRecord>>,
     /// Agent feedback inbox — delegation results accumulate here
     pub inbox: Mutex<Vec<crate::commands::inbox::InboxItem>>,
     /// Cached config.json — refreshed every 5 seconds or after writes
@@ -460,6 +461,7 @@ impl AppState {
             chat_cancellations: Mutex::new(HashSet::new()),
             dir_busy: Mutex::new(std::collections::HashSet::new()),
             activities: Mutex::new(HashMap::new()),
+            operations: Mutex::new(HashMap::new()),
             inbox: Mutex::new(Vec::new()),
             config_cache: Mutex::new((
                 serde_json::json!({}),

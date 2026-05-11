@@ -115,7 +115,11 @@ fn is_terminal_feedback(status: &str, kind: &str) -> bool {
 
 fn is_provider_state_sample(row: &Value) -> bool {
     let kind = field(row, "kind");
-    if kind != "progress" {
+    let semantic = row.get("semantic").and_then(|v| v.as_bool());
+    if semantic == Some(false) {
+        return true;
+    }
+    if kind != "progress" && kind != "provider_heartbeat" {
         return false;
     }
 
@@ -130,6 +134,56 @@ fn is_provider_state_sample(row: &Value) -> bool {
         || detail.contains("still running");
 
     volatile_status && (provider_phase || provider_detail)
+}
+
+fn operation_rows(state: &AppState, project_filter: &str, limit: usize) -> Vec<Value> {
+    let operations = match state.operations.lock() {
+        Ok(ops) => ops,
+        Err(e) => e.into_inner(),
+    };
+    let mut rows: Vec<Value> = operations
+        .values()
+        .flat_map(|operation| {
+            operation.events.iter().filter_map(|event| {
+                let project = clean_project(&event.project);
+                if !project_filter.trim().is_empty() && project != project_filter {
+                    return None;
+                }
+                let source = match event.actor.as_str() {
+                    "project_agent" | "gate" => "delegation",
+                    "orchestrator" | "agentos" => "chat",
+                    other => other,
+                };
+                Some(json!({
+                    "source": source,
+                    "kind": event.kind,
+                    "status": event.status,
+                    "title": event.phase,
+                    "detail": event.title,
+                    "project": project,
+                    "provider": operation.provider.clone().unwrap_or_else(|| event.actor.clone()),
+                    "model": operation.model.clone().unwrap_or_default(),
+                    "ts": event.ts,
+                    "semantic": event.semantic,
+                    "operation_id": event.operation_id,
+                    "parent_id": event.parent_id,
+                    "root_id": event.root_id,
+                    "event_id": event.id,
+                    "waiting_for": operation.waiting_for,
+                    "blocked_by": operation.blocked_by
+                }))
+            })
+        })
+        .collect();
+    rows.sort_by(|a, b| {
+        field(a, "ts")
+            .cmp(&field(b, "ts"))
+            .then_with(|| field(a, "event_id").cmp(&field(b, "event_id")))
+    });
+    if rows.len() > limit {
+        rows.drain(0..rows.len() - limit);
+    }
+    rows
 }
 
 fn delegation_provider_by_project(state: &AppState) -> HashMap<String, String> {
@@ -287,11 +341,22 @@ pub fn build_execution_map(
         room_session_id.clone(),
         limit,
     );
-    let rows = timeline
+    let timeline_rows = timeline
         .get("items")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
+    let op_rows = operation_rows(state, &project_filter, limit);
+    let rows_source = if op_rows.is_empty() {
+        "timeline"
+    } else {
+        "operations"
+    };
+    let rows = if op_rows.is_empty() {
+        timeline_rows
+    } else {
+        op_rows
+    };
     let raw_fallback_ts = rows
         .first()
         .and_then(|row| row.get("ts"))
@@ -601,6 +666,7 @@ pub fn build_execution_map(
             "events": events.len(),
             "edges": edges.len(),
             "state_samples": state_sample_count,
+            "source": rows_source,
             "waiting": waiting.len() + waiting_lanes,
             "blocked": blocked
         },

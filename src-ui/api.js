@@ -64,6 +64,8 @@ import {
   executionTimeline,
   executionMap,
   eventContract,
+  operationSnapshot,
+  operationEvents,
   appInfo,
   showToast,
 } from "/store.js";
@@ -85,6 +87,28 @@ async function loadAppInfo() {
     }
   } catch (e) {
     console.warn("loadAppInfo:", e);
+  }
+}
+
+async function loadOperationSnapshot() {
+  if (!__IS_TAURI) {
+    operationSnapshot.value = { operations: [], active_count: 0 };
+    operationEvents.value = [];
+    return operationSnapshot.value;
+  }
+  try {
+    const [snapshot, events] = await Promise.all([
+      __invoke("get_operation_snapshot"),
+      __invoke("get_operation_events", { limit: 120 }).catch(() => ({
+        events: [],
+      })),
+    ]);
+    operationSnapshot.value = snapshot || { operations: [], active_count: 0 };
+    operationEvents.value = Array.isArray(events?.events) ? events.events : [];
+    return operationSnapshot.value;
+  } catch (e) {
+    console.warn("loadOperationSnapshot:", e);
+    return operationSnapshot.value;
   }
 }
 
@@ -1687,34 +1711,45 @@ async function sendMessage(msg) {
       let lastQuietNoticeAt = 0;
       const MAX_POLLS = 7200; // 30 min max; long agent/tool runs should not require user nudges
       clearLiveDraft(projectKey);
-      // Tauri mode: start stream_chat, then poll the per-chat file-based buffer.
-      const streamStart = __invoke("stream_chat", {
-        project: proj,
-        message: msg,
-        provider: normalizedSelection.provider || null,
-        model: normalizedSelection.model || null,
-        reasoningEffort: normalizedSelection.effort || null,
-        runMode: normalizedSelection.runMode || "act",
-        permissionProfile: normalizedSelection.accessLevel || "write",
-      })
-        .then((res) => {
-          if (res?.status === "error") {
-            throw new Error(res?.error || "stream_chat failed");
-          }
-          return res;
-        })
-        .catch((e) => {
-          console.error("stream_chat error:", e);
-          showToast("Chat error: " + e, "error");
-          updateActiveRun({
-            status: "failed",
-            outcome: "failed",
-            phase: "startup",
-            detail: String(e),
-          });
-          isStreaming.value = false;
-          done = true;
+      let runId = null;
+      try {
+        const start = await __invoke("stream_chat", {
+          project: proj,
+          message: msg,
+          provider: normalizedSelection.provider || null,
+          model: normalizedSelection.model || null,
+          reasoningEffort: normalizedSelection.effort || null,
+          runMode: normalizedSelection.runMode || "act",
+          permissionProfile: normalizedSelection.accessLevel || "write",
         });
+        if (start?.status === "error") {
+          throw new Error(start?.error || "stream_chat failed");
+        }
+        runId = start?.run_id || start?.runId || null;
+        if (runId) {
+          updateActiveRun(
+            {
+              id: runId,
+              providerRunId: runId,
+              status: "running",
+              phase: "provider",
+              detail: "provider process started",
+            },
+            { semantic: false },
+          );
+        }
+      } catch (e) {
+        console.error("stream_chat error:", e);
+        showToast("Chat error: " + e, "error");
+        updateActiveRun({
+          status: "failed",
+          outcome: "failed",
+          phase: "startup",
+          detail: String(e),
+        });
+        isStreaming.value = false;
+        done = true;
+      }
       // Collect ordered chain of blocks for rendering
       const chain = [];
       while (!done && pollCount < MAX_POLLS) {
@@ -1724,6 +1759,7 @@ async function sendMessage(msg) {
           const poll = await __invoke("poll_stream", {
             project: proj || null,
             offset,
+            runId,
           });
           if (poll.cancelled && !poll.running) {
             finalOutcome = "cancelled";
@@ -1752,6 +1788,9 @@ async function sendMessage(msg) {
               }
             }
             for (const evt of poll.events) {
+              if (runId && evt.run_id && evt.run_id !== runId) {
+                continue;
+              }
               if (
                 evt.type === "run_started" ||
                 evt.type === "run_progress" ||
@@ -2023,7 +2062,6 @@ async function sendMessage(msg) {
           detail: "Response timed out after 30 minutes",
         });
       }
-      await streamStart.catch(() => {});
       // Unblock chat input immediately after poll loop exits
       isStreaming.value = false;
       curActivity.value = "";
@@ -2496,6 +2534,7 @@ export {
   loadExecutionTimeline,
   loadExecutionMap,
   loadEventContract,
+  loadOperationSnapshot,
   loadAppInfo,
   generateStrategy,
   createAdhocPlanFromRoom,
