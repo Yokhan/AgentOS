@@ -43,6 +43,7 @@ import {
   showPlan,
   orchOk,
   signalsData,
+  notificationsData,
   activities,
   composerDraftText,
   executionMap,
@@ -56,6 +57,8 @@ import {
   loadGoals,
   loadGraph,
   loadSignals,
+  loadNotifications,
+  clearNotifications,
   ackSignal,
   loadStrategies,
   loadPlansData,
@@ -1112,6 +1115,7 @@ function WorkbenchDock() {
     ["focus", "Фокус", "что делать сейчас"],
     ["projects", "Проекты", "обзор выбранного среза"],
     ["plans", "Планы", "план и очередь"],
+    ["events", "Журнал", "системные уведомления"],
     ["signals", "Сигналы", "риски и входящие"],
   ];
   return html`<nav class="workspace-dock" aria-label="Workspace views">
@@ -1242,6 +1246,74 @@ function SignalsWorkspace() {
   </section>`;
 }
 
+function NotificationsWorkspace() {
+  useEffect(() => {
+    loadNotifications();
+  }, []);
+  const data = notificationsData.value || { items: [], counts: {}, count: 0 };
+  const items = data.items || [];
+  const counts = data.counts || {};
+  const bySeverity = (sev) => items.filter((item) => item.severity === sev);
+  const renderGroup = (title, groupItems, tone) =>
+    html`<section class=${`notification-group ${tone || ""}`}>
+      <div class="notification-group-head">
+        <b>${title}</b>
+        <span>${groupItems.length}</span>
+      </div>
+      ${groupItems.length
+        ? groupItems.slice(-40).map(
+            (item) =>
+              html`<article class="notification-row">
+                <div class="notification-row-top">
+                  <b>${item.title || item.kind || "AgentOS"}</b>
+                  <span>${item.severity || "info"}</span>
+                  <em>${item.ts || ""}</em>
+                </div>
+                <p>${item.message || ""}</p>
+                <div class="notification-row-meta">
+                  ${item.command ? html`<code>${item.command}</code>` : null}
+                  ${item.project ? html`<span>${item.project}</span>` : null}
+                  <span
+                    >${item.source || "system"} / ${item.kind || "event"}</span
+                  >
+                </div>
+              </article>`,
+          )
+        : html`<div class="notification-empty">Пусто</div>`}
+    </section>`;
+  return html`<section class="workspace-panel notifications-workspace">
+    <div class="workspace-panel-head">
+      <div>
+        <div class="workbench-eyebrow">notification center</div>
+        <h2>Журнал системы</h2>
+        <p>
+          Сюда вынесены PA/status/warning сообщения. Чат остается разговором,
+          карта исполнения показывает только смысловые события.
+        </p>
+      </div>
+      <div class="workspace-actions">
+        <span>${data.count || items.length} событий</span>
+        <span>${counts.warning || 0} warning</span>
+        <button onClick=${() => loadNotifications()}>refresh</button>
+        <button
+          disabled=${!items.length}
+          onClick=${() =>
+            clearNotifications().catch((e) =>
+              showToast("Clear notifications failed: " + e, "error", 3000),
+            )}
+        >
+          clear
+        </button>
+      </div>
+    </div>
+    <div class="notification-grid">
+      ${renderGroup("Требуют внимания", bySeverity("warning"), "warning")}
+      ${renderGroup("Результаты команд", bySeverity("success"), "success")}
+      ${renderGroup("Инфо", bySeverity("info"), "info")}
+    </div>
+  </section>`;
+}
+
 function WorkspaceCanvas({
   allAgents,
   visibleAgents,
@@ -1261,6 +1333,7 @@ function WorkspaceCanvas({
       flatItems=${flatItems}
     />`;
   if (tab === "plans") return html`<${PlansWorkspace} />`;
+  if (tab === "events") return html`<${NotificationsWorkspace} />`;
   if (tab === "signals") return html`<${SignalsWorkspace} />`;
   return html`<${ExecutionFlowStage} />`;
 }

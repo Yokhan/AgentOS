@@ -42,6 +42,7 @@ import {
   delegations,
   feedItems,
   signalsData,
+  notificationsData,
   segments,
   modules,
   actionPlan,
@@ -747,6 +748,7 @@ async function loadChat(p) {
           );
           continue;
         }
+        continue;
       }
       if (m.role === "system") {
         const prev = msgs[msgs.length - 1];
@@ -894,6 +896,7 @@ async function loadOlderChat() {
           );
           continue;
         }
+        continue;
       }
       if (m.role === "system") {
         const prev = older[older.length - 1];
@@ -1001,6 +1004,33 @@ async function loadSignals() {
   } catch (e) {
     console.warn("loadSignals:", e);
   }
+}
+async function loadNotifications(limit = 160, severity = "all") {
+  if (!__IS_TAURI) {
+    notificationsData.value = { items: [], counts: {}, count: 0 };
+    return notificationsData.value;
+  }
+  try {
+    const result = await __invoke("get_notifications", {
+      limit,
+      severity: severity || "all",
+    });
+    notificationsData.value = result || { items: [], counts: {}, count: 0 };
+    return notificationsData.value;
+  } catch (e) {
+    console.warn("loadNotifications:", e);
+    return notificationsData.value;
+  }
+}
+async function clearNotifications() {
+  if (!__IS_TAURI) return null;
+  const res = await __invoke("clear_notifications", {});
+  if (res?.status === "ok") {
+    await loadNotifications();
+    showToast("Notification log cleared", "success", 1400);
+    return res;
+  }
+  throw new Error(res?.error || "Clear notifications failed");
 }
 async function ackSignal(id) {
   if (!__IS_TAURI || !id) {
@@ -2656,6 +2686,8 @@ export {
   loadGoals,
   loadGraph,
   loadSignals,
+  loadNotifications,
+  clearNotifications,
   ackSignal,
   loadStrategies,
   loadPlansData,

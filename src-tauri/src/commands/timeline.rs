@@ -112,11 +112,38 @@ fn archived_delegation_rows(state: &AppState, project: &str, limit: usize) -> Ve
     rows
 }
 
-pub fn build_execution_timeline(
+fn is_semantic_timeline_row(row: &EventRow) -> bool {
+    let kind = row.kind.as_str();
+    let status = row.status.as_str();
+    let title = row.title.to_ascii_lowercase();
+    let detail = row.detail.to_ascii_lowercase();
+    if kind == "progress"
+        && matches!(status, "running" | "waiting" | "info" | "")
+        && (matches!(title.as_str(), "provider" | "heartbeat" | "stream")
+            || detail.contains("subprocess")
+            || detail.contains("waiting for provider")
+            || detail.contains("still running"))
+    {
+        return false;
+    }
+    if row.source == "agentos"
+        && kind == "command"
+        && status == "done"
+        && (detail.starts_with("running ")
+            || detail.starts_with("completed ")
+            || detail.starts_with("auto-continuing"))
+    {
+        return false;
+    }
+    true
+}
+
+fn build_execution_timeline_inner(
     state: &AppState,
     project: Option<String>,
     room_session_id: Option<String>,
     limit: usize,
+    semantic_filter: bool,
 ) -> Value {
     let project = match project.unwrap_or_default().trim() {
         "" | "_orchestrator" => String::new(),
@@ -133,6 +160,9 @@ pub fn build_execution_timeline(
     }
     rows.extend(archived_delegation_rows(state, &project, limit.min(24)));
     rows.extend(delegation_rows(state, &project, limit.min(24)));
+    if semantic_filter {
+        rows.retain(is_semantic_timeline_row);
+    }
     rows.sort_by(|a, b| a.ts.cmp(&b.ts));
     if rows.len() > limit {
         rows = rows[rows.len() - limit..].to_vec();
@@ -155,6 +185,24 @@ pub fn build_execution_timeline(
         },
         "items": rows
     })
+}
+
+pub fn build_execution_timeline(
+    state: &AppState,
+    project: Option<String>,
+    room_session_id: Option<String>,
+    limit: usize,
+) -> Value {
+    build_execution_timeline_inner(state, project, room_session_id, limit, true)
+}
+
+pub(crate) fn build_execution_timeline_for_map(
+    state: &AppState,
+    project: Option<String>,
+    room_session_id: Option<String>,
+    limit: usize,
+) -> Value {
+    build_execution_timeline_inner(state, project, room_session_id, limit, false)
 }
 
 #[tauri::command]
@@ -208,6 +256,35 @@ mod tests {
         assert_eq!(result["big_plan"]["stage"], "live_route_progress");
         assert_eq!(result["items"][0]["kind"], "run");
         assert_eq!(result["items"][1]["kind"], "tool");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn provider_heartbeats_and_routine_status_do_not_fill_timeline() {
+        let root = test_root("semantic-filter");
+        let state = AppState::new(root.clone());
+        let path = root.join("tasks").join(".stream-_orchestrator.jsonl");
+        crate::commands::jsonl::append_jsonl_logged(
+            &path,
+            &json!({"type":"run_heartbeat","status":"running","phase":"provider","detail":"Codex subprocess is still running; waiting for provider output","ts":"2026-04-26T10:00:00Z"}),
+            "test heartbeat",
+        );
+        crate::commands::jsonl::append_jsonl_logged(
+            &path,
+            &json!({"type":"pa_status","text":"Running [DASHBOARD_FULL]","command":"[DASHBOARD_FULL]","ts":"2026-04-26T10:00:01Z"}),
+            "test routine status",
+        );
+        crate::commands::jsonl::append_jsonl_logged(
+            &path,
+            &json!({"type":"warning","text":"Delegation not parsed","ts":"2026-04-26T10:00:02Z"}),
+            "test warning",
+        );
+
+        let result = build_execution_timeline(&state, None, None, 10);
+        let items = result["items"].as_array().expect("items");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["status"], "warning");
 
         let _ = std::fs::remove_dir_all(root);
     }

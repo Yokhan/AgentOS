@@ -8,6 +8,7 @@ pub fn build_full_pa_prompt(state: &AppState, user_message: &str) -> String {
     let policy = build_response_policy_context(user_message);
     let template_policy = build_agent_template_context(state);
     let identity = build_identity_context(state);
+    let intent = build_natural_language_intent_context(state, user_message);
     let context = build_project_context(state);
     let categories = super::category::build_category_context(state);
     let history = build_chat_history(state);
@@ -21,7 +22,7 @@ pub fn build_full_pa_prompt(state: &AppState, user_message: &str) -> String {
     let memory = build_pa_memory(state);
 
     format!(
-        "{policy}\n{template_policy}\n{identity}\n{context}\n{categories}\n{deleg_status}\n{operation_health}\n{strategies}\n{plans}\n{gates}\n{signals}\n{queue}\n{memory}\n{history}\n[USER MESSAGE]\n{user_message}",
+        "{policy}\n{template_policy}\n{identity}\n{intent}\n{context}\n{categories}\n{deleg_status}\n{operation_health}\n{strategies}\n{plans}\n{gates}\n{signals}\n{queue}\n{memory}\n{history}\n[USER MESSAGE]\n{user_message}",
     )
 }
 
@@ -102,6 +103,106 @@ fn extract_template_section(content: &str, heading: &str) -> Option<String> {
     Some(rest[..end].trim().to_string())
 }
 
+fn build_natural_language_intent_context(state: &AppState, user_message: &str) -> String {
+    let lower = user_message.to_lowercase();
+    let project_onboarding_intent = [
+        "подключ",
+        "подхват",
+        "добавь проект",
+        "добавить проект",
+        "заведи проект",
+        "завести проект",
+        "онборд",
+        "onboard",
+        "connect project",
+        "connect projects",
+        "project onboarding",
+        "unmanaged",
+        "managed",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle));
+    if !project_onboarding_intent {
+        return String::new();
+    }
+
+    let known_project = std::fs::read_dir(&state.docs_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.flatten())
+        .filter(|entry| entry.path().join(".git").exists())
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .find(|name| lower.contains(&name.to_lowercase()));
+    let broad_scope = known_project.is_none()
+        && [
+            "все",
+            "всех",
+            "проекты",
+            "проектов",
+            "много",
+            "missing",
+            "all",
+            "bulk",
+        ]
+        .iter()
+        .any(|needle| lower.contains(needle));
+    let explicit_apply = [
+        "делай",
+        "сделай",
+        "примен",
+        "подключи",
+        "запускай",
+        "без dry",
+        "без превью",
+        "apply",
+        "execute",
+        "do it",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle));
+    let wants_audit = [
+        "проверь",
+        "выясни",
+        "аудит",
+        "что и как",
+        "состояние",
+        "check",
+        "audit",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle));
+
+    let recommended = if let Some(project) = known_project {
+        if explicit_apply && !wants_audit {
+            format!("[PROJECT_CONNECT:{}:Other:balanced]", project)
+        } else {
+            format!("[PROJECT_CONNECT:{}:Other:balanced:dry]", project)
+        }
+    } else if broad_scope {
+        if explicit_apply && !wants_audit {
+            "[PROJECT_CONNECT_MISSING:Other:balanced]".to_string()
+        } else {
+            "[PROJECT_CONNECT_MISSING:Other:balanced:dry]".to_string()
+        }
+    } else {
+        "[PROJECT_ONBOARD_AUDIT]".to_string()
+    };
+
+    format!(
+        "[INTENT ROUTING]\n\
+         Detected user intent: project onboarding / connecting repos to AgentOS.\n\
+         The user gives natural-language instructions; do not ask them to type PA command tags manually.\n\
+         Recommended next PA command: {recommended}\n\
+         Rules:\n\
+         - If project names or target segments are unclear, emit [PROJECT_ONBOARD_AUDIT] first.\n\
+         - For broad/many-project onboarding, preview metadata repair with [PROJECT_CONNECT_MISSING:Other:balanced:dry] unless the user explicitly said to apply now.\n\
+         - [PROJECT_CONNECT_MISSING:Other:balanced] only repairs AgentOS metadata: segment + permission. It does not sync templates.\n\
+         - Template sync is separate and must be explicit: use [PROJECT_CONNECT:Project:Segment:balanced:deploy] for one confirmed project, not a blind bulk sync.\n\
+         - In user-facing prose, explain what command you are launching in Russian, then emit the PA command tag on its own line.\n\
+         [END INTENT ROUTING]\n"
+    )
+}
+
 fn build_identity_context(state: &AppState) -> String {
     let project_count = {
         let cache = state.scan_cache.lock().unwrap_or_else(|e| e.into_inner());
@@ -132,7 +233,7 @@ fn build_identity_context(state: &AppState) -> String {
         "[IDENTITY]\n\
          You are PA Orchestrator inside AgentOS (Tauri desktop app).\n\
          You manage {} projects across {} categories.\n\n\
-         YOUR CAPABILITIES (51 commands):\n\n\
+         YOUR CAPABILITIES (54 commands):\n\n\
          Delegation:\n\
          Pending delegations are approval requests, not running work. Report the approval need once, then continue independent routes if available; only [DELEGATE_STATUS:?stale] means the queue is actually stuck.\n\
          [DELEGATE:Project]task[/DELEGATE] — send task to agent (user approves → L1→L2→L3)\n\
@@ -173,6 +274,13 @@ fn build_identity_context(state: &AppState) -> String {
          [GIT_SEARCH:commit|code|file:query] — cross-repo search\n\
          [TEMPLATE_AUDIT] — template versions\n\
          [DEPENDENCY_AUDIT:project] — outdated deps\n\n\
+         Project onboarding:\n\
+         [PROJECT_ONBOARD_AUDIT] — find unconnected/unmanaged repos and next actions\n\
+         [PROJECT_CONNECT:Project:Segment:balanced] — connect repo to AgentOS segment + permission\n\
+         [PROJECT_CONNECT:Project:Segment:balanced:deploy] — connect and sync agent template\n\
+         [PROJECT_CONNECT:Project:Segment:balanced:dry] — preview without writes\n\n\
+         [PROJECT_CONNECT_MISSING:Other:balanced:dry] — preview bulk segment/permission repair\n\
+         [PROJECT_CONNECT_MISSING:Other:balanced] — repair missing segment/permission metadata for all repos; does not sync templates\n\n\
          Scheduling:\n\
          [CRON_CREATE:name:schedule]task[/CRON_CREATE]\n\
          [CRON_LIST] [CRON_EDIT:name:schedule]task[/CRON_EDIT] [CRON_DELETE:name]\n\n\
@@ -440,7 +548,34 @@ fn build_project_context(state: &AppState) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_response_policy_context, extract_template_section};
+    use super::{
+        build_natural_language_intent_context, build_response_policy_context,
+        extract_template_section,
+    };
+    use crate::state::AppState;
+
+    fn test_state_with_project(name: &str) -> AppState {
+        let root = std::env::temp_dir().join(format!(
+            "agentos-chat-parse-{name}-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let docs = root.join("docs");
+        let project = docs.join(name);
+        let _ = std::fs::create_dir_all(project.join(".git"));
+        let _ = std::fs::create_dir_all(root.join("n8n"));
+        let config = serde_json::json!({
+            "documents_dir": docs.to_string_lossy(),
+            "project_root": root.to_string_lossy()
+        });
+        let _ = std::fs::write(
+            root.join("n8n").join("config.json"),
+            serde_json::to_string_pretty(&config).unwrap(),
+        );
+        AppState::new(root)
+    }
 
     #[test]
     fn response_policy_detects_russian_user_language() {
@@ -459,5 +594,25 @@ mod tests {
 
         assert!(section.contains("Result first"));
         assert!(!section.contains("## Next"));
+    }
+
+    #[test]
+    fn onboarding_intent_routes_broad_request_to_bulk_dry_run() {
+        let state = test_state_with_project("zolt");
+        let ctx =
+            build_natural_language_intent_context(&state, "Проверь подключение проектов к AgentOS");
+
+        assert!(ctx.contains("[INTENT ROUTING]"));
+        assert!(ctx.contains("Recommended next PA command"));
+        assert!(ctx.contains("[PROJECT_CONNECT_MISSING:Other:balanced:dry]"));
+        assert!(ctx.contains("do not ask them to type PA command tags manually"));
+    }
+
+    #[test]
+    fn onboarding_intent_routes_named_project_to_connect_command() {
+        let state = test_state_with_project("zolt");
+        let ctx = build_natural_language_intent_context(&state, "Подключи zolt к AgentOS");
+
+        assert!(ctx.contains("[PROJECT_CONNECT:zolt:Other:balanced]"));
     }
 }

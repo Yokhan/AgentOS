@@ -134,6 +134,11 @@ const signalsData = signal({
   signals: [],
   counts: { critical: 0, warn: 0, info: 0 },
 });
+const notificationsData = signal({
+  items: [],
+  counts: {},
+  count: 0,
+});
 const chatMode = signal("");
 
 const toasts = signal([]);
@@ -283,6 +288,7 @@ export {
   theme,
   feedItems,
   signalsData,
+  notificationsData,
   toasts,
   isLoading,
   clock,

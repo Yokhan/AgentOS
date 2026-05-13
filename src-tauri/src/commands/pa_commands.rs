@@ -27,7 +27,7 @@ static RE_STRATEGY: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"(?s)\[STRATEGY:([^\]]+)\](.*?)\[/STRATEGY\]").unwrap());
 static RE_BACKTICK_READONLY_COMMAND: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(
-        r"`(DELEGATE_STATUS(?::[^`\]\s]+)?|DELEGATE_LOG(?::[^`\]\s]+)?|DELEGATE_DIFF(?::[^`\]\s]+)?|GIT_STATUS_ALL|TEMPLATE_AUDIT|DASHBOARD_FULL|HEALTH_CHECK:[^`\]\s]+)`",
+        r"`(DELEGATE_STATUS(?::[^`\]\s]+)?|DELEGATE_LOG(?::[^`\]\s]+)?|DELEGATE_DIFF(?::[^`\]\s]+)?|GIT_STATUS_ALL|TEMPLATE_AUDIT|PROJECT_ONBOARD_AUDIT|DASHBOARD_FULL|HEALTH_CHECK:[^`\]\s]+)`",
     )
     .unwrap()
 });
@@ -221,6 +221,61 @@ pub fn describe_pa_command(cmd: &PaCommand) -> String {
             super::pa_commands_ops::OpsPaCommand::GraphRules { project } => {
                 format!("[GRAPH_RULES:{}]", project)
             }
+            super::pa_commands_ops::OpsPaCommand::ProjectOnboardAudit => {
+                "[PROJECT_ONBOARD_AUDIT]".to_string()
+            }
+            super::pa_commands_ops::OpsPaCommand::ProjectConnect { project, .. } => {
+                format!("[PROJECT_CONNECT:{}]", project)
+            }
+            super::pa_commands_ops::OpsPaCommand::ProjectConnectMissing { .. } => {
+                "[PROJECT_CONNECT_MISSING]".to_string()
+            }
+        },
+    }
+}
+
+pub fn is_read_only_pa_command(cmd: &PaCommand) -> bool {
+    match cmd {
+        PaCommand::HealthCheck { .. } => true,
+        PaCommand::WorkItemQueue { .. }
+        | PaCommand::Delegate { .. }
+        | PaCommand::Deploy { .. }
+        | PaCommand::Plan { .. }
+        | PaCommand::Queue { .. }
+        | PaCommand::Notify { .. }
+        | PaCommand::Remember { .. }
+        | PaCommand::Strategy { .. } => false,
+        PaCommand::DelegExt(cmd) => matches!(
+            cmd,
+            super::pa_commands_deleg::DelegPaCommand::Status { .. }
+                | super::pa_commands_deleg::DelegPaCommand::Log { .. }
+                | super::pa_commands_deleg::DelegPaCommand::Diff { .. }
+        ),
+        PaCommand::OpsExt(cmd) => match cmd {
+            super::pa_commands_ops::OpsPaCommand::GitStatusAll
+            | super::pa_commands_ops::OpsPaCommand::GitStaleBranches { .. }
+            | super::pa_commands_ops::OpsPaCommand::GitSearch { .. }
+            | super::pa_commands_ops::OpsPaCommand::TemplateAudit
+            | super::pa_commands_ops::OpsPaCommand::MemoryList { .. }
+            | super::pa_commands_ops::OpsPaCommand::MemorySearch { .. }
+            | super::pa_commands_ops::OpsPaCommand::CronList
+            | super::pa_commands_ops::OpsPaCommand::DependencyAudit { .. }
+            | super::pa_commands_ops::OpsPaCommand::StrategyProgress { .. }
+            | super::pa_commands_ops::OpsPaCommand::DailyReport
+            | super::pa_commands_ops::OpsPaCommand::DashboardFull
+            | super::pa_commands_ops::OpsPaCommand::ActivityDigest { .. }
+            | super::pa_commands_ops::OpsPaCommand::FinancialDashboard
+            | super::pa_commands_ops::OpsPaCommand::GraphContext { .. }
+            | super::pa_commands_ops::OpsPaCommand::GraphDependents { .. }
+            | super::pa_commands_ops::OpsPaCommand::GraphImpact { .. }
+            | super::pa_commands_ops::OpsPaCommand::GraphVerify { .. }
+            | super::pa_commands_ops::OpsPaCommand::GraphRules { .. }
+            | super::pa_commands_ops::OpsPaCommand::ProjectOnboardAudit => true,
+            super::pa_commands_ops::OpsPaCommand::ProjectConnect { dry_run, .. }
+            | super::pa_commands_ops::OpsPaCommand::ProjectConnectMissing { dry_run, .. } => {
+                *dry_run
+            }
+            _ => false,
         },
     }
 }
@@ -933,6 +988,61 @@ ERROR: {"type":"error","status":400}"#;
             &cmd.cmd,
             PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::DashboardFull)
         )));
+    }
+
+    #[test]
+    fn project_onboarding_commands_parse_from_orchestrator_response() {
+        let state = test_state("project-onboarding-commands");
+        let response = r#"Проверяю подключение проектов.
+
+[PROJECT_ONBOARD_AUDIT]
+
+[PROJECT_CONNECT:zolt:Client Projects:balanced:dry]
+
+[PROJECT_CONNECT_MISSING:Other:balanced:dry]"#;
+
+        let commands = parse_pa_commands(response, &state);
+
+        assert_eq!(commands.len(), 3);
+        assert!(commands.iter().all(|cmd| cmd.valid));
+        assert!(commands.iter().any(|cmd| matches!(
+            &cmd.cmd,
+            PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::ProjectOnboardAudit)
+        )));
+        assert!(commands.iter().any(|cmd| matches!(
+            &cmd.cmd,
+            PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::ProjectConnect { project, segment, permission, dry_run, .. })
+                if project == "zolt" && segment == "Client Projects" && permission == "balanced" && *dry_run
+        )));
+        assert!(commands.iter().any(|cmd| matches!(
+            &cmd.cmd,
+            PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::ProjectConnectMissing { segment, permission, dry_run })
+                if segment == "Other" && permission == "balanced" && *dry_run
+        )));
+    }
+
+    #[test]
+    fn project_onboarding_dry_run_is_read_only_but_apply_is_not() {
+        let audit =
+            PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::ProjectOnboardAudit);
+        let dry = PaCommand::OpsExt(
+            super::super::pa_commands_ops::OpsPaCommand::ProjectConnectMissing {
+                segment: "Other".to_string(),
+                permission: "balanced".to_string(),
+                dry_run: true,
+            },
+        );
+        let apply = PaCommand::OpsExt(
+            super::super::pa_commands_ops::OpsPaCommand::ProjectConnectMissing {
+                segment: "Other".to_string(),
+                permission: "balanced".to_string(),
+                dry_run: false,
+            },
+        );
+
+        assert!(is_read_only_pa_command(&audit));
+        assert!(is_read_only_pa_command(&dry));
+        assert!(!is_read_only_pa_command(&apply));
     }
 
     #[test]

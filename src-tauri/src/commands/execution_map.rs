@@ -4,7 +4,7 @@
 //! stream events, Duo session events, and delegation state/streams.
 
 use crate::commands::event_contract::EVENT_SCHEMA_VERSION;
-use crate::commands::timeline::build_execution_timeline;
+use crate::commands::timeline::build_execution_timeline_for_map;
 use crate::state::{AppState, Delegation};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -416,7 +416,7 @@ pub fn build_execution_map(
         value => value.to_string(),
     };
     let limit = limit.clamp(20, 180);
-    let timeline = build_execution_timeline(
+    let timeline = build_execution_timeline_for_map(
         state,
         Some(project_filter.clone()),
         room_session_id.clone(),

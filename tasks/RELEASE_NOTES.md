@@ -1,3 +1,12 @@
+# Agent OS 0.3.28
+
+- Moved AgentOS command/status spam out of the permanent chat transcript into a dedicated notification journal workspace.
+- Kept chat focused on actual user/agent conversation while preserving command warnings, delegation statuses, and diagnostics in `events / Журнал`.
+- Filtered routine provider heartbeats and AgentOS status noise out of the public execution timeline so Live Execution Flow shows semantic progress instead of repeated provider-wait cards.
+- Kept raw operation events available for the execution map state machine, so heartbeat/state tracking still works without polluting the visual branch map.
+- Added notification-center backend commands and UI refresh/clear controls for operational messages that used to clutter chat.
+- Added project onboarding/recovery tooling and release gates for connecting projects, verifying manifests, and keeping template recovery auditable.
+
 # Agent OS 0.3.27
 
 - Fixed project selection in the left navigation so the right chat switches to the selected project instead of keeping stale orchestrator history on screen.

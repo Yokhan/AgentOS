@@ -782,10 +782,24 @@ body.chat-resizing {
     margin: 2px 0 0;
     font-size: clamp(18px, 1.5vw, 24px);
 }
+.workspace-panel-head p {
+    margin: 4px 0 0;
+    color: var(--t2);
+    font-size: var(--fs-s);
+    max-width: 760px;
+}
 .workspace-actions {
     display: flex;
     gap: var(--sp-xs);
     flex-wrap: wrap;
+}
+.workspace-actions span {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 3px 7px;
 }
 .workspace-actions button,
 .workspace-empty button {
@@ -1021,6 +1035,91 @@ body.chat-resizing {
     gap: var(--sp-s);
     place-items: center;
     color: var(--t3);
+}
+.notifications-workspace {
+    min-height: min(720px, calc(100vh - 170px));
+}
+.notification-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(220px, 1fr));
+    gap: var(--sp-m);
+    min-height: 0;
+}
+.notification-group {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    min-height: 220px;
+    max-height: calc(100vh - 280px);
+    overflow-y: auto;
+}
+.notification-group.warning {
+    border-color: color-mix(in srgb, var(--yellow) 45%, var(--border));
+}
+.notification-group.success {
+    border-color: color-mix(in srgb, var(--green) 35%, var(--border));
+}
+.notification-group-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-s);
+    padding: var(--sp-s);
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--sf) 92%, transparent);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--t2);
+}
+.notification-group-head span {
+    color: var(--t3);
+}
+.notification-row {
+    padding: var(--sp-s);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+    display: grid;
+    gap: var(--sp-2xs);
+}
+.notification-row-top,
+.notification-row-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+    min-width: 0;
+}
+.notification-row-top b {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.notification-row-top span,
+.notification-row-top em,
+.notification-row-meta span,
+.notification-row-meta code {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 68%, transparent);
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    font-style: normal;
+    padding: 1px 5px;
+}
+.notification-row p {
+    margin: 0;
+    color: var(--t2);
+    line-height: 1.42;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.notification-empty {
+    padding: var(--sp-m);
+    color: var(--t3);
+    font-family: var(--font-mono);
 }
 .project-workbench-content {
     align-items: stretch;

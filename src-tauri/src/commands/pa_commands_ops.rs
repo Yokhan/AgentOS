@@ -126,6 +126,20 @@ pub enum OpsPaCommand {
     GraphRules {
         project: String,
     },
+    // Project onboarding
+    ProjectOnboardAudit,
+    ProjectConnect {
+        project: String,
+        segment: String,
+        permission: String,
+        deploy_template: bool,
+        dry_run: bool,
+    },
+    ProjectConnectMissing {
+        segment: String,
+        permission: String,
+        dry_run: bool,
+    },
 }
 
 static RE_DEPLOY_STATIC: LazyLock<regex::Regex> = LazyLock::new(|| {
@@ -215,6 +229,16 @@ static RE_GRAPH_VERIFY: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"\[GRAPH_VERIFY:([^\]]+)\]").unwrap());
 static RE_GRAPH_RULES: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"\[GRAPH_RULES:([^\]]+)\]").unwrap());
+static RE_PROJECT_ONBOARD_AUDIT: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"\[PROJECT_ONBOARD_AUDIT\]").unwrap());
+static RE_PROJECT_CONNECT: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"\[PROJECT_CONNECT:([^:\]]+)(?::([^:\]]+))?(?::([^:\]]+))?(?::([^\]]+))?\]")
+        .unwrap()
+});
+static RE_PROJECT_CONNECT_MISSING: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"\[PROJECT_CONNECT_MISSING(?::([^:\]]+))?(?::([^:\]]+))?(?::([^\]]+))?\]")
+        .unwrap()
+});
 
 pub fn parse_ops_commands(response: &str, _state: &AppState) -> Vec<ParsedCommand> {
     let mut cmds = Vec::new();
@@ -413,6 +437,47 @@ pub fn parse_ops_commands(response: &str, _state: &AppState) -> Vec<ParsedComman
             project: cap(c.get(1))
         });
     }
+    if RE_PROJECT_ONBOARD_AUDIT.is_match(response) {
+        push_cmd!(OpsPaCommand::ProjectOnboardAudit);
+    }
+    if let Some(c) = RE_PROJECT_CONNECT.captures(response) {
+        let segment = cap(c.get(2));
+        let permission = cap(c.get(3));
+        let flags = cap(c.get(4)).to_lowercase();
+        push_cmd!(OpsPaCommand::ProjectConnect {
+            project: cap(c.get(1)),
+            segment: if segment.is_empty() {
+                "Other".to_string()
+            } else {
+                segment
+            },
+            permission: if permission.is_empty() {
+                "balanced".to_string()
+            } else {
+                permission
+            },
+            deploy_template: flags.contains("deploy") || flags.contains("template"),
+            dry_run: flags.contains("dry") || flags.contains("plan"),
+        });
+    }
+    if let Some(c) = RE_PROJECT_CONNECT_MISSING.captures(response) {
+        let segment = cap(c.get(1));
+        let permission = cap(c.get(2));
+        let flags = cap(c.get(3)).to_lowercase();
+        push_cmd!(OpsPaCommand::ProjectConnectMissing {
+            segment: if segment.is_empty() {
+                "Other".to_string()
+            } else {
+                segment
+            },
+            permission: if permission.is_empty() {
+                "balanced".to_string()
+            } else {
+                permission
+            },
+            dry_run: flags.contains("dry") || flags.contains("plan"),
+        });
+    }
 
     for cmd in &cmds {
         crate::log_info!(
@@ -580,6 +645,79 @@ pub fn execute_ops_command(state: &AppState, cmd: &OpsPaCommand) -> Option<Strin
                 lines.push(format!("ℹ {} high-instability modules", high_instab.len()));
             }
             Some(lines.join("\n"))
+        }
+        OpsPaCommand::ProjectOnboardAudit => {
+            Some(super::project_onboarding::format_onboarding_audit(state))
+        }
+        OpsPaCommand::ProjectConnect {
+            project,
+            segment,
+            permission,
+            deploy_template,
+            dry_run,
+        } => {
+            let result = super::project_onboarding::connect_project_inline(
+                state,
+                super::project_onboarding::ProjectConnectOptions {
+                    project: project.clone(),
+                    segment: Some(segment.clone()),
+                    permission: Some(permission.clone()),
+                    deploy_template: *deploy_template,
+                    dry_run: *dry_run,
+                },
+            )
+            .unwrap_or_else(|e| {
+                serde_json::json!({
+                    "status": "error",
+                    "project": project,
+                    "error": e,
+                })
+            });
+            if result.get("status").and_then(serde_json::Value::as_str) == Some("error") {
+                Some(format!(
+                    "**Project connect failed:** {} — {}",
+                    project,
+                    result
+                        .get("error")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("unknown error")
+                ))
+            } else {
+                Some(super::project_onboarding::format_connect_result(&result))
+            }
+        }
+        OpsPaCommand::ProjectConnectMissing {
+            segment,
+            permission,
+            dry_run,
+        } => {
+            let result = super::project_onboarding::connect_missing_inline(
+                state,
+                super::project_onboarding::ProjectConnectMissingOptions {
+                    segment: Some(segment.clone()),
+                    permission: Some(permission.clone()),
+                    dry_run: *dry_run,
+                },
+            )
+            .unwrap_or_else(|e| {
+                serde_json::json!({
+                    "status": "error",
+                    "error": e,
+                })
+            });
+            if result.get("status").and_then(serde_json::Value::as_str) == Some("error") {
+                Some(format!(
+                    "**Project bulk connect failed:** {}",
+                    result
+                        .get("error")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("unknown error")
+                ))
+            } else {
+                Some(super::project_onboarding::format_connect_missing_result(
+                    &result,
+                ))
+            }
         }
     }
 }

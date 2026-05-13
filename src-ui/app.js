@@ -43,6 +43,7 @@ import {
   loadProjectPlan,
   loadGraph,
   loadSignals,
+  loadNotifications,
   loadPerms,
   ensureDualSession,
   loadDualSession,
@@ -167,6 +168,7 @@ async function refreshCurrentRoute() {
     loadQueue(),
     loadFeed(),
     loadSignals(),
+    loadNotifications(),
     loadInbox(),
     loadChat(chatKey),
     p ? loadModules(p) : Promise.resolve(),
@@ -289,6 +291,7 @@ try {
     loadInbox(),
     loadPlansData(),
     loadSignals(),
+    loadNotifications(),
     loadPerms(),
     loadAppInfo(),
     loadDelegations(),
@@ -337,6 +340,7 @@ setInterval(async () => {
   loadPlan();
   loadFeed();
   loadSignals();
+  loadNotifications();
   loadDelegations();
   loadExecutionMap().catch(() => {});
   loadOperationSnapshot().catch(() => {});

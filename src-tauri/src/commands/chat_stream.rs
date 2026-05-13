@@ -40,6 +40,28 @@ fn response_outcome(text: &str, cancelled: bool, exit_code: Option<i32>) -> &'st
     "done"
 }
 
+fn should_allow_plan_readonly_pa_loop(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    [
+        "подключ",
+        "подхват",
+        "онборд",
+        "проверь",
+        "аудит",
+        "статус",
+        "diagnostic",
+        "diagnostics",
+        "audit",
+        "status",
+        "onboard",
+        "connect project",
+        "connect projects",
+        "project onboarding",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+}
+
 fn append_stream_event(stream_buf: &Path, event: Value, label: &str) {
     crate::commands::jsonl::append_jsonl_logged(stream_buf, &event, label);
 }
@@ -128,31 +150,48 @@ fn spawn_provider_heartbeat(
     })
 }
 
-fn append_chat_system(
-    state: &AppState,
-    chat_file: &Path,
-    event_type: &str,
-    text: &str,
-    command: Option<&str>,
-    label: &str,
-) {
-    crate::commands::jsonl::append_jsonl_logged(
-        chat_file,
-        &json!({
-            "ts": state.now_iso(),
-            "role": "system",
-            "kind": "pa_feedback",
-            "pa_type": event_type,
-            "pa_command": command,
-            "msg": text
-        }),
-        label,
+fn pa_feedback_severity(event_type: &str, text: &str) -> &'static str {
+    if event_type == "warning" {
+        return "warning";
+    }
+    let lower = text.to_ascii_lowercase();
+    if lower.contains("failed") || lower.contains("error") || lower.contains("blocked") {
+        "warning"
+    } else if event_type == "pa_result" {
+        "success"
+    } else {
+        "info"
+    }
+}
+
+fn pa_feedback_kind(event_type: &str) -> &'static str {
+    match event_type {
+        "warning" => "command_warning",
+        "pa_result" => "command_result",
+        "pa_status" => "command_status",
+        _ => "agentos_event",
+    }
+}
+
+fn append_pa_notification(state: &AppState, event_type: &str, text: &str, command: Option<&str>) {
+    super::notifications::append_notification(
+        state,
+        super::notifications::NotificationInput {
+            severity: pa_feedback_severity(event_type, text).to_string(),
+            source: "agentos".to_string(),
+            kind: pa_feedback_kind(event_type).to_string(),
+            title: command.unwrap_or("AgentOS").to_string(),
+            message: text.to_string(),
+            project: None,
+            command: command.map(|value| value.to_string()),
+            operation_id: None,
+        },
     );
 }
 
 fn append_pa_feedback(
     state: &AppState,
-    chat_file: &Path,
+    _chat_file: &Path,
     stream_buf: &Path,
     event_type: &str,
     text: &str,
@@ -164,7 +203,7 @@ fn append_pa_feedback(
         json!({"type": event_type, "text": text, "command": command}),
         label,
     );
-    append_chat_system(state, chat_file, event_type, text, command, label);
+    append_pa_notification(state, event_type, text, command);
 }
 
 fn permission_path_for_chat(
@@ -231,7 +270,7 @@ pub async fn stream_chat(
     );
     let prompt = if plan_mode {
         format!(
-            "{}\n\n[AGENTOS RUN MODE]\nPlan mode is ON. Read and reason only. Do not edit files, do not run write operations, and do not emit AgentOS PA command tags. Return a plan, questions, or a concrete blocker. Preserve [RESPONSE POLICY]: match the user's language for prose.",
+            "{}\n\n[AGENTOS RUN MODE]\nPlan mode is ON. Read and reason only. Do not edit files and do not run write operations. You may emit read-only AgentOS PA command tags for diagnostics, audits, and dry-runs only, for example [PROJECT_ONBOARD_AUDIT] or [PROJECT_CONNECT_MISSING:Other:balanced:dry]. Do not emit write commands. Return a plan, questions, a read-only diagnostic command, or a concrete blocker. Preserve [RESPONSE POLICY]: match the user's language for prose.",
             prompt
         )
     } else {
@@ -310,7 +349,9 @@ pub async fn stream_chat(
         .payload(json!({"run_id": run_id.as_str()})),
     );
 
-    let allow_pa_loop = is_orchestrator && !plan_mode;
+    let allow_pa_loop =
+        is_orchestrator && (!plan_mode || should_allow_plan_readonly_pa_loop(&message));
+    let read_only_pa_loop = plan_mode;
 
     if matches!(provider, super::provider_runner::ProviderKind::Codex) {
         let state_arc = Arc::clone(&state);
@@ -321,6 +362,7 @@ pub async fn stream_chat(
         let chat_file_bg = chat_file.clone();
         let stream_buf_bg = stream_buf.clone();
         let allow_pa_loop_bg = allow_pa_loop;
+        let read_only_pa_loop_bg = read_only_pa_loop;
         let run_id_bg = run_id.clone();
         let operation_id_bg = operation_id.clone();
         let run_mode_label_bg = run_mode_label.to_string();
@@ -468,6 +510,7 @@ pub async fn stream_chat(
                     "stream codex",
                     Some(operation_id_bg.as_str()),
                     Some(run_id_bg.as_str()),
+                    read_only_pa_loop_bg,
                 )
             } else {
                 response.clone()
@@ -578,6 +621,7 @@ pub async fn stream_chat(
     let resolved_effort_bg = resolved_effort.clone();
     let operation_id_bg = operation_id.clone();
     let run_id_bg = run_id.clone();
+    let read_only_pa_loop_bg = read_only_pa_loop;
 
     // Spawn background thread for blocking I/O — returns immediately
     std::thread::spawn(move || {
@@ -596,6 +640,7 @@ pub async fn stream_chat(
             &run_id_bg,
             &operation_id_bg,
             allow_pa_loop,
+            read_only_pa_loop_bg,
         );
     });
 
@@ -618,6 +663,7 @@ fn stream_reader_loop(
     run_id: &str,
     operation_id: &str,
     allow_pa_loop: bool,
+    read_only_pa_loop: bool,
 ) {
     crate::log_info!(
         "[stream:{}] reader loop started, pid={}",
@@ -1031,6 +1077,7 @@ fn stream_reader_loop(
             "stream",
             Some(operation_id),
             Some(run_id),
+            read_only_pa_loop,
         )
     } else {
         full_text.clone()
@@ -1126,6 +1173,7 @@ fn execute_pa_commands_for_agent_loop(
     label_prefix: &str,
     chat_key: &str,
     operation_id: Option<&str>,
+    read_only_only: bool,
 ) -> PaLoopFeedback {
     let command_text = super::pa_commands::recover_bare_readonly_commands(response);
     let recovered_readonly = super::pa_commands::recoverable_bare_readonly_commands(response);
@@ -1169,6 +1217,24 @@ fn execute_pa_commands_for_agent_loop(
         }
 
         let command_label = super::pa_commands::describe_pa_command(&parsed.cmd);
+        if read_only_only && !super::pa_commands::is_read_only_pa_command(&parsed.cmd) {
+            let text = format!(
+                "{} -> skipped: current run mode is Plan/read-only; switch to act/full or use a dry-run/read-only command.",
+                command_label
+            );
+            append_pa_feedback(
+                state,
+                chat_file,
+                stream_buf,
+                "warning",
+                &text,
+                None,
+                &format!("{} readonly skip", label_prefix),
+            );
+            feedback.warnings += 1;
+            feedback.items.push(text);
+            continue;
+        }
         feedback.actionable += 1;
         if let Some(operation_id) = operation_id {
             super::operation_state::emit(
@@ -1332,6 +1398,10 @@ fn claims_agentos_action_without_command(response: &str) -> bool {
         "не делегировал",
         "ничего не отправил",
         "ничего не запускал",
+        "не подключил",
+        "не подключаю",
+        "не проверил",
+        "ничего не подключил",
         "did not delegate",
         "didn't delegate",
         "did not send",
@@ -1351,6 +1421,12 @@ fn claims_agentos_action_without_command(response: &str) -> bool {
         "делегировал",
         "поставил задачу",
         "создал делегацию",
+        "проверяю",
+        "проверил",
+        "подключаю",
+        "подключил",
+        "добавляю",
+        "завожу",
         "sent delegation",
         "queued delegation",
         "started delegation",
@@ -1359,11 +1435,17 @@ fn claims_agentos_action_without_command(response: &str) -> bool {
     ];
     let action_targets = [
         "делегац",
+        "проект",
+        "проекты",
+        "подключение",
+        "онборд",
         "agentos",
         "delegate",
         "delegation",
         "route",
         "work item",
+        "project onboarding",
+        "project_connect",
         "задачу на",
     ];
 
@@ -1374,7 +1456,8 @@ fn claims_agentos_action_without_command(response: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_auto_continue_prompt, claims_agentos_action_without_command, PaLoopFeedback,
+        build_auto_continue_prompt, claims_agentos_action_without_command,
+        should_allow_plan_readonly_pa_loop, PaLoopFeedback,
     };
 
     #[test]
@@ -1384,6 +1467,12 @@ mod tests {
         ));
         assert!(claims_agentos_action_without_command(
             "Sent delegation to AgentOS and queued the next route."
+        ));
+        assert!(claims_agentos_action_without_command(
+            "Проверяю подключение проектов к AgentOS."
+        ));
+        assert!(claims_agentos_action_without_command(
+            "Подключил проекты к onboarding metadata."
         ));
     }
 
@@ -1411,6 +1500,19 @@ mod tests {
         assert!(prompt.contains("emit the exact command tag"));
         assert!(prompt.contains("repeated the same diagnostic command"));
     }
+
+    #[test]
+    fn plan_mode_allows_readonly_loop_for_onboarding_intents() {
+        assert!(should_allow_plan_readonly_pa_loop(
+            "Проверь подключение проектов к AgentOS"
+        ));
+        assert!(should_allow_plan_readonly_pa_loop(
+            "Run project onboarding audit"
+        ));
+        assert!(!should_allow_plan_readonly_pa_loop(
+            "Напиши архитектурный план без действий"
+        ));
+    }
 }
 
 fn run_pa_agent_loop(
@@ -1427,6 +1529,7 @@ fn run_pa_agent_loop(
     label_prefix: &str,
     operation_id: Option<&str>,
     run_id: Option<&str>,
+    read_only_only: bool,
 ) -> String {
     let mut response = first_response.to_string();
     let mut final_response = response.clone();
@@ -1458,10 +1561,11 @@ fn run_pa_agent_loop(
             label_prefix,
             chat_key,
             operation_id,
+            read_only_only,
         );
         if feedback.is_empty() {
             if !missing_command_recovery_sent && claims_agentos_action_without_command(&response) {
-                let text = "Агент заявил, что запустил действие, но AgentOS не получил ни одной исполняемой команды. Исправь это следующим ответом: выдай точный тег команды, например [DELEGATE:Project]...[/DELEGATE], или явно напиши, что действие не было запущено.";
+                let text = "Агент заявил, что запустил действие, но AgentOS не получил ни одной исполняемой команды. Исправь это следующим ответом: выдай точный тег команды, например [PROJECT_ONBOARD_AUDIT], [PROJECT_CONNECT:Project:Other:balanced:dry] или [DELEGATE:Project]...[/DELEGATE], либо явно напиши, что действие не было запущено.";
                 append_pa_feedback(
                     state,
                     chat_file,

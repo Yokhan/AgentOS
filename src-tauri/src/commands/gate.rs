@@ -6,6 +6,28 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct VerifyCommand {
+    program: String,
+    args: Vec<String>,
+}
+
+impl VerifyCommand {
+    fn new(program: &str, args: &[&str]) -> Self {
+        Self {
+            program: verify_program(program),
+            args: args.iter().map(|arg| (*arg).to_string()).collect(),
+        }
+    }
+
+    fn display(&self) -> String {
+        std::iter::once(self.program.as_str())
+            .chain(self.args.iter().map(String::as_str))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GateResult {
     pub status: GateStatus,
@@ -106,31 +128,10 @@ fn run_verify_script(project_dir: &Path) -> Option<String> {
         return None;
     }
 
-    let cmd = if project_dir.join("Cargo.toml").exists() {
-        vec!["cargo", "check", "--message-format=short"]
-    } else if project_dir.join("package.json").exists() {
-        // Try npm test, fallback to npm run build
-        if let Ok(pkg) = std::fs::read_to_string(project_dir.join("package.json")) {
-            if pkg.contains("\"test\"") {
-                vec!["npm", "test", "--", "--passWithNoTests"]
-            } else if pkg.contains("\"build\"") {
-                vec!["npm", "run", "build"]
-            } else {
-                return None;
-            }
-        } else {
-            return None;
-        }
-    } else if project_dir.join("requirements.txt").exists()
-        || project_dir.join("pyproject.toml").exists()
-    {
-        vec!["python", "-m", "py_compile"] // basic syntax check
-    } else {
-        return None;
-    };
+    let cmd = detect_verify_command(project_dir)?;
 
-    let output = super::claude_runner::silent_cmd(cmd[0])
-        .args(&cmd[1..])
+    let output = super::claude_runner::silent_cmd(&cmd.program)
+        .args(&cmd.args)
         .current_dir(project_dir)
         .output();
 
@@ -151,7 +152,59 @@ fn run_verify_script(project_dir: &Path) -> Option<String> {
                 super::claude_runner::safe_truncate(&combined, 1000)
             ))
         }
-        Err(e) => Some(format!("EXIT_FAIL: verify error: {}", e)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(format!(
+            "EXIT_FAIL: verify command not found: `{}` (project: {})",
+            cmd.display(),
+            project_dir.display()
+        )),
+        Err(e) => Some(format!(
+            "EXIT_FAIL: verify error launching `{}`: {}",
+            cmd.display(),
+            e
+        )),
+    }
+}
+
+fn detect_verify_command(project_dir: &Path) -> Option<VerifyCommand> {
+    if project_dir.join("Cargo.toml").exists() {
+        Some(VerifyCommand::new(
+            "cargo",
+            &["check", "--message-format=short"],
+        ))
+    } else if project_dir.join("package.json").exists() {
+        // Try npm test, fallback to npm run build
+        if let Ok(pkg) = std::fs::read_to_string(project_dir.join("package.json")) {
+            let pkg_json = serde_json::from_str::<Value>(&pkg).ok()?;
+            let scripts = pkg_json.get("scripts").and_then(Value::as_object)?;
+            if scripts.get("test").and_then(Value::as_str).is_some() {
+                Some(VerifyCommand::new("npm", &["test"]))
+            } else if scripts.get("build").and_then(Value::as_str).is_some() {
+                Some(VerifyCommand::new("npm", &["run", "build"]))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else if project_dir.join("requirements.txt").exists()
+        || project_dir.join("pyproject.toml").exists()
+    {
+        Some(VerifyCommand::new("python", &["-m", "py_compile"])) // basic syntax check
+    } else {
+        None
+    }
+}
+
+fn verify_program(program: &str) -> String {
+    if cfg!(target_os = "windows") {
+        match program {
+            "cargo" => "cargo.exe".to_string(),
+            "npm" => "npm.cmd".to_string(),
+            "python" => "python.exe".to_string(),
+            other => other.to_string(),
+        }
+    } else {
+        program.to_string()
     }
 }
 
@@ -271,4 +324,74 @@ pub fn build_gate_context(state: &AppState) -> String {
         return String::new();
     }
     format!("[GATE RESULTS]\n{}\n[END GATE]", lines.join("\n"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_project(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let path = std::env::temp_dir().join(format!(
+            "agent-os-gate-{}-{}-{}",
+            name,
+            std::process::id(),
+            nanos
+        ));
+        std::fs::create_dir_all(&path).expect("create temp project");
+        path
+    }
+
+    #[test]
+    fn node_verify_command_uses_platform_launcher() {
+        let project = temp_project("node-launcher");
+        std::fs::write(
+            project.join("package.json"),
+            r#"{"scripts":{"test":"cargo test --manifest-path src-tauri/Cargo.toml"}}"#,
+        )
+        .expect("write package.json");
+
+        let command = detect_verify_command(&project).expect("detect node verify command");
+        let expected_program = if cfg!(target_os = "windows") {
+            "npm.cmd"
+        } else {
+            "npm"
+        };
+        assert_eq!(command.program, expected_program);
+        assert_eq!(
+            command.args,
+            vec!["test"]
+                .into_iter()
+                .map(String::from)
+                .collect::<Vec<_>>()
+        );
+
+        let _ = std::fs::remove_dir_all(project);
+    }
+
+    #[test]
+    fn jest_node_verify_command_does_not_inject_pass_with_no_tests() {
+        let project = temp_project("jest-launcher");
+        std::fs::write(
+            project.join("package.json"),
+            r#"{"scripts":{"test":"jest"}}"#,
+        )
+        .expect("write package.json");
+
+        let command = detect_verify_command(&project).expect("detect jest verify command");
+        assert_eq!(
+            command.args,
+            vec!["test"]
+                .into_iter()
+                .map(String::from)
+                .collect::<Vec<_>>()
+        );
+
+        let _ = std::fs::remove_dir_all(project);
+    }
 }

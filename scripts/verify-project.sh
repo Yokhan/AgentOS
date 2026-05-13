@@ -23,7 +23,7 @@ fi
 if [ -f "package.json" ]; then
     if grep -q '"test"' package.json; then
         echo "[node] npm test..."
-        npm test -- --passWithNoTests 2>&1
+        npm test 2>&1
         exit $?
     elif grep -q '"build"' package.json; then
         echo "[node] npm run build..."
