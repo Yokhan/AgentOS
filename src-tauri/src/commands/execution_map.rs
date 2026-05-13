@@ -142,6 +142,55 @@ fn is_provider_state_sample(row: &Value) -> bool {
     volatile_status && (provider_phase || provider_detail)
 }
 
+fn is_visual_map_row(row: &Value) -> bool {
+    if is_provider_state_sample(row) {
+        return false;
+    }
+    if row.get("semantic").and_then(|v| v.as_bool()) == Some(false) {
+        return false;
+    }
+
+    let source = field(row, "source");
+    let kind = field(row, "kind");
+
+    match kind.as_str() {
+        "queued"
+        | "state"
+        | "stage"
+        | "done"
+        | "safety"
+        | "tool"
+        | "tool_result"
+        | "tool_started"
+        | "tool_completed"
+        | "delegation_queued"
+        | "delegation_started"
+        | "delegation_l1"
+        | "delegation_l2"
+        | "delegation_l3_decision"
+        | "delegation_done"
+        | "gate_started"
+        | "review_verdict"
+        | "run_cancelled" => true,
+        "command"
+        | "coordination"
+        | "pa_command_started"
+        | "pa_command_result"
+        | "pa_command_warning"
+        | "pa_command_missing"
+        | "auto_continue"
+        | "run_done"
+        | "run"
+        | "progress"
+        | "thinking"
+        | "usage"
+        | "cost"
+        | "system"
+        | "model_output" => false,
+        _ => source == "delegation",
+    }
+}
+
 fn stable_state_detail(sample: &Value) -> String {
     let kind = field(sample, "kind");
     let waiting_for = field(sample, "waiting_for");
@@ -458,6 +507,8 @@ pub fn build_execution_map(
                 if replace {
                     latest_state_samples.insert(lane_id, row);
                 }
+                None
+            } else if !is_visual_map_row(&row) {
                 None
             } else {
                 Some(row)
@@ -1070,6 +1121,58 @@ mod tests {
             orchestrator["last_state_detail"],
             "waiting for provider output"
         );
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn pa_command_and_auto_continue_noise_do_not_render_as_map_events() {
+        let root = test_root("pa-command-noise");
+        let state = AppState::new(root.clone());
+        let operation_id = "chat:test-run".to_string();
+
+        for (kind, phase, status, title) in [
+            (
+                "pa_command_started",
+                "command",
+                "running",
+                "Running [DASHBOARD_FULL]",
+            ),
+            (
+                "pa_command_result",
+                "command",
+                "running",
+                "Completed [DASHBOARD_FULL]",
+            ),
+            (
+                "pa_command_missing",
+                "command",
+                "needs_user",
+                "Claimed action without executable AgentOS command",
+            ),
+            ("auto_continue", "agent_loop", "running", "Auto-continue turn 3"),
+            ("run_done", "done", "done", "done"),
+        ] {
+            crate::commands::operation_state::emit(
+                &state,
+                crate::commands::operation_state::OperationEventInput::new(
+                    operation_id.clone(),
+                    "agentos",
+                    "_orchestrator",
+                    kind,
+                    phase,
+                    status,
+                    title,
+                ),
+            );
+        }
+
+        let result = build_execution_map(&state, None, None, 50);
+        assert_eq!(result["counts"]["visual_events"], 0);
+        let events = result["events"].as_array().expect("events");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["kind"], "root");
+        assert_eq!(events[0]["visible"], false);
 
         let _ = std::fs::remove_dir_all(root);
     }

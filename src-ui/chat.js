@@ -1921,6 +1921,7 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
       return "comfortable";
     }
   });
+  const [showWaitingDetails, setShowWaitingDetails] = useState(false);
   if (!map || map.status !== "ok") return null;
   const isStage = variant === "stage";
   const dense = density === "dense";
@@ -1963,6 +1964,7 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const counts = map.counts || {};
   const hiddenStateSamples =
     Number(counts.state_samples || 0) + uiHiddenStateSamples;
+  const showWaitingGrid = !isStage || showWaitingDetails;
   const allEventsForLayout = rawEvents.map((event, index) => {
     const eventIndex = finiteNumber(
       event.event_index,
@@ -2105,7 +2107,9 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
           </div>
         </div>`}
     ${waitingGroups.length
-      ? html`<div class="exec-map-waiting">
+      ? html`<div
+          class=${`exec-map-waiting ${showWaitingGrid ? "" : "compact"}`}
+        >
           <b>нужен ты</b>
           <div class="exec-map-waiting-head">
             <b>нужен ты</b>
@@ -2115,57 +2119,97 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
             ${waitingOverflow
               ? html`<em>еще ${waitingOverflow} групп скрыто</em>`
               : null}
+            ${isStage
+              ? html`<button
+                  onClick=${() => setShowWaitingDetails(!showWaitingDetails)}
+                >
+                  ${showWaitingDetails ? "collapse" : "details"}
+                </button>`
+              : null}
           </div>
-          <div class="exec-map-waiting-grid">
-            ${visibleWaitingGroups.map((group) => {
-              const item = group.items[0] || group;
-              const action = String(item.action || "");
-              const status = String(item.status || "");
-              const canApprove =
-                action === "approve" ||
-                status === "pending" ||
-                status === "needs_permission";
-              const canRetry =
-                action.includes("retry") ||
-                ["failed", "rejected", "cancelled"].includes(status);
-              return html`<div class="exec-map-waiting-item">
-                <div class="exec-map-waiting-item-top">
-                  <b>${group.project}</b>
-                  <span>${group.status}</span>
-                  ${group.items.length > 1
-                    ? html`<em>${group.items.length}x</em>`
-                    : null}
-                </div>
-                <p>${group.task || group.status}</p>
-                <div class="exec-map-waiting-actions">
-                  ${canApprove
-                    ? html`<button onClick=${() => approveDel(item.id)}>
-                          approve
-                        </button>
-                        <button onClick=${() => rejectDel(item.id)}>
-                          reject
-                        </button>`
-                    : null}
-                  ${canRetry
-                    ? html`<button
-                          onClick=${() => {
-                            composerDraftText.value = `[DELEGATE_RETRY:${item.id}]Retry this delegation through the selected available provider. Report exact blocker/result.[/DELEGATE_RETRY]`;
-                          }}
-                        >
-                          retry
-                        </button>
-                        <button
+          ${showWaitingGrid
+            ? html`<div class="exec-map-waiting-grid">
+                ${visibleWaitingGroups.map((group) => {
+                  const item = group.items[0] || group;
+                  const action = String(item.action || "");
+                  const status = String(item.status || "");
+                  const canApprove =
+                    action === "approve" ||
+                    status === "pending" ||
+                    status === "needs_permission";
+                  const canRetry =
+                    action.includes("retry") ||
+                    ["failed", "rejected", "cancelled"].includes(status);
+                  return html`<div class="exec-map-waiting-item">
+                    <div class="exec-map-waiting-item-top">
+                      <b>${group.project}</b>
+                      <span>${group.status}</span>
+                      ${group.items.length > 1
+                        ? html`<em>${group.items.length}x</em>`
+                        : null}
+                    </div>
+                    <p>${group.task || group.status}</p>
+                    <div class="exec-map-waiting-actions">
+                      ${canApprove
+                        ? html`<button onClick=${() => approveDel(item.id)}>
+                              approve
+                            </button>
+                            <button onClick=${() => rejectDel(item.id)}>
+                              reject
+                            </button>`
+                        : null}
+                      ${canRetry
+                        ? html`<button
+                              onClick=${() => {
+                                composerDraftText.value = `[DELEGATE_RETRY:${item.id}]Retry this delegation through the selected available provider. Report exact blocker/result.[/DELEGATE_RETRY]`;
+                              }}
+                            >
+                              retry
+                            </button>
+                            <button
+                              onClick=${() => {
+                                composerDraftText.value = `[DELEGATE_STATUS:${item.id}]\n[DELEGATE_CLEANUP:1]`;
+                              }}
+                            >
+                              status/archive
+                            </button>`
+                        : null}
+                    </div>
+                  </div>`;
+                })}
+              </div>`
+            : html`<div class="exec-map-waiting-strip">
+                ${visibleWaitingGroups.map((group) => {
+                  const item = group.items[0] || group;
+                  const action = String(item.action || "");
+                  const status = String(item.status || "");
+                  const canApprove =
+                    action === "approve" ||
+                    status === "pending" ||
+                    status === "needs_permission";
+                  return html`<div class="exec-map-waiting-chip">
+                    <b>${group.project}</b>
+                    <span>${group.status}</span>
+                    ${group.items.length > 1
+                      ? html`<em>${group.items.length}x</em>`
+                      : null}
+                    ${canApprove
+                      ? html`<button onClick=${() => approveDel(item.id)}>
+                            approve
+                          </button>
+                          <button onClick=${() => rejectDel(item.id)}>
+                            reject
+                          </button>`
+                      : html`<button
                           onClick=${() => {
                             composerDraftText.value = `[DELEGATE_STATUS:${item.id}]\n[DELEGATE_CLEANUP:1]`;
                           }}
                         >
-                          status/archive
-                        </button>`
-                    : null}
-                </div>
-              </div>`;
-            })}
-          </div>
+                          status
+                        </button>`}
+                  </div>`;
+                })}
+              </div>`}
         </div>`
       : null}
     ${!events.length && hiddenStateSamples

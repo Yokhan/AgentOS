@@ -1033,6 +1033,230 @@ function RouteDecisionPanel({ map, execution }) {
   </section>`;
 }
 
+function RouteDecisionPanelCompact({ map, execution }) {
+  const [showDetails, setShowDetails] = useState(false);
+  const allRoutes = (map?.project_agent_routes || []).filter(
+    routeNeedsDecision,
+  );
+  const allWaiting = execution?.waiting_for_user || [];
+  const routeLimit = showDetails ? 5 : 3;
+  const routes = allRoutes.slice(0, routeLimit);
+  const waiting = allWaiting.slice(0, routeLimit);
+  const totalWaiting = allRoutes.length + allWaiting.length;
+  if (!totalWaiting) return null;
+
+  const routeProgress = map?.route_progress || {};
+  const headline =
+    routeProgress.headline ||
+    (allRoutes.length
+      ? `${allRoutes.length} route need decision`
+      : `${allWaiting.length} delegation decisions`);
+  const statusCommand = (id, fallback) =>
+    `[DELEGATE_STATUS:${id || fallback || "?failed"}]`;
+  const cleanupCommand = `[DELEGATE_CLEANUP:1]\n[DELEGATE_STATUS:?failed]\n[DASHBOARD_FULL]`;
+  const retryCommand = (id) =>
+    `[DELEGATE_RETRY:${id}]Repeat through the currently available provider. If Claude is unavailable, use Codex. Check diff/health first, then return the factual result without unrelated changes.[/DELEGATE_RETRY]`;
+  const refresh = () =>
+    Promise.allSettled([
+      loadExecutionMap("", activeDualSession.value || null, 180),
+      loadOrchestrationMap("", activeDualSession.value || null),
+    ]);
+
+  return html`<section
+    class=${`route-decision-panel ${showDetails ? "" : "compact"}`}
+  >
+    <div class="route-decision-head">
+      <div>
+        <span>needs your decision</span>
+        <b>${headline}</b>
+      </div>
+      <div class="route-decision-head-actions">
+        <button onClick=${() => setShowDetails((value) => !value)}>
+          ${showDetails ? "collapse" : "details"}
+        </button>
+        <button onClick=${refresh}>refresh</button>
+      </div>
+    </div>
+    ${showDetails
+      ? html`<div class="route-decision-grid">
+          ${routes.map((route) => {
+            const id = routeDelegationId(route);
+            const counts = route.counts || {};
+            return html`<article class="route-decision-card">
+              <div class="route-decision-title">
+                <b>${route.project || "project"}</b>
+                <span
+                  >${route.route_state ||
+                  route.progress?.phase ||
+                  "blocked"}</span
+                >
+              </div>
+              <p>${route.title || route.progress?.label || "Route blocked"}</p>
+              <div class="route-decision-meta">
+                ${id
+                  ? html`<code>${id}</code>`
+                  : html`<code>no delegation id</code>`}
+                <span>${counts.blocked || 0} blockers</span>
+                <span>${route.executor_provider || "agent"}</span>
+              </div>
+              <div class="route-decision-actions">
+                <button
+                  onClick=${() =>
+                    executeRouteCommand(
+                      statusCommand(id, route.project),
+                      "status",
+                    )}
+                >
+                  status
+                </button>
+                <button
+                  disabled=${!id}
+                  onClick=${() =>
+                    executeRouteCommand(retryCommand(id), "retry")}
+                >
+                  retry
+                </button>
+                <button
+                  onClick=${() =>
+                    executeRouteCommand(cleanupCommand, "cleanup")}
+                >
+                  archive terminal
+                </button>
+                <button
+                  onClick=${() =>
+                    executeRouteCommand(
+                      `[HEALTH_CHECK:${route.project || "all"}]`,
+                      "health",
+                    )}
+                >
+                  health
+                </button>
+              </div>
+            </article>`;
+          })}
+          ${waiting.map((item) => {
+            const canApprove =
+              item.action === "approve" ||
+              item.status === "pending" ||
+              item.status === "needs_permission";
+            return html`<article class="route-decision-card">
+              <div class="route-decision-title">
+                <b>${item.project || "project"}</b>
+                <span>${item.status || item.action || "waiting"}</span>
+              </div>
+              <p>${item.task || "Delegation waits for a decision"}</p>
+              <div class="route-decision-meta">
+                <code>${item.id}</code>
+                <span>${item.action || "review"}</span>
+              </div>
+              <div class="route-decision-actions">
+                ${canApprove
+                  ? html`<button
+                        class="primary"
+                        onClick=${() =>
+                          approveRouteDelegation(item.id, "approve")}
+                      >
+                        approve
+                      </button>
+                      <button
+                        onClick=${() =>
+                          approveRouteDelegation(item.id, "reject")}
+                      >
+                        reject
+                      </button>`
+                  : null}
+                <button
+                  onClick=${() =>
+                    executeRouteCommand(statusCommand(item.id), "status")}
+                >
+                  status
+                </button>
+                <button
+                  disabled=${!item.id || canApprove}
+                  onClick=${() =>
+                    executeRouteCommand(retryCommand(item.id), "retry")}
+                >
+                  retry
+                </button>
+                <button
+                  onClick=${() =>
+                    executeRouteCommand(cleanupCommand, "cleanup")}
+                >
+                  archive terminal
+                </button>
+              </div>
+            </article>`;
+          })}
+        </div>`
+      : html`<div class="route-decision-strip">
+          ${routes.map((route) => {
+            const id = routeDelegationId(route);
+            const counts = route.counts || {};
+            return html`<article class="route-decision-chip">
+              <b>${route.project || "project"}</b>
+              <span
+                >${route.route_state ||
+                route.progress?.phase ||
+                "blocked"}</span
+              >
+              <em>${counts.blocked || 0} blockers</em>
+              <button
+                onClick=${() =>
+                  executeRouteCommand(
+                    statusCommand(id, route.project),
+                    "status",
+                  )}
+              >
+                status
+              </button>
+              <button
+                disabled=${!id}
+                onClick=${() => executeRouteCommand(retryCommand(id), "retry")}
+              >
+                retry
+              </button>
+            </article>`;
+          })}
+          ${waiting.map((item) => {
+            const canApprove =
+              item.action === "approve" ||
+              item.status === "pending" ||
+              item.status === "needs_permission";
+            return html`<article class="route-decision-chip">
+              <b>${item.project || "project"}</b>
+              <span>${item.status || item.action || "waiting"}</span>
+              <em>${item.action || "review"}</em>
+              ${canApprove
+                ? html`<button
+                      class="primary"
+                      onClick=${() =>
+                        approveRouteDelegation(item.id, "approve")}
+                    >
+                      approve
+                    </button>
+                    <button
+                      onClick=${() => approveRouteDelegation(item.id, "reject")}
+                    >
+                      reject
+                    </button>`
+                : html`<button
+                    onClick=${() =>
+                      executeRouteCommand(statusCommand(item.id), "status")}
+                  >
+                    status
+                  </button>`}
+            </article>`;
+          })}
+          ${totalWaiting > routes.length + waiting.length
+            ? html`<article class="route-decision-chip muted">
+                +${totalWaiting - routes.length - waiting.length} more
+                <button onClick=${() => setShowDetails(true)}>details</button>
+              </article>`
+            : null}
+        </div>`}
+  </section>`;
+}
+
 function ExecutionFlowStage() {
   const map = executionMap.value;
   const orchestration = orchestrationMap.value;
@@ -1087,7 +1311,7 @@ function ExecutionFlowStage() {
         </button>
       </div>
     </div>
-    <${RouteDecisionPanel} map=${orchestration} execution=${map} />
+    <${RouteDecisionPanelCompact} map=${orchestration} execution=${map} />
     ${map?.status === "ok"
       ? html`<${ExecutionMapCard}
           map=${map}

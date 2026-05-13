@@ -1,3 +1,12 @@
+# Agent OS 0.3.30
+
+- Stopped Live Execution Flow from rendering AgentOS command/status chatter as branch-map events.
+- Kept provider heartbeat/wait samples as lane state only, so repeated provider-wait pings no longer create shaking duplicate nodes.
+- Added regression coverage for PA command, auto-continue, and run-finished noise staying out of the visual execution map.
+- Collapsed execution-map waiting decisions into a compact horizontal strip by default, with full details behind an explicit `details` toggle.
+- Collapsed the route-decision panel above the map into a compact action strip, so pending approvals and failed routes no longer visually replace the map.
+- Preserved explicit approve/reject/status/retry actions while keeping the main flow area focused on execution branches.
+
 # Agent OS 0.3.29
 
 - Fixed updater `latest.json` generation to read release notes as UTF-8, so Russian text like `Журнал` no longer becomes mojibake in the installed-app update dialog.
