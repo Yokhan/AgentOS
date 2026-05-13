@@ -1,3 +1,8 @@
+# Agent OS 0.3.29
+
+- Fixed updater `latest.json` generation to read release notes as UTF-8, so Russian text like `Журнал` no longer becomes mojibake in the installed-app update dialog.
+- Rebuilt the same AgentOS UX/onboarding package with a clean updater manifest after validating the published endpoint.
+
 # Agent OS 0.3.28
 
 - Moved AgentOS command/status spam out of the permanent chat transcript into a dedicated notification journal workspace.

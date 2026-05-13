@@ -118,7 +118,7 @@ function Read-NormalizedText {
         [string]$Path
     )
 
-    return [string]::Concat((Get-Content $Path -Raw))
+    return [string]::Concat((Get-Content $Path -Raw -Encoding UTF8))
 }
 
 function Read-ReleaseNotesForVersion {
