@@ -1,3 +1,13 @@
+# Agent OS 0.3.33
+
+- Added a visible Code Context attachment flow in chat: the selected project can build a real backend `agentos.code_context.v1` bundle before the next message.
+- Added a Code Context inspector showing bundle count, projects, schema, size, truncation, warnings, focus, and a sample preview before send.
+- Wrapped attached context in an explicit envelope before sending so agents receive the hidden context with provenance instead of unexplained prompt text.
+- Added fallback behavior: if backend context generation fails, AgentOS attaches a `[CODE_CONTEXT]` request and shows the error instead of silently doing nothing.
+- Added `scripts/check-code-context-ui.mjs` to the UI release gate so the code-context button, inspector, send envelope, and store wiring cannot disappear unnoticed.
+- Rewrote `docs/CODE_CONTEXT.md` as an operator-readable contract for shared auth, game-engine/3D UI work, project agents, and current analyzer limits.
+- Added `tasks/UX_CODE_CONTEXT_50_20_PLAN.md` with the audit of the previous 50+20 and the next 20+50 product polish plan.
+
 # Agent OS 0.3.32
 
 - Added production code context bundles (`agentos.code_context.v1`) for orchestrator and project agents.

@@ -1776,7 +1776,28 @@ async function sendMessage(msg) {
     chatMode.value = "";
   }
   const contextBlocks = (contextAttachments.value || [])
-    .map((item) => String(item?.prompt || "").trim())
+    .map((item) => {
+      const body = String(item?.prompt || "").trim();
+      if (!body) return "";
+      const label = String(item?.label || item?.kind || "context").replace(
+        /\s+/g,
+        " ",
+      );
+      const kind = String(item?.kind || "context").replace(/\s+/g, "-");
+      const projects = Array.isArray(item?.projects)
+        ? item.projects.filter(Boolean).join(", ")
+        : item?.project || "";
+      const meta = [
+        `kind=${kind}`,
+        `label=${label}`,
+        projects ? `projects=${projects}` : "",
+        item?.schema ? `schema=${item.schema}` : "",
+        item?.truncated ? "truncated=true" : "",
+      ]
+        .filter(Boolean)
+        .join("; ");
+      return `--- ATTACHED CONTEXT (${meta}) ---\n${body}\n--- END ATTACHED CONTEXT ---`;
+    })
     .filter(Boolean);
   if (contextBlocks.length) {
     msg = contextBlocks.join("\n\n") + "\n\n[USER_TASK]\n" + msg;
@@ -2364,6 +2385,34 @@ async function sendMessage(msg) {
   }
 }
 
+async function loadCodeContextBundle(request = {}) {
+  const body = {
+    ...request,
+    max_chars: request.max_chars || request.maxChars || 12000,
+    include_files:
+      request.include_files !== undefined
+        ? request.include_files
+        : request.includeFiles || false,
+  };
+  if (__IS_TAURI) {
+    const value = await __invoke("get_code_context_bundle", { request: body });
+    if (value?.status === "error" || value?.error) {
+      throw new Error(value.error || "code context failed");
+    }
+    return value;
+  }
+  const response = await fetch("/api/code-context", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const value = await response.json();
+  if (!response.ok || value?.status === "error" || value?.error) {
+    throw new Error(value?.error || `code context failed: ${response.status}`);
+  }
+  return value;
+}
+
 async function approveDel(id) {
   const d = { ...delegations.value };
   d[id] = { ...d[id], status: "running", _start: Date.now() };
@@ -2777,6 +2826,7 @@ export {
   loadEventContract,
   loadOperationSnapshot,
   loadAppInfo,
+  loadCodeContextBundle,
   generateStrategy,
   createAdhocPlanFromRoom,
   createRoomProjectSession,

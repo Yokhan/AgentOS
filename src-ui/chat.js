@@ -67,6 +67,9 @@ import {
   eventContract,
   operationSnapshot,
   operationEvents,
+  codeContextBusy,
+  codeContextError,
+  codeContextPreview,
   permData,
 } from "/store.js";
 import {
@@ -116,6 +119,7 @@ import {
   loadExecutionTimeline,
   loadExecutionMap,
   loadEventContract,
+  loadCodeContextBundle,
   setDualOrchestrator,
 } from "/api.js";
 import {
@@ -269,25 +273,113 @@ function duoInputLabel(action, lead, target) {
   return "both agents review";
 }
 
+function contextSizeLabel(chars) {
+  const n = Number(chars || 0);
+  if (!n) return "";
+  if (n > 999) return `${Math.round(n / 100) / 10}k chars`;
+  return `${n} chars`;
+}
+
+function contextMetaLine(item) {
+  const projects = Array.isArray(item?.projects)
+    ? item.projects.filter(Boolean).join(", ")
+    : item?.project || "";
+  return [
+    item?.schema || item?.kind || "context",
+    projects ? `projects: ${projects}` : "",
+    contextSizeLabel(item?.previewChars),
+    item?.truncated ? "truncated" : "",
+    item?.warnings?.length ? `${item.warnings.length} warnings` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function ContextChips({ items, onRemove, onClear }) {
-  if (!items?.length) return null;
+  const hasItems = !!items?.length;
+  if (!hasItems && !codeContextBusy.value && !codeContextError.value) {
+    return null;
+  }
   return html`<div class="context-chips">
-    <span class="context-chips-label">attached context</span>
+    <span class="context-chips-label">next message context</span>
+    ${codeContextBusy.value
+      ? html`<span class="context-chip is-busy">building code context...</span>`
+      : null}
     ${items.map(
       (item, index) =>
         html`<button
           type="button"
-          class="context-chip"
-          title=${item.prompt || item.label || "context"}
+          class=${[
+            "context-chip",
+            item.kind ? `kind-${item.kind}` : "",
+            item.truncated ? "is-truncated" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          title=${contextMetaLine(item)}
           onClick=${() => onRemove(index)}
         >
-          <span>${item.label || item.kind || "context"}</span><b>x</b>
+          <em>${item.kind || "context"}</em>
+          <span>${item.label || item.kind || "context"}</span>
+          ${item.previewChars
+            ? html`<small>${contextSizeLabel(item.previewChars)}</small>`
+            : null}
+          ${item.warnings?.length
+            ? html`<small class="warn">${item.warnings.length} warn</small>`
+            : null}
+          <b>x</b>
         </button>`,
     )}
-    <button type="button" class="context-clear" onClick=${onClear}>
-      clear
-    </button>
+    ${codeContextError.value
+      ? html`<span class="context-error">${codeContextError.value}</span>`
+      : null}
+    ${hasItems
+      ? html`<button type="button" class="context-clear" onClick=${onClear}>
+          clear
+        </button>`
+      : null}
   </div>`;
+}
+
+function CodeContextInspector({ items }) {
+  const codeItems = (items || []).filter((item) => item?.kind === "code");
+  if (!codeItems.length) return null;
+  const latest = codeItems[codeItems.length - 1];
+  const totalChars = codeItems.reduce(
+    (sum, item) => sum + Number(item.previewChars || 0),
+    0,
+  );
+  const warnings = codeItems.flatMap((item) => item.warnings || []);
+  return html`<details class="code-context-inspector">
+    <summary>
+      <span>Code Context</span>
+      <em>${codeItems.length} bundle${codeItems.length === 1 ? "" : "s"}</em>
+      ${totalChars ? html`<em>${contextSizeLabel(totalChars)}</em>` : null}
+      ${warnings.length
+        ? html`<em class="warn">${warnings.length} warnings</em>`
+        : null}
+    </summary>
+    <div class="code-context-body">
+      ${codeItems.map(
+        (item) =>
+          html`<div class="code-context-row">
+            <b>${item.label || "code context"}</b>
+            <span>${contextMetaLine(item)}</span>
+            ${item.focus ? html`<small>focus: ${item.focus}</small>` : null}
+          </div>`,
+      )}
+      ${latest?.sample
+        ? html`<pre class="code-context-sample">${latest.sample}</pre>`
+        : null}
+      ${warnings.length
+        ? html`<div class="code-context-warnings">
+            ${warnings
+              .slice(0, 4)
+              .map((warning) => html`<span>${warning}</span>`)}
+          </div>`
+        : null}
+    </div>
+  </details>`;
 }
 
 function DuoFlowCard({ route }) {
@@ -1434,7 +1526,8 @@ function ComposerPreview({ preview }) {
       : `${preview.mode}/${preview.access}`,
     preview.provider,
     preview.model || "auto model",
-    preview.contextCount ? `${preview.contextCount} context` : "",
+    preview.contextDetail ||
+      (preview.contextCount ? `${preview.contextCount} context` : ""),
     preview.fileCount ? `${preview.fileCount} files` : "",
   ].filter(Boolean);
   const commandCount =
@@ -1460,6 +1553,11 @@ function ComposerPreview({ preview }) {
         : null}
       ${preview.writeCommands.length
         ? html`<span class="write">${preview.writeCommands.length} write</span>`
+        : null}
+      ${preview.contextWarnings
+        ? html`<span class="write"
+            >${preview.contextWarnings} context warn</span
+          >`
         : null}
     </div>
     ${preview.warnings.length
@@ -2548,10 +2646,82 @@ function ChatSidebar() {
     );
     inputRef.current?.focus();
   };
+  const attachCodeContext = async ({
+    key,
+    label,
+    project,
+    projects,
+    focus,
+    maxChars = 12000,
+    includeFiles = false,
+  }) => {
+    const projectList = (projects || [project || currentProject.value])
+      .map((value) => normalizeProjectKey(value || ""))
+      .filter(Boolean);
+    if (!projectList.length) {
+      showToast("Pick a project before attaching code context", "error", 2200);
+      return;
+    }
+    const requestFocus = (
+      focus ||
+      composerText ||
+      scope.summary ||
+      "current task"
+    ).trim();
+    codeContextBusy.value = true;
+    codeContextError.value = "";
+    try {
+      const bundle = await loadCodeContextBundle({
+        projects: projectList,
+        focus: requestFocus,
+        max_chars: maxChars,
+        include_files: includeFiles,
+      });
+      const contextText = String(bundle?.context || "").trim();
+      const item = {
+        key: key || "code-context:" + projectList.join(","),
+        kind: "code",
+        label: label || `${projectList.join(", ")} code context`,
+        prompt: contextText,
+        schema: bundle?.schema || "agentos.code_context.v1",
+        projects: bundle?.projects || projectList,
+        focus: bundle?.focus || requestFocus,
+        truncated: !!bundle?.truncated,
+        warnings: bundle?.warnings || [],
+        previewChars: contextText.length,
+        sample: contextText.split("\n").slice(0, 10).join("\n"),
+        source: "backend",
+      };
+      codeContextPreview.value = item;
+      attachContext(item);
+    } catch (e) {
+      const fallback = {
+        key: key || "code-context:" + projectList.join(","),
+        kind: "code",
+        label: label || `${projectList.join(", ")} code context request`,
+        prompt: `[CODE_CONTEXT:${projectList.join(",")}]\n${requestFocus}\n[/CODE_CONTEXT]`,
+        schema: "agentos.code_context.v1",
+        projects: projectList,
+        focus: requestFocus,
+        warnings: [String(e)],
+        previewChars: 0,
+        source: "command-fallback",
+      };
+      codeContextError.value = "Code context fallback attached: " + String(e);
+      codeContextPreview.value = fallback;
+      attachContext(fallback);
+    } finally {
+      codeContextBusy.value = false;
+      inputRef.current?.focus();
+    }
+  };
   const removeContextAttachment = (index) => {
-    contextAttachments.value = (contextAttachments.value || []).filter(
-      (_, i) => i !== index,
-    );
+    const next = (contextAttachments.value || []).filter((_, i) => i !== index);
+    contextAttachments.value = next;
+    if (!next.some((item) => item.kind === "code")) {
+      codeContextPreview.value = null;
+      codeContextError.value = "";
+    }
   };
   const latestDuoRound = (() => {
     if (!duoCollaborateMode || isStreaming.value) {
@@ -3197,15 +3367,33 @@ function ChatSidebar() {
       scopeProject: scope.project || scope.target_project || "",
     },
   };
+  const attachedContext = contextAttachments.value || [];
+  const codeContextItems = attachedContext.filter(
+    (item) => item.kind === "code",
+  );
   const composerPreview = buildComposerPreview({
     route,
     draft: composerText,
     duoEnabled,
     duoAction: duoComposerAction,
     target: roomTarget?.label || activeOrchestrator?.label || "",
-    contextCount: (contextAttachments.value || []).length,
+    contextCount: attachedContext.length,
     fileCount: attFiles.value.length,
   });
+  composerPreview.contextDetail = codeContextItems.length
+    ? `${codeContextItems.length} code bundle · ${contextSizeLabel(
+        codeContextItems.reduce(
+          (sum, item) => sum + Number(item.previewChars || 0),
+          0,
+        ),
+      )}`
+    : attachedContext.length
+      ? `${attachedContext.length} attached context`
+      : "";
+  composerPreview.contextWarnings = attachedContext.reduce(
+    (sum, item) => sum + Number(item.warnings?.length || 0),
+    0,
+  );
   const allChatMessages = sideMessages.value || [];
   const renderedHiddenCount = showAllRenderedMessages
     ? 0
@@ -3414,7 +3602,25 @@ function ChatSidebar() {
                   ([value, label]) =>
                     html`<option value=${value}>${label}</option>`,
                 )}
-              </select>`}
+              </select>
+              <button
+                class="route-lite-action"
+                disabled=${routeState.isGlobal || codeContextBusy.value}
+                title=${routeState.isGlobal
+                  ? "Pick a project first"
+                  : "Build and attach a real backend Code Context bundle to the next message"}
+                onClick=${() =>
+                  attachCodeContext({
+                    key: "code-header:" + routeState.key,
+                    project: routeState.label,
+                    label: routeState.label + " code context",
+                    focus:
+                      composerText ||
+                      "Current project route, architecture risks, and safest next edit path.",
+                  })}
+              >
+                ${codeContextBusy.value ? "context..." : "code context"}
+              </button>`}
       </span>
     </div>
     ${isDrag.value ? html`<div class="drop-zone">Drop files here</div>` : null}
@@ -3425,8 +3631,13 @@ function ChatSidebar() {
     <${ContextChips}
       items=${contextAttachments.value || []}
       onRemove=${removeContextAttachment}
-      onClear=${() => (contextAttachments.value = [])}
+      onClear=${() => {
+        contextAttachments.value = [];
+        codeContextError.value = "";
+        codeContextPreview.value = null;
+      }}
     />
+    <${CodeContextInspector} items=${contextAttachments.value || []} />
     <${TranscriptStatusBar}
       route=${route}
       viewportMode=${viewportMode}
@@ -3524,16 +3735,21 @@ function ChatSidebar() {
           <${OrchestrationMapCard}
             map=${orchestrationMap.value}
             onAttachGraph=${() =>
-              attachContext({
-                key: "graph-route:" + routeState.key,
-                kind: "graph",
-                label: routeState.isGlobal
-                  ? "global graph"
-                  : routeState.label + " graph",
-                prompt: routeState.isGlobal
-                  ? "[GRAPH_CONTEXT:overview]\nUse the project graph to choose the safest orchestration route."
-                  : `[GRAPH_CONTEXT:${routeState.label}]\nUse this code context when planning and executing. Call out dependency risks before edits.`,
-              })}
+              routeState.isGlobal
+                ? attachContext({
+                    key: "graph-route:" + routeState.key,
+                    kind: "graph",
+                    label: "global graph",
+                    prompt:
+                      "[GRAPH_CONTEXT:overview]\nUse the project graph to choose the safest orchestration route.",
+                  })
+                : attachCodeContext({
+                    key: "code-route:" + routeState.key,
+                    project: routeState.label,
+                    label: routeState.label + " code context",
+                    focus:
+                      "Planning and executing this route. Call out dependency risks before edits.",
+                  })}
             onOpenGraph=${() => loadGraph(currentProject.value || "overview")}
             onVerifyGraph=${() =>
               insertPrompt(
@@ -3740,18 +3956,23 @@ function ChatSidebar() {
               </button>
               <button
                 onClick=${() =>
-                  attachContext({
-                    key: "graph-map:" + routeState.key,
-                    kind: "graph",
-                    label: routeState.isGlobal
-                      ? "global graph map"
-                      : routeState.label + " graph map",
-                    prompt: routeState.isGlobal
-                      ? "[GRAPH_CONTEXT:overview]\nMap project dependencies and identify the safest next orchestration target."
-                      : `[GRAPH_CONTEXT:${routeState.label}]\nMap the code structure, risks, and safest implementation path.`,
-                  })}
+                  routeState.isGlobal
+                    ? attachContext({
+                        key: "graph-map:" + routeState.key,
+                        kind: "graph",
+                        label: "global graph map",
+                        prompt:
+                          "[GRAPH_CONTEXT:overview]\nMap project dependencies and identify the safest next orchestration target.",
+                      })
+                    : attachCodeContext({
+                        key: "code-map:" + routeState.key,
+                        project: routeState.label,
+                        label: routeState.label + " code map",
+                        focus:
+                          "Map the code structure, dependency risks, and safest implementation path.",
+                      })}
               >
-                graph context
+                code context
               </button>
             </div>
           </div>`

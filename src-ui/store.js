@@ -229,6 +229,9 @@ const executionMap = signal(null);
 const eventContract = signal(null);
 const operationSnapshot = signal(null);
 const operationEvents = signal([]);
+const codeContextBusy = signal(false);
+const codeContextError = signal("");
+const codeContextPreview = signal(null);
 const appInfo = signal({ version: "dev" });
 
 // Clock interval (global, no cleanup needed for desktop app)
@@ -321,6 +324,9 @@ export {
   eventContract,
   operationSnapshot,
   operationEvents,
+  codeContextBusy,
+  codeContextError,
+  codeContextPreview,
   appInfo,
   showToast,
 };

@@ -1741,6 +1741,31 @@
     padding: 3px 7px;
     cursor: pointer;
 }
+.context-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+}
+.context-chip em,
+.context-chip small {
+    color: var(--t3);
+    font-style: normal;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.context-chip.kind-code {
+    border-color: color-mix(in srgb, var(--cyan) 55%, var(--border));
+    color: var(--cyan);
+}
+.context-chip.is-busy {
+    color: var(--yellow);
+    border-color: color-mix(in srgb, var(--yellow) 55%, var(--border));
+}
+.context-chip .warn,
+.context-error {
+    color: var(--yellow);
+}
 .context-chip b {
     margin-left: var(--sp-xs);
     color: var(--accent);
@@ -1748,6 +1773,77 @@
 }
 .context-clear {
     color: var(--t3);
+}
+.code-context-inspector {
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--cyan) 4%, transparent);
+    padding: var(--sp-xs) var(--sp-m);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.code-context-inspector summary {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-xs);
+    cursor: pointer;
+    color: var(--text);
+}
+.code-context-inspector summary em {
+    color: var(--t3);
+    font-style: normal;
+    border: 1px solid var(--border);
+    background: var(--sf);
+    padding: 1px 5px;
+}
+.code-context-inspector summary .warn {
+    color: var(--yellow);
+    border-color: color-mix(in srgb, var(--yellow) 55%, var(--border));
+}
+.code-context-body {
+    display: grid;
+    gap: var(--sp-xs);
+    margin-top: var(--sp-xs);
+}
+.code-context-row {
+    display: grid;
+    gap: 2px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    padding: 6px 8px;
+}
+.code-context-row span,
+.code-context-row small,
+.code-context-warnings span {
+    color: var(--t3);
+}
+.code-context-sample {
+    max-height: 140px;
+    overflow: auto;
+    white-space: pre-wrap;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--t2);
+    padding: 6px 8px;
+    margin: 0;
+}
+.code-context-warnings {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+}
+.route-lite-action {
+    background: var(--sf);
+    color: var(--cyan);
+    border: 1px solid color-mix(in srgb, var(--cyan) 45%, var(--border));
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: var(--sp-xs);
+    cursor: pointer;
+}
+.route-lite-action:disabled {
+    color: var(--t3);
+    border-color: var(--border);
+    cursor: not-allowed;
 }
 .m {
     max-width: 88%;

@@ -2,34 +2,21 @@
 
 ## Короткий вывод
 
-Кодовый контекст был не декоративным: AgentOS уже умел строить граф файлов и импортов, отдавать его через PA-команды и добавлять компактный граф в делегации.
+Code Context не должен быть декоративной кнопкой. Это рабочий контракт между оркестратором, проектными агентами и backend-анализатором кода.
 
-Но этого было недостаточно для прод-уровня. Система давала "граф одного проекта", а не рабочий контракт для агента: что за задача, какие проекты связаны, какие файлы важны, что делать если контекста мало, и как запросить дополнительный срез у оркестратора.
+AgentOS строит ограниченный bundle: какие проекты затронуты, какой фокус задачи, какие файлы и зависимости важны, какие есть warnings, и как агенту запросить дополнительный срез.
 
-## Что теперь является контрактом
+## Основной формат
 
-Основной формат: `agentos.code_context.v1`.
+Schema: `agentos.code_context.v1`.
 
-Он возвращает bounded context bundle:
-
-- список проектов;
-- фокус задачи;
-- hot spots по графу зависимостей;
-- совпадения по фокусу задачи;
-- циклы зависимостей;
-- fallback-индекс файлов, если import-граф пустой;
-- безопасные snippets запрошенных файлов;
-- инструкции, как агенту запросить больше контекста.
-
-## Как оркестратор вызывает контекст
-
-PA-команда:
+Команда для оркестратора:
 
 ```text
 [CODE_CONTEXT:ProjectA,ProjectB]shared auth login flow[/CODE_CONTEXT]
 ```
 
-Для точечного анализа:
+Связанные команды:
 
 ```text
 [GRAPH_IMPACT:Project:file]
@@ -37,119 +24,99 @@ PA-команда:
 [GRAPH_VERIFY:Project]
 ```
 
-## Как проектный агент получает контекст
-
-При approve делегации AgentOS теперь добавляет к задаче не только category context, а task-scoped code context bundle.
-
-Это значит: агент в проекте получает компактный архитектурный срез без ручного запроса пользователя.
-
-Если этого мало, агент должен не гадать, а явно попросить оркестратор:
+Если агенту мало контекста, он должен не гадать, а явно попросить:
 
 ```text
 Нужен дополнительный контекст:
 [CODE_CONTEXT:ProjectA,ProjectB]что именно нужно понять[/CODE_CONTEXT]
 ```
 
-## HTTP API для внешних агентов
+## Что входит в bundle
 
-Endpoint:
+- список проектов;
+- фокус задачи;
+- hot spots по dependency graph;
+- совпадения по тексту фокуса;
+- циклы зависимостей;
+- fallback-индекс файлов, если import graph пустой;
+- безопасные snippets запрошенных файлов;
+- warnings и признак `truncated`;
+- инструкции, как запросить больше контекста.
 
-```http
-POST /api/code-context
-Authorization: Bearer <AgentOS API token>
-Content-Type: application/json
+## Как это видно в UI
+
+В чате есть кнопка `code context` для выбранного проекта.
+
+После нажатия AgentOS строит backend bundle и показывает:
+
+- context chip с типом `code`;
+- проекты;
+- schema;
+- размер bundle;
+- warnings;
+- truncation;
+- sample первых строк.
+
+При отправке сообщения attached context уходит вместе с задачей в читаемом envelope:
+
+```text
+--- ATTACHED CONTEXT (kind=code; label=Project code context; schema=agentos.code_context.v1) ---
+...
+--- END ATTACHED CONTEXT ---
+
+[USER_TASK]
+...
 ```
 
-Body:
+Если backend bundle не построился, UI прикрепляет fallback-команду `[CODE_CONTEXT]`, чтобы оркестратор всё равно мог получить контекст через PA command path.
 
-```json
-{
-  "projects": ["ProjectA", "ProjectB"],
-  "focus": "shared authentication and login UI",
-  "files": ["src/auth.ts", "src/login.tsx"],
-  "include_files": true,
-  "max_chars": 18000
-}
-```
+## Как проектный агент получает контекст
 
-Ответ:
+При approve делегации AgentOS автоматически добавляет task-scoped code context к задаче. Это защищает проектного агента от работы вслепую.
 
-```json
-{
-  "status": "ok",
-  "schema": "agentos.code_context.v1",
-  "projects": ["ProjectA", "ProjectB"],
-  "truncated": false,
-  "warnings": [],
-  "context": "..."
-}
-```
+Если задача кросс-проектная, оркестратор должен сначала построить multi-project bundle и только потом делегировать части работы.
 
-## Что сканер понимает сейчас
+## Shared auth flow
 
-Языки и файлы:
+Для общей аутентификации между проектами нормальный поток такой:
 
-- Rust: `rs`;
-- TypeScript/JavaScript: `ts`, `tsx`, `js`, `jsx`;
-- Python: `py`;
-- Godot/GDScript: `gd`, `tscn`, `tres`, `gdshader`, `shader`;
-- C# файлы видны в индексе как `cs`, но глубокое разрешение C# imports пока не считается production-grade.
-
-Сканер исключает heavy/cache директории: `node_modules`, `target`, `dist`, `.git`, `.next`, `.venv`, `.godot`, `.cache`, `ia-memory` и похожие.
-
-## Ограничения
-
-- Это статический анализ. Он не понимает runtime DI, reflection, dynamic imports, generated code и часть alias-конфигов.
-- Межпроектные связи пока задаются через явный запрос нескольких проектов, а не выводятся автоматически из package/workspace manifests.
-- Для C#/Unity/Godot C# нужен отдельный parser, если появится активная задача на game-engine UI в C#.
-- Контекст намеренно ограничен по размеру, чтобы не ломать делегации токенами.
-
-## Что считать готовым для общей auth-системы
-
-Для общей аутентификации между проектами нормальный flow такой:
-
-1. Оркестратор строит cross-project bundle:
+1. Оркестратор строит bundle:
 
 ```text
 [CODE_CONTEXT:BackendProject,WebApp,MobileApp]shared auth, login, sessions, tokens[/CODE_CONTEXT]
 ```
 
-2. Оркестратор делает план границ:
+2. Оркестратор определяет границы:
 
 - где источник истины пользователя;
 - где выдаются токены;
-- какие клиенты зависят от auth SDK/API;
+- какие клиенты зависят от auth API/SDK;
 - какие файлы являются hot spots;
 - какие проекты можно менять параллельно.
 
-3. После этого делегирует проектным агентам конкретные части. Каждый агент получает task-scoped bundle автоматически.
+3. Только после этого задачи уходят проектным агентам.
 
-## Что считать готовым для 3D/game-engine UI
+## 3D/game-engine UI flow
 
-Для Godot-проектов контекст теперь видит `gd`, `tscn`, `tres`, shader-файлы и `res://` ссылки.
-
-Production flow:
-
-1. Запросить контекст по game/UI проекту:
+Для game/UI задач нормальный поток такой:
 
 ```text
-[CODE_CONTEXT:GameUiProject]3D UI, scene graph, input, auth overlay[/CODE_CONTEXT]
+[CODE_CONTEXT:GameUiProject,AuthBackend]3D login UI, scene graph, input, auth overlay[/CODE_CONTEXT]
 ```
 
-2. Если есть общий backend/auth проект, строить bundle сразу по двум проектам:
+AgentOS уже видит Godot/GDScript-артефакты: `gd`, `tscn`, `tres`, shaders и `res://` ссылки. Для C#/Unity нужен отдельный parser, если появится активная production-задача.
 
-```text
-[CODE_CONTEXT:GameUiProject,AuthBackend]3D login UI + token exchange[/CODE_CONTEXT]
-```
+## Ограничения
 
-3. Делегировать только после того, как оркестратор определил точки интеграции и риски.
+- Это статический анализ, не runtime tracer.
+- Он не понимает все DI/reflection/dynamic imports/generated code.
+- Cross-project связи пока задаются явным запросом нескольких проектов, а не выводятся полностью автоматически из workspace manifests.
+- Контекст намеренно ограничен по размеру, чтобы не ломать делегации токенами.
 
 ## Следующий уровень
 
-Чтобы довести систему до полноценного code-intelligence слоя, нужны следующие шаги:
-
-- manifest-aware cross-project graph: package.json, Cargo.toml, pyproject.toml, Godot project.godot;
+- manifest-aware cross-project graph: `package.json`, `Cargo.toml`, `pyproject.toml`, `project.godot`;
 - symbol-level context через tree-sitter/LSP;
 - cache со stale markers вместо полного scan на каждый запрос;
-- UI-панель "Code Context" с видимым bundle, warnings и кнопками attach/request;
-- per-agent context budget: compact / standard / deep.
+- UI budgets: compact / standard / deep;
+- per-agent context budgets для дешёвых и дорогих моделей.
