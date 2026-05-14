@@ -84,6 +84,7 @@ import {
   formatRunDuration,
   runPhaseLabel,
   runStuckHint,
+  runWaitDiagnosis,
   runTraceLabel,
 } from "/run-state.js";
 import {
@@ -1365,6 +1366,7 @@ function OperationLiveBar() {
     : (op.events || operationEvents.value || [])
         .filter((evt) => evt?.semantic !== false)
         .slice(-8);
+  const diagnosis = fallback ? runWaitDiagnosis(run) : null;
   const cls = isTerminalOperationStatus(status)
     ? status
     : status === "needs_user"
@@ -1388,6 +1390,9 @@ function OperationLiveBar() {
       ${blocked
         ? html`<span class="operation-blocked">блокер: ${blocked}</span>`
         : null}
+      ${diagnosis
+        ? html`<span class="operation-diagnosis">${diagnosis.title}</span>`
+        : null}
       <span>${children} дочерних</span>
       <span>${eventCount} событий</span>
       <button type="button" onClick=${() => setOpen(!open)}>
@@ -1404,6 +1409,13 @@ function OperationLiveBar() {
                 <em>${evt.ts ? ageLabel(evt.ts) : ""}</em>
               </div>`,
           )}
+        </div>`
+      : null}
+    ${diagnosis
+      ? html`<div class="operation-live-diagnosis ${diagnosis.severity}">
+          <b>${diagnosis.stage}</b>
+          <span>${diagnosis.detail}</span>
+          <em>${diagnosis.next}</em>
         </div>`
       : null}
   </section>`;
@@ -1466,6 +1478,7 @@ function LiveStatusStrip() {
     : 0;
   const events = runMatches ? (run.events || []).slice(-6) : [];
   const stuck = runStuckHint(runMatches ? run : null);
+  const diagnosis = runWaitDiagnosis(runMatches ? run : null);
   const now = Date.now();
   const semanticQuiet =
     runMatches && run.lastSemanticAt
@@ -1522,6 +1535,13 @@ function LiveStatusStrip() {
               ${run.heartbeatBeat !== null && run.heartbeatBeat !== undefined
                 ? html`<span>beat #${run.heartbeatBeat}</span>`
                 : null}
+            </div>`
+          : null}
+        ${diagnosis
+          ? html`<div class="live-run-diagnosis ${diagnosis.severity}">
+              <b>${diagnosis.title}</b>
+              <span>${diagnosis.detail}</span>
+              <em>${diagnosis.next}</em>
             </div>`
           : null}
       </div>

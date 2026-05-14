@@ -159,6 +159,29 @@
     max-height: 160px;
     overflow: auto;
 }
+.operation-live-diagnosis {
+    margin-top: var(--sp-xs);
+    border: 1px solid color-mix(in srgb, var(--yellow) 48%, var(--border));
+    background: color-mix(in srgb, var(--yellow) 6%, transparent);
+    padding: 6px 8px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 4px 8px;
+}
+.operation-live-diagnosis b {
+    color: var(--yellow);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.operation-live-diagnosis span,
+.operation-live-diagnosis em {
+    color: var(--t2);
+    font-style: normal;
+}
+.operation-live-diagnosis em {
+    grid-column: 2;
+    color: var(--t3);
+}
 .operation-live-event {
     display: grid;
     grid-template-columns: 150px minmax(0, 1fr) auto;

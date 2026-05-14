@@ -138,6 +138,79 @@ function runStuckHint(run, now = Date.now()) {
   return null;
 }
 
+function runWaitDiagnosis(run, now = Date.now()) {
+  if (!run) return null;
+  const status = String(run.status || "");
+  const phase = String(run.phase || "");
+  const ageMs = run.startedAt ? now - Number(run.startedAt) : 0;
+  const semanticMs = run.lastSemanticAt
+    ? now - Number(run.lastSemanticAt)
+    : ageMs;
+  const heartbeatMs = run.heartbeatAt ? now - Number(run.heartbeatAt) : null;
+  const heartbeatLive = heartbeatMs !== null && heartbeatMs < 15000;
+  const detail = String(run.detail || run.heartbeatDetail || "");
+
+  if (isTerminalRun(status)) {
+    return {
+      severity: status === "done" ? "ok" : "warn",
+      stage: status,
+      title: status === "done" ? "Завершено" : "Run остановлен",
+      detail: detail || run.outcome || status,
+      next: "Можно читать финальный ответ или открыть детали run.",
+    };
+  }
+
+  if (phase === "provider") {
+    return {
+      severity: semanticMs > 180000 ? "warn" : "info",
+      stage: heartbeatLive ? "provider_alive" : "provider_wait",
+      title: heartbeatLive
+        ? "Модель думает, tool сейчас не выполняется"
+        : "Ждём ответ провайдера",
+      detail: heartbeatLive
+        ? `Heartbeat есть, смыслового output нет ${formatRunDuration(semanticMs / 1000)}.`
+        : `Последний heartbeat: ${heartbeatMs === null ? "нет" : formatRunDuration(heartbeatMs / 1000) + " назад"}.`,
+      next:
+        semanticMs > 180000
+          ? "Если это не ожидаемо длинная задача, жми stop или запускай независимый route."
+          : "Ждать ответ модели; это не стадия tool и не требует подпинывания.",
+    };
+  }
+
+  if (phase === "tool" || phase === "agentos" || phase === "command") {
+    return {
+      severity: "info",
+      stage: phase,
+      title:
+        phase === "tool"
+          ? "Выполняется tool"
+          : phase === "agentos"
+            ? "AgentOS выполняет команду"
+            : "Обрабатывается результат команды",
+      detail: detail || "Стадия активна.",
+      next: "Ждать завершение этой операции; детали доступны в run events.",
+    };
+  }
+
+  if (phase === "waiting_output") {
+    return {
+      severity: "warn",
+      stage: "waiting_output",
+      title: "Нет новых событий",
+      detail: detail || "UI не получил новых событий от backend.",
+      next: "Проверь heartbeat/details; если нет движения, останови run.",
+    };
+  }
+
+  return {
+    severity: "info",
+    stage: phase || status || "running",
+    title: "Run активен",
+    detail: detail || "AgentOS ждёт следующего события.",
+    next: "Смотри details или live output.",
+  };
+}
+
 function buildComposerPreview({
   route,
   draft,
@@ -222,5 +295,6 @@ export {
   quietWaitEvent,
   runPhaseLabel,
   runStuckHint,
+  runWaitDiagnosis,
   runTraceLabel,
 };

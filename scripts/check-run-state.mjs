@@ -1,6 +1,7 @@
 import {
   isProviderStateSampleEvent,
   runStuckHint,
+  runWaitDiagnosis,
 } from "../src-ui/run-state.js";
 
 const heartbeat = {
@@ -41,6 +42,30 @@ const hint = runStuckHint(
 
 if (!hint || !String(hint.title || "").includes("Модель молчит")) {
   throw new Error("long provider wait must produce a persistent stuck hint");
+}
+
+const diagnosis = runWaitDiagnosis(
+  {
+    status: "running",
+    phase: "provider",
+    startedAt: now - 90 * 1000,
+    updatedAt: now,
+    heartbeatAt: now - 1000,
+    lastSemanticAt: now - 80 * 1000,
+    heartbeatDetail:
+      "Codex subprocess pid=21876 is still running; waiting for provider output.",
+  },
+  now,
+);
+
+if (
+  !diagnosis ||
+  diagnosis.stage !== "provider_alive" ||
+  !String(diagnosis.next || "").includes("не требует подпинывания")
+) {
+  throw new Error(
+    "provider wait diagnosis must explain that heartbeat is not progress",
+  );
 }
 
 const disappearedHint = runStuckHint(
