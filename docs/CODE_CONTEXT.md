@@ -39,6 +39,7 @@ Schema: `agentos.code_context.v1`.
 - совпадения по тексту фокуса;
 - циклы зависимостей;
 - fallback-индекс файлов, если import graph пустой;
+- manifest summary: `package.json`, `Cargo.toml`, `pyproject.toml`, `project.godot`;
 - безопасные snippets запрошенных файлов;
 - warnings и признак `truncated`;
 - инструкции, как запросить больше контекста.
@@ -115,7 +116,7 @@ AgentOS уже видит Godot/GDScript-артефакты: `gd`, `tscn`, `tres
 
 ## Следующий уровень
 
-- manifest-aware cross-project graph: `package.json`, `Cargo.toml`, `pyproject.toml`, `project.godot`;
+- manifest-aware cross-project graph links between projects;
 - symbol-level context через tree-sitter/LSP;
 - cache со stale markers вместо полного scan на каждый запрос;
 - UI budgets: compact / standard / deep;

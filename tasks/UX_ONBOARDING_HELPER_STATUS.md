@@ -21,3 +21,10 @@ manual scripts and command tags.
 - Bulk operations are limited to metadata repair.
 - Template deployment is one project at a time.
 - Dirty or non-git-status-readable projects are listed as blocked, not auto-deployed.
+
+## Follow-Up: Code Context Readiness
+
+- Code Context now includes manifest summaries for `package.json`, `Cargo.toml`,
+  `pyproject.toml`, and `project.godot`.
+- This makes shared auth, shared UI, and game-engine/3D tasks safer because agents see
+  project identity, scripts, dependencies, and framework hints before editing.

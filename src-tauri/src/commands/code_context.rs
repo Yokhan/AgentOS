@@ -18,6 +18,7 @@ const HARD_MAX_CHARS: usize = 50_000;
 const MAX_PROJECTS: usize = 8;
 const MAX_REQUESTED_FILES: usize = 12;
 const PER_FILE_CHAR_LIMIT: usize = 3_500;
+const MAX_MANIFEST_CHARS: usize = 6_000;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CodeContextRequest {
@@ -184,6 +185,12 @@ fn build_project_context_section(
         format!("root: {}", project_dir.display()),
     ];
 
+    let manifests = collect_manifest_summaries(&project_dir);
+    if !manifests.is_empty() {
+        lines.push("manifests:".to_string());
+        lines.extend(manifests);
+    }
+
     let mut files: Vec<_> = graph.nodes.iter().filter(|n| n.kind == "file").collect();
     files.sort_by(|a, b| (b.metrics.ca + b.metrics.ce).cmp(&(a.metrics.ca + a.metrics.ce)));
     if files.is_empty() {
@@ -247,6 +254,173 @@ fn build_project_context_section(
     }
 
     Ok(lines.join("\n"))
+}
+
+fn collect_manifest_summaries(project_dir: &Path) -> Vec<String> {
+    [
+        (
+            "package.json",
+            summarize_package_json as fn(&str) -> Option<String>,
+        ),
+        ("Cargo.toml", summarize_cargo_toml),
+        ("pyproject.toml", summarize_pyproject_toml),
+        ("project.godot", summarize_project_godot),
+    ]
+    .iter()
+    .filter_map(|(rel, summarizer)| {
+        let path = project_dir.join(rel);
+        let content = std::fs::read_to_string(path).ok()?;
+        let (content, _) = truncate_chars(&content, MAX_MANIFEST_CHARS);
+        summarizer(&content).map(|summary| format!("  - {}: {}", rel, summary))
+    })
+    .collect()
+}
+
+fn summarize_package_json(content: &str) -> Option<String> {
+    let value = serde_json::from_str::<Value>(content).ok()?;
+    let name = value
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("unnamed");
+    let version = value.get("version").and_then(Value::as_str).unwrap_or("?");
+    let scripts = object_keys(value.get("scripts"), 8);
+    let deps = object_keys(value.get("dependencies"), 12);
+    let dev_deps = object_keys(value.get("devDependencies"), 8);
+    Some(format!(
+        "name={}, version={}, scripts=[{}], deps=[{}], devDeps=[{}]",
+        name,
+        version,
+        scripts.join(", "),
+        deps.join(", "),
+        dev_deps.join(", ")
+    ))
+}
+
+fn summarize_cargo_toml(content: &str) -> Option<String> {
+    let package_name = toml_value(content, "package", "name").unwrap_or_else(|| "unnamed".into());
+    let version = toml_value(content, "package", "version").unwrap_or_else(|| "?".into());
+    let deps = toml_section_keys(content, "dependencies", 12);
+    let dev_deps = toml_section_keys(content, "dev-dependencies", 8);
+    Some(format!(
+        "package={}, version={}, deps=[{}], devDeps=[{}]",
+        package_name,
+        version,
+        deps.join(", "),
+        dev_deps.join(", ")
+    ))
+}
+
+fn summarize_pyproject_toml(content: &str) -> Option<String> {
+    let name = toml_value(content, "project", "name").unwrap_or_else(|| "unnamed".into());
+    let deps = toml_array_values(content, "dependencies", 12);
+    let build_backend =
+        toml_value(content, "build-system", "build-backend").unwrap_or_else(|| "?".into());
+    Some(format!(
+        "project={}, build_backend={}, deps=[{}]",
+        name,
+        build_backend,
+        deps.join(", ")
+    ))
+}
+
+fn summarize_project_godot(content: &str) -> Option<String> {
+    let name = toml_value(content, "application", "config/name")
+        .or_else(|| toml_value(content, "application", "run/main_scene"))
+        .unwrap_or_else(|| "unnamed".into());
+    let main_scene = toml_value(content, "application", "run/main_scene").unwrap_or_default();
+    Some(format!("name={}, main_scene={}", name, main_scene))
+}
+
+fn object_keys(value: Option<&Value>, limit: usize) -> Vec<String> {
+    value
+        .and_then(Value::as_object)
+        .map(|map| map.keys().take(limit).cloned().collect())
+        .unwrap_or_default()
+}
+
+fn toml_value(content: &str, target_section: &str, key: &str) -> Option<String> {
+    let mut section = "";
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            section = trimmed.trim_matches(&['[', ']'][..]);
+            continue;
+        }
+        if section != target_section {
+            continue;
+        }
+        if let Some((left, right)) = trimmed.split_once('=') {
+            if left.trim() == key {
+                return Some(clean_manifest_value(right));
+            }
+        }
+    }
+    None
+}
+
+fn toml_section_keys(content: &str, target_section: &str, limit: usize) -> Vec<String> {
+    let mut section = "";
+    let mut out = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            section = trimmed.trim_matches(&['[', ']'][..]);
+            continue;
+        }
+        if section == target_section {
+            if let Some((left, _)) = trimmed.split_once('=') {
+                let key = left.trim();
+                if !key.is_empty() && !key.starts_with('#') {
+                    out.push(key.to_string());
+                }
+            }
+        }
+        if out.len() >= limit {
+            break;
+        }
+    }
+    out
+}
+
+fn toml_array_values(content: &str, key: &str, limit: usize) -> Vec<String> {
+    let marker = format!("{} =", key);
+    let mut capture = false;
+    let mut out = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with(&marker) {
+            capture = true;
+        }
+        if capture {
+            for part in trimmed.split(',') {
+                let clean = clean_manifest_value(part.trim().trim_start_matches(&marker));
+                if !clean.is_empty() && clean != "[" && clean != "]" {
+                    out.push(clean);
+                }
+                if out.len() >= limit {
+                    return out;
+                }
+            }
+            if trimmed.ends_with(']') {
+                break;
+            }
+        }
+    }
+    out
+}
+
+fn clean_manifest_value(value: &str) -> String {
+    value
+        .trim()
+        .trim_matches(',')
+        .trim_matches('[')
+        .trim_matches(']')
+        .trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn read_project_file_snippet(project_dir: &Path, file: &str) -> Result<String, String> {
@@ -351,6 +525,26 @@ mod tests {
             "export function login() { return true; }\n",
         )
         .expect("auth");
+        std::fs::write(
+            root.join("Demo").join("package.json"),
+            json!({
+                "name": "demo-web",
+                "version": "1.2.3",
+                "scripts": {
+                    "test": "vitest",
+                    "build": "vite build"
+                },
+                "dependencies": {
+                    "@auth/core": "^0.1.0",
+                    "three": "^0.170.0"
+                },
+                "devDependencies": {
+                    "vite": "^6.0.0"
+                }
+            })
+            .to_string(),
+        )
+        .expect("package");
         (AppState::new(root.clone()), root)
     }
 
@@ -370,9 +564,51 @@ mod tests {
         let context = value["context"].as_str().unwrap_or("");
         assert!(context.contains(CODE_CONTEXT_SCHEMA));
         assert!(context.contains("[PROJECT: Demo]"));
+        assert!(context.contains("package.json: name=demo-web"));
+        assert!(context.contains("@auth/core"));
+        assert!(context.contains("three"));
         assert!(context.contains("src/auth.ts"));
         assert!(context.contains("[GRAPH_IMPACT:Project:file]"));
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn manifest_summary_handles_cargo_pyproject_and_godot() {
+        let cargo = r#"
+[package]
+name = "demo-rs"
+version = "0.1.0"
+
+[dependencies]
+serde = "1"
+tokio = { version = "1", features = ["full"] }
+"#;
+        let pyproject = r#"
+[project]
+name = "demo-py"
+dependencies = [
+  "fastapi",
+  "sqlalchemy",
+]
+
+[build-system]
+build-backend = "hatchling.build"
+"#;
+        let godot = r#"
+[application]
+config/name="Demo Game"
+run/main_scene="res://main.tscn"
+"#;
+
+        assert!(summarize_cargo_toml(cargo)
+            .unwrap()
+            .contains("deps=[serde, tokio]"));
+        assert!(summarize_pyproject_toml(pyproject)
+            .unwrap()
+            .contains("fastapi"));
+        assert!(summarize_project_godot(godot)
+            .unwrap()
+            .contains("main_scene=res://main.tscn"));
     }
 
     #[test]

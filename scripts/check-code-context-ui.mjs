@@ -5,6 +5,8 @@ const chat = read("src-ui/chat.js");
 const api = read("src-ui/api.js");
 const store = read("src-ui/store.js");
 const css = read("src-ui/styles/chat.css");
+const codeContext = read("src-tauri/src/commands/code_context.rs");
+const doc = read("docs/CODE_CONTEXT.md");
 
 const checks = [
   {
@@ -55,6 +57,16 @@ const checks = [
       chat.includes("contextProjectDraft") &&
       css.includes(".route-lite-input") &&
       css.includes(".route-lite-select"),
+  },
+  {
+    name: "code context includes project manifest summaries",
+    ok:
+      codeContext.includes("collect_manifest_summaries") &&
+      codeContext.includes("summarize_package_json") &&
+      codeContext.includes("summarize_cargo_toml") &&
+      codeContext.includes("summarize_pyproject_toml") &&
+      codeContext.includes("summarize_project_godot") &&
+      doc.includes("manifest summary"),
   },
 ];
 
