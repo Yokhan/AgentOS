@@ -1497,13 +1497,40 @@ function SignalsWorkspace() {
 }
 
 function NotificationsWorkspace() {
+  const [severityFilter, setSeverityFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("all");
   useEffect(() => {
     loadNotifications();
   }, []);
   const data = notificationsData.value || { items: [], counts: {}, count: 0 };
   const items = data.items || [];
   const counts = data.counts || {};
-  const bySeverity = (sev) => items.filter((item) => item.severity === sev);
+  const sourceOptions = [
+    ...new Set(items.map((item) => item.source || "system").filter(Boolean)),
+  ].sort();
+  const projectOptions = [
+    ...new Set(items.map((item) => item.project || "").filter(Boolean)),
+  ].sort();
+  const visibleItems = items.filter((item) => {
+    const severity = item.severity || "info";
+    const source = item.source || "system";
+    const project = item.project || "";
+    return (
+      (severityFilter === "all" || severity === severityFilter) &&
+      (sourceFilter === "all" || source === sourceFilter) &&
+      (projectFilter === "all" || project === projectFilter)
+    );
+  });
+  const notificationContextLabel = (item) =>
+    [
+      item.project ? `project:${item.project}` : "",
+      item.route_id ? `route:${item.route_id}` : "",
+      item.delegation_id ? `delegation:${item.delegation_id}` : "",
+      item.run_id ? `run:${item.run_id}` : "",
+    ].filter(Boolean);
+  const bySeverity = (sev) =>
+    visibleItems.filter((item) => (item.severity || "info") === sev);
   const renderGroup = (title, groupItems, tone) =>
     html`<section class=${`notification-group ${tone || ""}`}>
       <div class="notification-group-head">
@@ -1522,7 +1549,9 @@ function NotificationsWorkspace() {
                 <p>${item.message || ""}</p>
                 <div class="notification-row-meta">
                   ${item.command ? html`<code>${item.command}</code>` : null}
-                  ${item.project ? html`<span>${item.project}</span>` : null}
+                  ${notificationContextLabel(item).map(
+                    (label) => html`<span>${label}</span>`,
+                  )}
                   <span
                     >${item.source || "system"} / ${item.kind || "event"}</span
                   >
@@ -1542,7 +1571,9 @@ function NotificationsWorkspace() {
         </p>
       </div>
       <div class="workspace-actions">
-        <span>${data.count || items.length} событий</span>
+        <span
+          >${visibleItems.length}/${data.count || items.length} событий</span
+        >
         <span>${counts.warning || 0} warning</span>
         <button onClick=${() => loadNotifications()}>refresh</button>
         <button
@@ -1555,6 +1586,53 @@ function NotificationsWorkspace() {
           clear
         </button>
       </div>
+    </div>
+    <div class="notification-filters">
+      <label>
+        severity
+        <select
+          value=${severityFilter}
+          onChange=${(e) => setSeverityFilter(e.target.value)}
+        >
+          <option value="all">all</option>
+          <option value="warning">warning</option>
+          <option value="success">success</option>
+          <option value="info">info</option>
+        </select>
+      </label>
+      <label>
+        source
+        <select
+          value=${sourceFilter}
+          onChange=${(e) => setSourceFilter(e.target.value)}
+        >
+          <option value="all">all</option>
+          ${sourceOptions.map(
+            (source) => html`<option value=${source}>${source}</option>`,
+          )}
+        </select>
+      </label>
+      <label>
+        project
+        <select
+          value=${projectFilter}
+          onChange=${(e) => setProjectFilter(e.target.value)}
+        >
+          <option value="all">all</option>
+          ${projectOptions.map(
+            (project) => html`<option value=${project}>${project}</option>`,
+          )}
+        </select>
+      </label>
+      <button
+        onClick=${() => {
+          setSeverityFilter("all");
+          setSourceFilter("all");
+          setProjectFilter("all");
+        }}
+      >
+        reset filters
+      </button>
     </div>
     <div class="notification-grid">
       ${renderGroup("Требуют внимания", bySeverity("warning"), "warning")}

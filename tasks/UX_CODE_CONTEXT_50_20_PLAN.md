@@ -159,6 +159,8 @@
 11. [x] `check-code-context-ui.mjs` теперь требует очистку preview/error и `[USER_TASK]` envelope.
 12. [x] `check-execution-map-ux.mjs` теперь фиксирует контракт: heartbeat/provider state скрывается из event nodes.
 13. [x] Waiting/blocker item в execution map получил отдельную readable detail panel с действиями approve/reject/retry/status.
+14. [x] Notification center получил фильтры severity/source/project и route/delegation/run context chips.
+15. [x] Добавлен gate `check-notification-center-ui.mjs`.
 
 ### Осталось: высокий уровень
 
@@ -186,8 +188,8 @@
 8. [x] Добавить details panel для выбранного waiting item вместо только inline details.
 9. [x] После retry/status/archive обновлять execution map так же, как approve/reject.
 10. [ ] Убрать остаточный PA/status noise из chat transcript там, где он ещё попадает.
-11. [ ] Добавить фильтры notifications по source/severity/project.
-12. [ ] Связать notification item с project/route/delegation, если есть id.
+11. [x] Добавить фильтры notifications по source/severity/project.
+12. [x] Связать notification item с project/route/delegation, если есть id.
 13. [ ] В execution map показывать lane owner: orchestrator / project-agent / reviewer / user.
 14. [ ] В route header показывать plan/task link, если activeScope его знает.
 15. [ ] В project rail показать active plan/task badge.
