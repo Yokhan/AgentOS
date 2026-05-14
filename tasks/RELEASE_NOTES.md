@@ -1,3 +1,10 @@
+# Agent OS 0.3.35
+
+- Added explicit startup updater diagnostics so installed builds log whether update checks are scheduled, skipped, checking, downloading, or failed.
+- Added a 45 second timeout around updater manifest checks, preventing silent hangs before the first visible updater result.
+- Added a 10 minute timeout around updater download/install, preventing indefinite updater stalls during GitHub or installer issues.
+- Replaced the updater notification mojibake ellipsis with plain ASCII text.
+
 # Agent OS 0.3.34
 
 - Added safe `[PROJECT_ONBOARD_PLAN:segment:permission:limit]` planning so the orchestrator can build project onboarding and recovery waves from natural-language requests.
