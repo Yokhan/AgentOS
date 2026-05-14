@@ -2154,6 +2154,20 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
       .then(() => showToast("execution map copied", "success", 1200))
       .catch(() => showToast("copy failed", "error", 2000));
   };
+  const refreshAfter = (promise) =>
+    Promise.resolve(promise)
+      .catch((e) => showToast("Action failed: " + e, "error", 4000))
+      .finally(() => {
+        if (onRefresh) onRefresh();
+      });
+  const askMapRepair = () => {
+    composerDraftText.value = [
+      "Проверь живую карту исполнения: сейчас видна только ветка оркестратора.",
+      "Объясни, почему проектные агенты не дали смысловых events, что ждём, и какой один безопасный шаг разблокирует карту.",
+      "Не запускай новую волну, пока не разберёшь текущий blocker.",
+    ].join("\n");
+    showToast("Drafted execution-map repair prompt", "success", 1400);
+  };
   return html`<div class=${`exec-map-card ${isStage ? "stage" : ""}`}>
     ${isStage
       ? html`<div class="exec-map-stage-strip">
@@ -2250,10 +2264,14 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
                     <p>${group.task || group.status}</p>
                     <div class="exec-map-waiting-actions">
                       ${canApprove
-                        ? html`<button onClick=${() => approveDel(item.id)}>
+                        ? html`<button
+                              onClick=${() => refreshAfter(approveDel(item.id))}
+                            >
                               approve
                             </button>
-                            <button onClick=${() => rejectDel(item.id)}>
+                            <button
+                              onClick=${() => refreshAfter(rejectDel(item.id))}
+                            >
                               reject
                             </button>`
                         : null}
@@ -2274,6 +2292,21 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
                             </button>`
                         : null}
                     </div>
+                    <details class="exec-map-waiting-details">
+                      <summary>details</summary>
+                      <pre>
+${[
+                          `id: ${item.id || ""}`,
+                          `project: ${item.project || group.project || ""}`,
+                          `status: ${item.status || group.status || ""}`,
+                          `action: ${item.action || ""}`,
+                          "",
+                          item.task || group.task || item.title || "",
+                        ]
+                          .filter((line) => line !== "")
+                          .join("\n")}</pre
+                      >
+                    </details>
                   </div>`;
                 })}
               </div>`
@@ -2293,10 +2326,14 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
                       ? html`<em>${group.items.length}x</em>`
                       : null}
                     ${canApprove
-                      ? html`<button onClick=${() => approveDel(item.id)}>
+                      ? html`<button
+                            onClick=${() => refreshAfter(approveDel(item.id))}
+                          >
                             approve
                           </button>
-                          <button onClick=${() => rejectDel(item.id)}>
+                          <button
+                            onClick=${() => refreshAfter(rejectDel(item.id))}
+                          >
                             reject
                           </button>`
                       : html`<button
@@ -2327,6 +2364,10 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
             Сейчас видна только ветка оркестратора. Проектные агенты не дали
             events в текущий scope или еще не дошли до делегации.
           </span>
+          <div class="exec-map-warning-actions">
+            <button onClick=${askMapRepair}>разобрать</button>
+            <button onClick=${onRefresh}>refresh</button>
+          </div>
         </div>`
       : null}
     <div class="exec-map-body">

@@ -1112,6 +1112,26 @@
     max-height: 2.7em;
     overflow: hidden;
 }
+.exec-map-waiting-details {
+    margin-top: 5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    color: var(--t3);
+}
+.exec-map-waiting-details summary {
+    cursor: pointer;
+    color: var(--yellow);
+}
+.exec-map-waiting-details pre {
+    margin: 5px 0 0;
+    max-height: 120px;
+    overflow: auto;
+    white-space: pre-wrap;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--t2);
+    padding: 5px 6px;
+}
 .exec-map-waiting button {
     border: 1px solid var(--border);
     background: var(--bg);
@@ -1138,6 +1158,20 @@
 }
 .exec-map-warning span {
     color: var(--t2);
+}
+.exec-map-warning-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.exec-map-warning-actions button {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--yellow);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    cursor: pointer;
 }
 .exec-map-warning.muted {
     border-color: color-mix(in srgb, var(--border) 70%, transparent);

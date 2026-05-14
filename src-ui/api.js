@@ -68,6 +68,8 @@ import {
   eventContract,
   operationSnapshot,
   operationEvents,
+  codeContextError,
+  codeContextPreview,
   appInfo,
   showToast,
 } from "/store.js";
@@ -1802,6 +1804,8 @@ async function sendMessage(msg) {
   if (contextBlocks.length) {
     msg = contextBlocks.join("\n\n") + "\n\n[USER_TASK]\n" + msg;
     contextAttachments.value = [];
+    codeContextError.value = "";
+    codeContextPreview.value = null;
   }
   if (attFiles.value.length) {
     const paths = attFiles.value

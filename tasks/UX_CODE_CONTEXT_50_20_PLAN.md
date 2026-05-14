@@ -130,3 +130,67 @@
 ## Статус этого прохода
 
 Выполняется этап 1: видимый Code Context и проверка закрытия прошлого 50+20.
+
+## Единый backlog: перенос недоделок из прошлого плана
+
+Этот раздел является рабочим источником статуса. В него перенесены незакрытые пункты прошлого `UX_POLISH_50_20_PLAN.md` и новые пункты текущего плана.
+
+### Закрыто в `0.3.33`
+
+1. [x] Видимый Code Context: frontend API, backend bundle, chips, inspector, warnings, truncation, sample.
+2. [x] Attached context отправляется агенту в явном envelope.
+3. [x] Fallback `[CODE_CONTEXT]` прикрепляется, если backend bundle не построился.
+4. [x] Документация `docs/CODE_CONTEXT.md` переписана как операторский контракт.
+5. [x] UI gate `check-code-context-ui.mjs` добавлен в `check:ui`.
+6. [x] Аудит прошлого `50+20` зафиксирован в этом плане.
+
+### Закрыто в текущем проходе
+
+1. [x] После отправки сообщения очищается не только `contextAttachments`, но и видимое состояние `codeContextPreview/codeContextError`.
+2. [x] `ExecutionMap` refresh запускается после approve/reject waiting item, чтобы карта не требовала ручного refresh.
+3. [x] Waiting cards получили `details` с id/project/status/action/full task.
+4. [x] Предупреждение “карта неполная” стало actionable: кнопки `разобрать` и `refresh`.
+5. [x] Добавлен gate `check-execution-map-ux.mjs`.
+
+### Осталось: высокий уровень
+
+1. [ ] Chat separation: окончательно разделить разговор, PA traces, pending decisions и diagnostics.
+2. [ ] Semantic execution map: показывать только смысловые события и не пускать notifications/status spam в карту.
+3. [ ] Waiting-state contract: единый backend/UI контракт для `needs_user`, `permission`, `blocked`, `failed`, `retry/archive`.
+4. [ ] Project/plan/task/agent hierarchy: в каждом route показать, к какому плану/этапу/задаче относится работа.
+5. [ ] Provider/account observability: связать provider/model/account с текущим run и дочерними делегациями.
+6. [ ] Context budgets: добавить compact/standard/deep режимы для code context.
+7. [ ] Cross-project context UI: выбирать несколько проектов для shared auth / 3D UI / общей библиотеки.
+8. [ ] Recovery smoke: проверить reload/cancel/network drop без потери active run и partial output.
+9. [ ] Settings polish: сделать provider routing, Claude disable, Codex defaults и delegation provider очевидными.
+10. [ ] Onboarding helpers: natural-language path и helper для массового подключения/проверки проектов.
+11. [ ] Release readiness dashboard: явный список пройденных gates и непроверенных рисков перед релизом.
+
+### Осталось: конкретные задачи
+
+1. [ ] Добавить context budget selector в чат: compact / standard / deep.
+2. [ ] Перед attach показывать ожидаемый budget и лимиты.
+3. [ ] Добавить multi-project context picker из project rail/route panel.
+4. [ ] Добавить `[CODE_CONTEXT:ProjectA,ProjectB]` UI-flow без ручного набора.
+5. [ ] Добавить behavior smoke: attach code context -> send -> envelope appears.
+6. [ ] Добавить behavior smoke: reload keeps selected project and route.
+7. [ ] Добавить behavior smoke: execution map does not render heartbeat as nodes.
+8. [ ] Добавить details panel для выбранного waiting item вместо только inline details.
+9. [ ] После retry/status/archive обновлять execution map так же, как approve/reject.
+10. [ ] Убрать остаточный PA/status noise из chat transcript там, где он ещё попадает.
+11. [ ] Добавить фильтры notifications по source/severity/project.
+12. [ ] Связать notification item с project/route/delegation, если есть id.
+13. [ ] В execution map показывать lane owner: orchestrator / project-agent / reviewer / user.
+14. [ ] В route header показывать plan/task link, если activeScope его знает.
+15. [ ] В project rail показать active plan/task badge.
+16. [ ] В settings вывести effective provider для orchestrator/delegation/reviewer одной таблицей.
+17. [ ] В settings вывести GPT account label/snapshot, если backend смог определить.
+18. [ ] Проверить и задокументировать отключение Claude без скрытого fallback.
+19. [ ] Добавить helper `project connect/onboarding wave` для оркестратора.
+20. [ ] Helper должен проверять git, manifest, template, agent files, health.
+21. [ ] Helper должен возвращать отчёт, который оркестратор может вставить в план.
+22. [ ] Добавить UI action “prepare onboarding wave” без ручного набора команд.
+23. [ ] Добавить operator doc: как вести 30 проектов через AgentOS.
+24. [ ] Добавить operator doc: как запускать cross-project shared auth работу.
+25. [ ] Добавить release checklist для code context, execution map и waiting UX.
+26. [ ] Перед следующим релизом прогнать `check:ui`, Rust tests, updater build.
