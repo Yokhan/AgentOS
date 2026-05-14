@@ -1057,6 +1057,9 @@ body.chat-resizing {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.project-rail-state.has-work {
+    color: var(--t2);
+}
 .project-rail-dirty {
     font-family: var(--font-mono);
     color: var(--t3);
@@ -1091,6 +1094,27 @@ body.chat-resizing {
 }
 .project-rail-plan {
     color: var(--yellow);
+}
+.project-rail-work {
+    color: var(--cyan);
+    border-color: color-mix(in srgb, var(--cyan) 48%, var(--border)) !important;
+    background: color-mix(in srgb, var(--cyan) 7%, transparent);
+}
+.project-rail-work.task {
+    color: var(--green);
+    border-color: color-mix(
+        in srgb,
+        var(--green) 42%,
+        var(--border)
+    ) !important;
+}
+.project-rail-work.plan {
+    color: var(--yellow);
+    border-color: color-mix(
+        in srgb,
+        var(--yellow) 48%,
+        var(--border)
+    ) !important;
 }
 .project-rail-empty {
     border: 1px dashed var(--border);

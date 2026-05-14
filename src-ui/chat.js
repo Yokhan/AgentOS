@@ -4949,6 +4949,22 @@ function isNoiseResult(text) {
   );
 }
 
+function isRoutineSystemTraceMessage(text) {
+  const t = String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) return false;
+  return [
+    /^auto-continuing after \d+ agentos actions?/i,
+    /^waiting coordinator:/i,
+    /^provider (is )?alive/i,
+    /^heartbeat:/i,
+    /^beat #\d+/i,
+    /^codex subprocess .*still running/i,
+    /^claude subprocess .*still running/i,
+  ].some((pattern) => pattern.test(t));
+}
+
 function classifyTraceStatus(text, fallback = "done") {
   const t = String(text || "");
   if (/error|failed|blocked|not parsed|permission denied/i.test(t)) {
@@ -5293,6 +5309,7 @@ function ChatMsg({ m, compactPaTrace = false }) {
         <em>${ft(m.ts)}</em>
       </div>`;
     }
+    if (isRoutineSystemTraceMessage(m.msg)) return null;
     const isSuccess =
       (m.msg || "").includes("✓") || (m.msg || "").includes("complete");
     const isFail =
@@ -5881,6 +5898,7 @@ export {
   ExecutionTimelineCard,
   buildRouteContextChips,
   executionLaneOwnerLabel,
+  isRoutineSystemTraceMessage,
   isProviderStateEvent,
   isRenderableMapEvent,
   ChatMsg,

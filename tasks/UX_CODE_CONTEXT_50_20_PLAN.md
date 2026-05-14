@@ -164,6 +164,8 @@
 16. [x] Execution map lane rail теперь явно показывает owner role: orchestrator / project-agent / reviewer / user / agent.
 17. [x] Route header получил project/plan/task/stage chips из activeScope и orchestrationMap; клик по plan/task открывает Plans.
 18. [x] Добавлен behavior smoke `smoke-execution-map-noise.mjs`: heartbeat/provider state/root/non-semantic events не становятся узлами карты.
+19. [x] Chat transcript скрывает рутинные system-trace сообщения (`auto-continuing`, heartbeat/provider alive), оставляя смысловые ошибки и run-card.
+20. [x] Project rail показывает active plan/task badge из active plans, work items и project-agent routes.
 
 ### Осталось: высокий уровень
 
@@ -190,12 +192,12 @@
 7. [x] Добавить behavior smoke: execution map does not render heartbeat as nodes.
 8. [x] Добавить details panel для выбранного waiting item вместо только inline details.
 9. [x] После retry/status/archive обновлять execution map так же, как approve/reject.
-10. [ ] Убрать остаточный PA/status noise из chat transcript там, где он ещё попадает.
+10. [x] Убрать остаточный PA/status noise из chat transcript там, где он ещё попадает.
 11. [x] Добавить фильтры notifications по source/severity/project.
 12. [x] Связать notification item с project/route/delegation, если есть id.
 13. [x] В execution map показывать lane owner: orchestrator / project-agent / reviewer / user.
 14. [x] В route header показывать plan/task link, если activeScope его знает.
-15. [ ] В project rail показать active plan/task badge.
+15. [x] В project rail показать active plan/task badge.
 16. [ ] В settings вывести effective provider для orchestrator/delegation/reviewer одной таблицей.
 17. [ ] В settings вывести GPT account label/snapshot, если backend смог определить.
 18. [ ] Проверить и задокументировать отключение Claude без скрытого fallback.

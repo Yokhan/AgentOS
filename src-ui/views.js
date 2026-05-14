@@ -1666,22 +1666,112 @@ function WorkspaceCanvas({
   return html`<${ExecutionFlowStage} />`;
 }
 
+const RAIL_TERMINAL_STATUSES = new Set([
+  "done",
+  "completed",
+  "failed",
+  "cancelled",
+  "rejected",
+  "error",
+]);
+
+function isOpenRailStatus(status) {
+  const value = String(status || "")
+    .trim()
+    .toLowerCase();
+  return !RAIL_TERMINAL_STATUSES.has(value);
+}
+
+function compactRailText(value, limit = 46) {
+  const text = String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "";
+  return text.length > limit ? `${text.slice(0, limit - 3)}...` : text;
+}
+
+function projectPlanMatches(plan, project) {
+  return (
+    plan?.project === project ||
+    (plan?.steps || []).some((step) => step?.project === project)
+  );
+}
+
+function firstOpenPlanForProject(project) {
+  return (plansData.value || []).find(
+    (plan) =>
+      isOpenRailStatus(plan?.status) && projectPlanMatches(plan, project),
+  );
+}
+
+function firstOpenPlanStep(plan, project) {
+  if (!plan) return null;
+  if (
+    plan.next_step &&
+    (!plan.next_step.project || plan.next_step.project === project) &&
+    isOpenRailStatus(plan.next_step.status)
+  ) {
+    return plan.next_step;
+  }
+  return (plan.steps || []).find(
+    (step) => step?.project === project && isOpenRailStatus(step?.status),
+  );
+}
+
+function projectRailWorkBadge(project) {
+  const map = orchestrationMap.value || {};
+  const route = (map.project_agent_routes || []).find(
+    (item) => item?.project === project,
+  );
+  const nextWorkItem = route?.next_work_item || null;
+  if (nextWorkItem?.title || nextWorkItem?.task) {
+    return {
+      kind: "task",
+      label: "task",
+      title: compactRailText(nextWorkItem.title || nextWorkItem.task),
+      full: nextWorkItem.task || nextWorkItem.title || "",
+    };
+  }
+  const activeWorkItem = (map.work_items || []).find(
+    (item) => item?.project === project && isOpenRailStatus(item?.status),
+  );
+  if (activeWorkItem?.title || activeWorkItem?.task) {
+    return {
+      kind: "task",
+      label: activeWorkItem.status || "task",
+      title: compactRailText(activeWorkItem.title || activeWorkItem.task),
+      full: activeWorkItem.task || activeWorkItem.title || "",
+    };
+  }
+  const plan = firstOpenPlanForProject(project);
+  const step = firstOpenPlanStep(plan, project);
+  if (step?.task) {
+    return {
+      kind: "task",
+      label: "next",
+      title: compactRailText(step.task),
+      full: step.task,
+    };
+  }
+  if (plan?.title) {
+    return {
+      kind: "plan",
+      label: "plan",
+      title: compactRailText(plan.title),
+      full: plan.title,
+    };
+  }
+  return null;
+}
+
 function projectHasDelegation(project) {
   return Object.values(delegations.value || {}).some(
-    (item) =>
-      item?.project === project &&
-      !["done", "failed", "cancelled", "rejected", "error"].includes(
-        item?.status || "",
-      ),
+    (item) => item?.project === project && isOpenRailStatus(item?.status),
   );
 }
 
 function projectHasPlan(project) {
-  return (plansData.value || []).some(
-    (plan) =>
-      plan?.project === project ||
-      (plan?.steps || []).some((step) => step?.project === project),
-  );
+  return !!firstOpenPlanForProject(project);
 }
 
 function applyRailFilter(items) {
@@ -1770,47 +1860,58 @@ function ProjectRail({ items, segMap, useFlat, flatItems }) {
             <span>${name || "all projects"}</span>
             <em>${list.length}</em>
           </div>
-          ${list.map(
-            (ag) =>
-              html`<button
-                class="project-rail-row ${currentProject.value === ag.name
-                  ? "selected"
-                  : ""}"
-                onClick=${() => openProject(ag.name)}
-                title=${`${ag.name}: ${ag.task || ag.status || "sleeping"}`}
+          ${list.map((ag) => {
+            const workBadge = projectRailWorkBadge(ag.name);
+            const visibleState =
+              workBadge?.title || ag.task || ag.status || "sleeping";
+            return html`<button
+              class="project-rail-row ${currentProject.value === ag.name
+                ? "selected"
+                : ""}"
+              onClick=${() => openProject(ag.name)}
+              title=${`${ag.name}: ${workBadge?.full || visibleState}`}
+            >
+              <span class="dot ${ag.status || "sleeping"}"></span>
+              <span class="project-rail-name">${ag.name}</span>
+              <span
+                class=${`project-rail-state ${workBadge ? "has-work" : ""}`}
               >
-                <span class="dot ${ag.status || "sleeping"}"></span>
-                <span class="project-rail-name">${ag.name}</span>
-                <span class="project-rail-state">
-                  ${ag.task || ag.status || "sleeping"}
-                </span>
-                <span class="project-rail-badges">
-                  ${(ag.uncommitted || 0) > 0
-                    ? html`<span
-                        class="project-rail-dirty ${(ag.uncommitted || 0) > 20
-                          ? "hot"
-                          : ""}"
-                        >${ag.uncommitted}</span
-                      >`
-                    : null}
-                  ${(ag.days || 0) > 7
-                    ? html`<span class="project-rail-age">${ag.days}d</span>`
-                    : null}
-                  ${ag.blockers
-                    ? html`<span class="project-rail-blocked">block</span>`
-                    : null}
-                  ${activities.value?.[ag.name]
-                    ? html`<span class="project-rail-live">live</span>`
-                    : null}
-                  ${projectHasDelegation(ag.name)
-                    ? html`<span class="project-rail-deleg">deleg</span>`
-                    : null}
-                  ${projectHasPlan(ag.name)
-                    ? html`<span class="project-rail-plan">plan</span>`
-                    : null}
-                </span>
-              </button>`,
-          )}
+                ${visibleState}
+              </span>
+              <span class="project-rail-badges">
+                ${workBadge
+                  ? html`<span
+                      class=${`project-rail-work ${workBadge.kind}`}
+                      title=${workBadge.full || workBadge.title}
+                      >${workBadge.label}</span
+                    >`
+                  : null}
+                ${(ag.uncommitted || 0) > 0
+                  ? html`<span
+                      class="project-rail-dirty ${(ag.uncommitted || 0) > 20
+                        ? "hot"
+                        : ""}"
+                      >${ag.uncommitted}</span
+                    >`
+                  : null}
+                ${(ag.days || 0) > 7
+                  ? html`<span class="project-rail-age">${ag.days}d</span>`
+                  : null}
+                ${ag.blockers
+                  ? html`<span class="project-rail-blocked">block</span>`
+                  : null}
+                ${activities.value?.[ag.name]
+                  ? html`<span class="project-rail-live">live</span>`
+                  : null}
+                ${projectHasDelegation(ag.name)
+                  ? html`<span class="project-rail-deleg">deleg</span>`
+                  : null}
+                ${projectHasPlan(ag.name)
+                  ? html`<span class="project-rail-plan">plan</span>`
+                  : null}
+              </span>
+            </button>`;
+          })}
         </section>`,
     )}
   </div>`;
