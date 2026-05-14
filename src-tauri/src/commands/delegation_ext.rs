@@ -180,6 +180,7 @@ fn exec_cancel(state: &AppState, id: &str) -> Option<String> {
         del.status = crate::commands::status::DelegationStatus::Cancelled;
     }
     state.save_delegations();
+    super::agents::invalidate_scan_cache(state);
     crate::log_info!(
         "[deleg_ext] cancelled {} (was {})",
         resolved_id,

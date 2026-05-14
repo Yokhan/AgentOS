@@ -40,6 +40,7 @@ import {
   slashItems,
   pastedImg,
   delegations,
+  delegStreams,
   feedItems,
   signalsData,
   notificationsData,
@@ -188,19 +189,24 @@ function extractDelegationTags(text) {
   return out;
 }
 
-function mergeDelegationItems(items, { pruneActive = false } = {}) {
-  if (!items?.length && !pruneActive) return;
+function mergeDelegationItems(
+  items,
+  { replace = false, pruneActive = false } = {},
+) {
+  if (!items?.length && !pruneActive && !replace) return;
   items = items || [];
   const activeIds = new Set(items.map((item) => item?.id).filter(Boolean));
   const next = {};
-  for (const [id, existing] of Object.entries(delegations.value || {})) {
-    const status = existing?.status || "";
-    if (
-      !pruneActive ||
-      !ACTIVE_DELEGATION_STATUSES.has(status) ||
-      activeIds.has(id)
-    ) {
-      next[id] = existing;
+  if (!replace) {
+    for (const [id, existing] of Object.entries(delegations.value || {})) {
+      const status = existing?.status || "";
+      if (
+        !pruneActive ||
+        !ACTIVE_DELEGATION_STATUSES.has(status) ||
+        activeIds.has(id)
+      ) {
+        next[id] = existing;
+      }
     }
   }
   for (const item of items) {
@@ -227,7 +233,7 @@ async function loadDelegations() {
       task: item.task,
       ts: item.ts,
     }));
-    mergeDelegationItems(items, { pruneActive: true });
+    mergeDelegationItems(items, { replace: true });
   } catch (e) {
     console.warn("loadDelegations:", e);
   }
@@ -842,6 +848,16 @@ async function loadChat(p) {
       console.warn("loadChat:", e);
     }
   }
+}
+
+async function searchChatHistory(query, project = "", limit = 60) {
+  const q = String(query || "").trim();
+  if (!q || !__IS_TAURI) return { query: q, matches: [], count: 0 };
+  return await __invoke("search_chat_history", {
+    query: q,
+    project: project ? normalizeProjectKey(project) : null,
+    limit,
+  });
 }
 
 async function loadOlderChat() {
@@ -2659,6 +2675,67 @@ async function runDualRoomAction(action, message, targetParticipantId) {
   }
 }
 
+const delegStreamOffsets = {};
+
+function summarizeDelegationStream(current, events) {
+  const next = {
+    ...(current || { stage: "queued", label: "", events: [] }),
+    events: [...((current && current.events) || []), ...events].slice(-60),
+  };
+  for (const evt of events || []) {
+    const type = evt?.type || "";
+    if (type === "stage") {
+      next.stage = evt.stage || next.stage;
+      next.label = evt.label || next.label;
+    } else if (type === "tool_start") {
+      next.stage = "tool";
+      next.label = evt.tool || "tool";
+    } else if (type === "thinking") {
+      next.stage = "thinking";
+      next.label = String(evt.text || "").slice(0, 80);
+    } else if (type === "text_delta") {
+      next.stage = "output";
+      next.label = String(evt.text || "").slice(0, 80);
+    } else if (type === "usage") {
+      next.usage = evt.usage || next.usage;
+    } else if (type === "cost") {
+      next.cost_usd = evt.cost_usd;
+    } else if (type === "done") {
+      next.stage = evt.status || "done";
+      next.label = evt.response || next.label;
+      next.done = true;
+    } else if (type === "safety") {
+      next.stage = "safety";
+      next.label = evt.reason || "safety";
+    }
+  }
+  return next;
+}
+
+async function pollDelegationStreams() {
+  if (!__IS_TAURI) return;
+  const active = Object.entries(delegations.value || {}).filter(([_, d]) =>
+    ["running", "escalated", "verifying", "deciding"].includes(d?.status),
+  );
+  if (!active.length) return;
+  const updated = { ...delegStreams.value };
+  for (const [id] of active) {
+    try {
+      const res = await __invoke("poll_delegation_stream", {
+        id,
+        offset: delegStreamOffsets[id] || 0,
+      });
+      delegStreamOffsets[id] = res?.offset ?? delegStreamOffsets[id] ?? 0;
+      if ((res?.events || []).length) {
+        updated[id] = summarizeDelegationStream(updated[id], res.events || []);
+      }
+    } catch (e) {
+      console.warn("pollDelegationStreams:", id, e);
+    }
+  }
+  delegStreams.value = updated;
+}
+
 // ===== HELPERS =====
 // esc, md, ft, SC, SL imported from utils.js
 
@@ -2679,7 +2756,9 @@ export {
   checkOrch,
   loadSegments,
   loadChat,
+  searchChatHistory,
   loadDelegations,
+  pollDelegationStreams,
   loadModules,
   loadPlan,
   loadQueue,

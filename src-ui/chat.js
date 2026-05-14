@@ -93,6 +93,7 @@ import {
   handlePaste,
   loadChat,
   loadOlderChat,
+  searchChatHistory,
   loadModules,
   loadGraph,
   loadPlansData,
@@ -2444,6 +2445,10 @@ function ChatSidebar() {
   const [routeChangeNote, setRouteChangeNote] = useState("");
   const [composerText, setComposerText] = useState("");
   const [showAllRenderedMessages, setShowAllRenderedMessages] = useState(false);
+  const [chatSearchOpen, setChatSearchOpen] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
+  const [chatSearchResults, setChatSearchResults] = useState([]);
+  const [chatSearchBusy, setChatSearchBusy] = useState(false);
   const lastLiveMarker = useRef("");
   const duoEnabled = chatCollabMode.value === "duo";
   const duoView = duoEnabled ? normalizeDuoView(activeRoomTab.value) : "chat";
@@ -2924,6 +2929,26 @@ function ChatSidebar() {
       setShowScrollBtn(true);
     });
   };
+  const runChatSearch = async (projectOnly = false) => {
+    const query = chatSearchQuery.trim();
+    if (!query) {
+      setChatSearchResults([]);
+      return;
+    }
+    setChatSearchBusy(true);
+    try {
+      const res = await searchChatHistory(
+        query,
+        projectOnly ? currentProject.value || "" : "",
+        80,
+      );
+      setChatSearchResults(res?.matches || []);
+    } catch (e) {
+      showToast("search failed: " + e, "error", 3000);
+    } finally {
+      setChatSearchBusy(false);
+    }
+  };
   const send = async () => {
     const v = inputRef.current?.value;
     if (!v?.trim()) return;
@@ -3279,6 +3304,13 @@ function ChatSidebar() {
         >
           ↓
         </button>
+        <button
+          style=${`background:none;border:1px solid var(--border);color:${chatSearchOpen ? "var(--cyan)" : "var(--t3)"};font-size:var(--fs-s);padding:2px 6px;cursor:pointer;font-family:var(--font-mono)`}
+          title="Search chat history"
+          onClick=${() => setChatSearchOpen(!chatSearchOpen)}
+        >
+          search
+        </button>
         ${duoEnabled
           ? null
           : html`<button
@@ -3402,6 +3434,71 @@ function ChatSidebar() {
       onFollow=${scrollToBottom}
       onLoadOlder=${loadOlder}
     />
+    ${chatSearchOpen
+      ? html`<div class="chat-search-panel">
+          <form
+            onSubmit=${(e) => {
+              e.preventDefault();
+              runChatSearch(false);
+            }}
+          >
+            <input
+              value=${chatSearchQuery}
+              placeholder="search all chats..."
+              onInput=${(e) => setChatSearchQuery(e.target.value)}
+            />
+            <button type="submit" disabled=${chatSearchBusy}>
+              ${chatSearchBusy ? "..." : "all"}
+            </button>
+            <button
+              type="button"
+              disabled=${chatSearchBusy || !currentProject.value}
+              onClick=${() => runChatSearch(true)}
+            >
+              project
+            </button>
+            <button
+              type="button"
+              onClick=${() => {
+                setChatSearchQuery("");
+                setChatSearchResults([]);
+              }}
+            >
+              clear
+            </button>
+          </form>
+          <div class="chat-search-results">
+            ${chatSearchResults.length
+              ? chatSearchResults.slice(0, 12).map(
+                  (row) =>
+                    html`<button
+                      class="chat-search-result"
+                      type="button"
+                      onClick=${() => {
+                        if (row.project) currentProject.value = row.project;
+                        setChatSearchOpen(false);
+                        loadChat(
+                          row.project ||
+                            currentProject.value ||
+                            "_orchestrator",
+                        );
+                      }}
+                    >
+                      <b>${row.project || "chat"}</b>
+                      <span>${row.role || "msg"} · ${row.ts || "no time"}</span>
+                      <em>${row.snippet || ""}</em>
+                    </button>`,
+                )
+              : html`<span class="chat-search-empty">
+                  ${chatSearchQuery
+                    ? chatSearchBusy
+                      ? "searching..."
+                      : "no matches"
+                    : "type a phrase to search loaded chat history files"}
+                </span>`}
+          </div>
+        </div>`
+      : null}
     ${false
       ? html`<details
           class="chat-context-drawer"
@@ -4910,6 +5007,33 @@ function DelegBtn({ id, project }) {
         : null}
     </div>
     ${d?.task ? html`<div class="dc2-task">${d.task}</div>` : null}
+    ${stream
+      ? html`<details class="dc2-stream">
+          <summary>
+            live:
+            ${stream.stage || "running"}${stream.label
+              ? " / " + stream.label
+              : ""}
+          </summary>
+          <div>
+            ${(stream.events || []).slice(-8).map(
+              (evt) =>
+                html`<p>
+                  <b>${evt.type || "event"}</b>
+                  <span>
+                    ${evt.stage ||
+                    evt.label ||
+                    evt.tool ||
+                    evt.reason ||
+                    evt.response ||
+                    evt.text ||
+                    ""}
+                  </span>
+                </p>`,
+            )}
+          </div>
+        </details>`
+      : null}
     ${d?.scheduled_at && s === "scheduled"
       ? html`<div
           style="font-size:var(--fs-s);color:var(--t3);margin-top:var(--sp-2xs)"

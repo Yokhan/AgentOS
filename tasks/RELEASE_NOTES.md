@@ -1,3 +1,15 @@
+# Agent OS 0.3.31
+
+- Added live delegation stream polling to the UI so active project-agent delegations expose stage, tool, output, usage, and completion events instead of looking idle.
+- Added a reverse channel for project agents: `/api/project/report` and `project_agent_report` route blockers/results into inbox, project chat, and operation state.
+- Added chat history search across all chat JSONL files, with optional current-project filtering from the chat sidebar.
+- Made route-decision cards open the relevant project-agent chat directly, reducing ambiguity between orchestrator chat and project chat.
+- Fixed scheduled delegation execution and chain dependencies so scheduled work is not skipped when auto-approve rules are disabled, and ready chain steps unblock after prior steps complete.
+- Project browser status now invalidates and overlays delegation state after pending/running/failed/recent-done work, reducing stale project cards after delegation results.
+- Delegation streams now parse usage/cost events into persistent usage logs and per-delegation state.
+- Live execution map now ignores archived terminal delegation operations that are no longer present in the live delegation set.
+- Cleaned the tracked queue plan so placeholder tasks no longer show up as real orchestration work.
+
 # Agent OS 0.3.30
 
 - Stopped Live Execution Flow from rendering AgentOS command/status chatter as branch-map events.

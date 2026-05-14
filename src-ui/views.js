@@ -894,6 +894,17 @@ async function approveRouteDelegation(id, action) {
   ]);
 }
 
+function openProjectAgentChat(project) {
+  const name = String(project || "").trim();
+  if (!name || name === "project" || name === "_orchestrator") return;
+  currentProject.value = name;
+  showSettings.value = false;
+  showStrategy.value = false;
+  showPlans.value = false;
+  showGraph.value = false;
+  showToast(`chat: ${name}`, "success", 1200);
+}
+
 function RouteDecisionPanel({ map, execution }) {
   const routes = (map?.project_agent_routes || [])
     .filter(routeNeedsDecision)
@@ -975,6 +986,9 @@ function RouteDecisionPanel({ map, execution }) {
                 )}
             >
               health
+            </button>
+            <button onClick=${() => openProjectAgentChat(route.project)}>
+              chat
             </button>
           </div>
         </article>`;
@@ -1131,6 +1145,9 @@ function RouteDecisionPanelCompact({ map, execution }) {
                 >
                   health
                 </button>
+                <button onClick=${() => openProjectAgentChat(route.project)}>
+                  chat
+                </button>
               </div>
             </article>`;
           })}
@@ -1184,6 +1201,9 @@ function RouteDecisionPanelCompact({ map, execution }) {
                 >
                   archive terminal
                 </button>
+                <button onClick=${() => openProjectAgentChat(item.project)}>
+                  chat
+                </button>
               </div>
             </article>`;
           })}
@@ -1215,6 +1235,9 @@ function RouteDecisionPanelCompact({ map, execution }) {
               >
                 retry
               </button>
+              <button onClick=${() => openProjectAgentChat(route.project)}>
+                chat
+              </button>
             </article>`;
           })}
           ${waiting.map((item) => {
@@ -1245,6 +1268,9 @@ function RouteDecisionPanelCompact({ map, execution }) {
                   >
                     status
                   </button>`}
+              <button onClick=${() => openProjectAgentChat(item.project)}>
+                chat
+              </button>
             </article>`;
           })}
           ${totalWaiting > routes.length + waiting.length

@@ -68,6 +68,7 @@ pub fn queue_delegation_internal(state: &AppState, project: &str, task: &str) ->
         delegations.insert(id.clone(), delegation);
     }
     state.save_delegations();
+    super::agents::invalidate_scan_cache(state);
     super::operation_state::emit(
         state,
         super::operation_state::OperationEventInput::new(
@@ -162,6 +163,7 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
         del.clone()
     };
     state.save_delegations();
+    super::agents::invalidate_scan_cache(state);
     if let Some(work_item_id) = d.work_item_id.as_deref() {
         if let Ok(mut work_items) = state.work_items.lock() {
             if let Some(item) = work_items.get_mut(work_item_id) {
@@ -351,6 +353,7 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
             }
         }
         state.save_delegations();
+        super::agents::invalidate_scan_cache(state);
         if let Some(session_id) = d.room_session_id.as_deref() {
             super::multi_agent::emit_pipeline_event(
                 state,
@@ -414,6 +417,7 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
                 }
             }
             state.save_delegations();
+            super::agents::invalidate_scan_cache(state);
 
             let (_, pa_dir) = state.get_orch_dir();
             let pa_prompt = format!(
@@ -513,6 +517,7 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
             }
         }
         state.save_delegations();
+        super::agents::invalidate_scan_cache(state);
         if let Some(work_item_id) = d.work_item_id.as_deref() {
             if let Ok(mut work_items) = state.work_items.lock() {
                 if let Some(item) = work_items.get_mut(work_item_id) {
@@ -581,6 +586,13 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
     };
 
     super::delegation_stream::emit_done(&stream_buf, effective_status, &final_response);
+    let usage = super::delegation_stream::parse_stream_usage(
+        &stream_buf,
+        deleg_model.as_deref().unwrap_or(""),
+    );
+    if let Some(usage) = usage.as_ref() {
+        super::usage::append_usage(&state.root, &d.project, usage);
+    }
     super::operation_state::emit(
         state,
         super::operation_state::OperationEventInput::new(
@@ -682,6 +694,7 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
                 crate::commands::status::DelegationStatus::Failed
             };
             del.response = Some(final_response.chars().take(500).collect());
+            del.usage = usage.clone();
             del.gate_result = gate_result.clone();
             if effective_status == "complete" {
                 del.git_diff = super::claude_runner::capture_git_changes(&project_dir);
@@ -689,6 +702,7 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
         }
     }
     state.save_delegations();
+    super::agents::invalidate_scan_cache(state);
     if let Some(work_item_id) = d.work_item_id.as_deref() {
         let mut completed_work_item = None;
         if let Ok(mut work_items) = state.work_items.lock() {

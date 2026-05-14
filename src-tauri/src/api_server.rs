@@ -50,6 +50,7 @@ pub async fn start(state: Arc<AppState>, port: u16) {
         .route("/api/chat/{project}", get(get_chat_history))
         .route("/api/chat", post(send_chat))
         .route("/api/chats", get(get_chats))
+        .route("/api/chat/search", get(search_chat_history))
         // Feed & status
         .route("/api/feed", get(get_feed))
         .route("/api/activity", get(get_activity))
@@ -64,6 +65,7 @@ pub async fn start(state: Arc<AppState>, port: u16) {
         .route("/api/delegations", get(get_delegations))
         .route("/api/delegation/approve", post(approve_delegation))
         .route("/api/delegation/reject", post(reject_delegation))
+        .route("/api/project/report", post(project_agent_report))
         // Graph API (for MCP / Agent Protocol)
         .route("/api/graph/overview", get(graph_overview))
         .route("/api/graph/project/{project}", get(graph_project))
@@ -130,6 +132,25 @@ async fn get_chats(AxState(state): AxState<Arc<AppState>>) -> impl IntoResponse 
 }
 
 #[derive(Deserialize)]
+struct ChatSearchQuery {
+    query: String,
+    project: Option<String>,
+    limit: Option<usize>,
+}
+
+async fn search_chat_history(
+    AxState(state): AxState<Arc<AppState>>,
+    Query(query): Query<ChatSearchQuery>,
+) -> impl IntoResponse {
+    Json(crate::commands::chat_search::search_chat_history_core(
+        &state,
+        &query.query,
+        query.project.as_deref(),
+        query.limit.unwrap_or(50),
+    ))
+}
+
+#[derive(Deserialize)]
 struct ChatHistoryQuery {
     before: Option<usize>,
     limit: Option<usize>,
@@ -146,6 +167,19 @@ async fn get_chat_history(
         query.before,
         query.limit,
     ))
+}
+
+async fn project_agent_report(
+    AxState(state): AxState<Arc<AppState>>,
+    Json(body): Json<crate::commands::project_reports::ProjectAgentReportRequest>,
+) -> impl IntoResponse {
+    match crate::commands::project_reports::project_agent_report_core(&state, body) {
+        Ok(value) => (StatusCode::OK, Json(value)),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"status":"error","error":error})),
+        ),
+    }
 }
 
 async fn send_chat(

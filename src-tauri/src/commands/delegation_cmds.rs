@@ -26,6 +26,7 @@ pub fn reject_delegation(state: State<Arc<AppState>>, id: String) -> Value {
             let work_item_id = del.work_item_id.clone();
             drop(delegations);
             state.save_delegations();
+            super::agents::invalidate_scan_cache(&state);
             if let Some(work_item_id) = work_item_id.as_deref() {
                 if let Ok(mut work_items) = state.work_items.lock() {
                     if let Some(item) = work_items.get_mut(work_item_id) {
@@ -64,6 +65,7 @@ pub fn schedule_delegation(state: State<Arc<AppState>>, id: String, scheduled_at
             del.scheduled_at = Some(scheduled_at.clone());
             drop(delegations);
             state.save_delegations();
+            super::agents::invalidate_scan_cache(&state);
             crate::log_info!("[delegation] scheduled {} for {}", id, scheduled_at);
             return json!({"status": "scheduled", "scheduled_at": scheduled_at});
         }

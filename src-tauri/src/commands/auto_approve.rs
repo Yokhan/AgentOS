@@ -182,11 +182,6 @@ pub async fn auto_approve_loop(state: Arc<AppState>) {
             continue;
         }
 
-        let rules = load_rules(&state);
-        if rules.is_empty() || rules.iter().all(|r| !r.enabled) {
-            continue;
-        }
-
         // Collect pending delegations
         let pending: Vec<crate::state::Delegation> = {
             let delegations = match state.delegations.lock() {
@@ -240,6 +235,13 @@ pub async fn auto_approve_loop(state: Arc<AppState>) {
             }
         }
 
+        unblock_ready_chain_steps(&state);
+
+        let rules = load_rules(&state);
+        if rules.is_empty() || rules.iter().all(|r| !r.enabled) {
+            continue;
+        }
+
         // Sort by priority (High first)
         let mut pending = pending;
         pending.sort_by(|a, b| {
@@ -284,6 +286,52 @@ pub async fn auto_approve_loop(state: Arc<AppState>) {
                 }
             }
         }
+    }
+}
+
+fn unblock_ready_chain_steps(state: &Arc<AppState>) {
+    let mut changed = false;
+    if let Ok(mut delegations) = state.delegations.lock() {
+        let mut chain_ids: Vec<String> = delegations
+            .values()
+            .filter_map(|d| d.batch_id.as_deref())
+            .filter(|batch| batch.starts_with("chain-"))
+            .map(String::from)
+            .collect();
+        chain_ids.sort();
+        chain_ids.dedup();
+
+        for chain_id in chain_ids {
+            let mut items: Vec<(String, String)> = delegations
+                .iter()
+                .filter(|(_, d)| d.batch_id.as_deref() == Some(chain_id.as_str()))
+                .map(|(id, d)| (id.clone(), d.ts.clone()))
+                .collect();
+            items.sort_by(|a, b| a.1.cmp(&b.1));
+
+            let mut previous_done = true;
+            for (id, _) in items {
+                let Some(d) = delegations.get_mut(&id) else {
+                    continue;
+                };
+                if previous_done && d.status == crate::commands::status::DelegationStatus::Scheduled
+                {
+                    d.status = crate::commands::status::DelegationStatus::Pending;
+                    d.scheduled_at = None;
+                    changed = true;
+                    crate::log_info!("[auto-approve] chain {} unblocked {}", chain_id, id);
+                    break;
+                }
+                previous_done = d.status == crate::commands::status::DelegationStatus::Done;
+                if !previous_done {
+                    break;
+                }
+            }
+        }
+    }
+    if changed {
+        state.save_delegations();
+        super::agents::invalidate_scan_cache(state);
     }
 }
 

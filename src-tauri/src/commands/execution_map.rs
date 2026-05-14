@@ -4,6 +4,7 @@
 //! stream events, Duo session events, and delegation state/streams.
 
 use crate::commands::event_contract::EVENT_SCHEMA_VERSION;
+use crate::commands::status::DelegationStatus;
 use crate::commands::timeline::build_execution_timeline_for_map;
 use crate::state::{AppState, Delegation};
 use serde_json::{json, Value};
@@ -172,21 +173,9 @@ fn is_visual_map_row(row: &Value) -> bool {
         | "gate_started"
         | "review_verdict"
         | "run_cancelled" => true,
-        "command"
-        | "coordination"
-        | "pa_command_started"
-        | "pa_command_result"
-        | "pa_command_warning"
-        | "pa_command_missing"
-        | "auto_continue"
-        | "run_done"
-        | "run"
-        | "progress"
-        | "thinking"
-        | "usage"
-        | "cost"
-        | "system"
-        | "model_output" => false,
+        "command" | "coordination" | "pa_command_started" | "pa_command_result"
+        | "pa_command_warning" | "pa_command_missing" | "auto_continue" | "run_done" | "run"
+        | "progress" | "thinking" | "usage" | "cost" | "system" | "model_output" => false,
         _ => source == "delegation",
     }
 }
@@ -222,13 +211,49 @@ fn state_sample_weight(sample: &Value) -> u8 {
     }
 }
 
+fn delegation_id_for_operation(operation_id: &str) -> Option<&str> {
+    operation_id
+        .strip_prefix("delegation:")
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+}
+
+fn is_terminal_operation_status(status: &str) -> bool {
+    status == DelegationStatus::Done.to_string()
+        || status == DelegationStatus::Failed.to_string()
+        || status == DelegationStatus::Cancelled.to_string()
+}
+
+fn is_archived_terminal_delegation_operation(
+    operation: &crate::commands::operation_state::OperationRecord,
+    live_delegation_ids: &HashSet<String>,
+) -> bool {
+    let is_delegation_operation = operation.actor == "project_agent"
+        || operation.actor == "gate"
+        || delegation_id_for_operation(&operation.operation_id).is_some();
+    if !is_delegation_operation || !is_terminal_operation_status(&operation.status) {
+        return false;
+    }
+    delegation_id_for_operation(&operation.operation_id)
+        .map(|id| !live_delegation_ids.contains(id))
+        .unwrap_or(true)
+}
+
 fn operation_rows(state: &AppState, project_filter: &str, limit: usize) -> Vec<Value> {
     let operations = match state.operations.lock() {
         Ok(ops) => ops,
         Err(e) => e.into_inner(),
     };
+    let live_delegation_ids: HashSet<String> = state
+        .delegations
+        .lock()
+        .map(|delegations| delegations.keys().cloned().collect())
+        .unwrap_or_default();
     let mut rows: Vec<Value> = operations
         .values()
+        .filter(|operation| {
+            !is_archived_terminal_delegation_operation(operation, &live_delegation_ids)
+        })
         .flat_map(|operation| {
             operation.events.iter().filter_map(|event| {
                 let project = clean_project(&event.project);
@@ -262,6 +287,9 @@ fn operation_rows(state: &AppState, project_filter: &str, limit: usize) -> Vec<V
         })
         .collect();
     for operation in operations.values() {
+        if is_archived_terminal_delegation_operation(operation, &live_delegation_ids) {
+            continue;
+        }
         let Some(heartbeat_ts) = operation.heartbeat_ts.clone() else {
             continue;
         };
@@ -953,6 +981,47 @@ mod tests {
     }
 
     #[test]
+    fn archived_terminal_delegation_operation_does_not_stay_live() {
+        let root = test_root("archived-terminal-operation");
+        let state = AppState::new(root.clone());
+        let operation_id = "delegation:d-archived";
+
+        crate::commands::operation_state::emit(
+            &state,
+            crate::commands::operation_state::OperationEventInput::new(
+                operation_id,
+                "project_agent",
+                "HealthTracker",
+                "delegation_started",
+                "delegation",
+                "running",
+                "Delegation started",
+            ),
+        );
+        crate::commands::operation_state::emit(
+            &state,
+            crate::commands::operation_state::OperationEventInput::new(
+                operation_id,
+                "project_agent",
+                "HealthTracker",
+                "delegation_done",
+                "done",
+                "failed",
+                "Delegation failed",
+            ),
+        );
+
+        let result = build_execution_map(&state, None, None, 50);
+        let lanes = result["lanes"].as_array().expect("lanes");
+        assert!(!lanes.iter().any(|lane| lane["project"] == "HealthTracker"));
+        assert_eq!(result["counts"]["blocked"], 0);
+        assert_eq!(result["counts"]["waiting"], 0);
+        assert_eq!(result["counts"]["visual_events"], 0);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn includes_live_running_delegation_without_stream_output() {
         let root = test_root("live-running");
         let state = AppState::new(root.clone());
@@ -1150,7 +1219,12 @@ mod tests {
                 "needs_user",
                 "Claimed action without executable AgentOS command",
             ),
-            ("auto_continue", "agent_loop", "running", "Auto-continue turn 3"),
+            (
+                "auto_continue",
+                "agent_loop",
+                "running",
+                "Auto-continue turn 3",
+            ),
             ("run_done", "done", "done", "done"),
         ] {
             crate::commands::operation_state::emit(

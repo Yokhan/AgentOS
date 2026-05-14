@@ -20,6 +20,7 @@ tasks/.delegations.json
 tasks/.delegation-log.jsonl
 tasks/.audit-log.jsonl
 tasks/.operations.jsonl
+tasks/.notifications.jsonl
 tasks/.signals.jsonl
 tasks/.strategies.json
 tasks/agent-os.log

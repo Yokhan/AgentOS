@@ -39,6 +39,7 @@ import {
   loadPlansData,
   loadChat,
   loadDelegations,
+  pollDelegationStreams,
   loadModules,
   loadProjectPlan,
   loadGraph,
@@ -375,4 +376,5 @@ setInterval(() => {
     loadExecutionMap().catch(() => {});
     loadOperationSnapshot().catch(() => {});
   }
+  pollDelegationStreams().catch(() => {});
 }, 1000);

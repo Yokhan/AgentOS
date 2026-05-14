@@ -7,6 +7,13 @@ use tauri::State;
 
 const CACHE_TTL_SECS: u64 = 30;
 
+pub fn invalidate_scan_cache(state: &AppState) {
+    if let Ok(mut cache) = state.scan_cache.lock() {
+        cache.data = None;
+        cache.updated = None;
+    }
+}
+
 /// Shared agent-fetching logic — used by both Tauri command and HTTP API
 pub fn get_agents_cached(state: &AppState) -> Value {
     let mut cache = match state.scan_cache.lock() {
@@ -59,6 +66,63 @@ pub fn get_agents_cached(state: &AppState) -> Value {
         for p in &mut projects {
             if recent_projects.contains(&p.name) {
                 p.status = "working".to_string();
+            }
+        }
+    }
+
+    // Project cards must reflect live project-agent work immediately, not only git age.
+    if let Ok(delegations) = state.delegations.lock() {
+        let now = chrono::Utc::now();
+        for p in &mut projects {
+            let latest = delegations
+                .values()
+                .filter(|d| d.project == p.name)
+                .max_by(|a, b| a.ts.cmp(&b.ts));
+            let Some(d) = latest else { continue };
+            match d.status {
+                crate::commands::status::DelegationStatus::Running
+                | crate::commands::status::DelegationStatus::Escalated
+                | crate::commands::status::DelegationStatus::Verifying
+                | crate::commands::status::DelegationStatus::Deciding => {
+                    p.status = "working".to_string();
+                    p.task = format!(
+                        "delegation: {}",
+                        d.task.chars().take(72).collect::<String>()
+                    );
+                }
+                crate::commands::status::DelegationStatus::Pending
+                | crate::commands::status::DelegationStatus::NeedsPermission
+                | crate::commands::status::DelegationStatus::Scheduled => {
+                    if p.status != "working" {
+                        p.status = "pending".to_string();
+                        p.task = format!(
+                            "queued delegation: {}",
+                            d.task.chars().take(68).collect::<String>()
+                        );
+                    }
+                }
+                crate::commands::status::DelegationStatus::Failed => {
+                    p.status = "blocked".to_string();
+                    p.blockers = true;
+                    p.blocker_text = d
+                        .response
+                        .clone()
+                        .unwrap_or_else(|| "Delegation failed".to_string());
+                }
+                crate::commands::status::DelegationStatus::Done => {
+                    let is_recent = chrono::DateTime::parse_from_rfc3339(&d.ts)
+                        .map(|dt| {
+                            now.signed_duration_since(dt.with_timezone(&chrono::Utc))
+                                .num_hours()
+                                < 24
+                        })
+                        .unwrap_or(false);
+                    if is_recent && p.status != "blocked" {
+                        p.status = "working".to_string();
+                        p.task = "delegation completed recently".to_string();
+                    }
+                }
+                _ => {}
             }
         }
     }

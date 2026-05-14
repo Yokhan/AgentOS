@@ -367,6 +367,62 @@ pub fn emit_done(stream_buf: &Path, status: &str, response: &str) {
 }
 
 /// Poll delegation stream buffer — frontend calls every 500ms
+pub fn parse_stream_usage(
+    stream_buf: &Path,
+    fallback_model: &str,
+) -> Option<super::usage::UsageInfo> {
+    let content = std::fs::read_to_string(stream_buf).ok()?;
+    let mut input_tokens = 0u64;
+    let mut output_tokens = 0u64;
+    let mut cost_usd = 0.0f64;
+    let mut model = fallback_model.to_string();
+
+    for line in content.lines() {
+        let Ok(evt) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        match evt.get("type").and_then(|v| v.as_str()).unwrap_or("") {
+            "provider" => {
+                if model.is_empty() {
+                    model = evt
+                        .get("model")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                }
+            }
+            "usage" => {
+                if let Some(usage) = evt.get("usage") {
+                    input_tokens += usage
+                        .get("input_tokens")
+                        .or_else(|| usage.get("cache_creation_input_tokens"))
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    output_tokens += usage
+                        .get("output_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                }
+            }
+            "cost" => {
+                cost_usd += evt.get("cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            }
+            _ => {}
+        }
+    }
+
+    if input_tokens == 0 && output_tokens == 0 && cost_usd <= 0.0 {
+        return None;
+    }
+
+    Some(super::usage::UsageInfo {
+        input_tokens,
+        output_tokens,
+        cost_usd,
+        model,
+    })
+}
+
 #[tauri::command]
 pub fn poll_delegation_stream(state: State<Arc<AppState>>, id: String, offset: usize) -> Value {
     let buf_path = state

@@ -773,6 +773,33 @@
     -webkit-box-orient: vertical;
     font-family: var(--font-mono);
 }
+.dc2-stream {
+    margin-top: var(--sp-xs);
+    border: 1px solid color-mix(in srgb, var(--cyan) 26%, var(--border));
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    padding: var(--sp-xs);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.dc2-stream summary {
+    cursor: pointer;
+    color: var(--cyan);
+}
+.dc2-stream p {
+    margin: 4px 0 0;
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: var(--sp-xs);
+}
+.dc2-stream b {
+    color: var(--t3);
+}
+.dc2-stream span {
+    color: var(--t2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .dc2-actions {
     display: flex;
     gap: var(--sp-s);
