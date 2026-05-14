@@ -1,3 +1,12 @@
+# Agent OS 0.3.34
+
+- Added safe `[PROJECT_ONBOARD_PLAN:segment:permission:limit]` planning so the orchestrator can build project onboarding and recovery waves from natural-language requests.
+- Added dirty-worktree aware canary planning: metadata repair can be planned in bulk, while template deploy remains one-project-at-a-time and blocked on dirty projects.
+- Added a Workbench `prepare onboarding wave` shortcut and `docs/PROJECT_ONBOARDING.md` operator contract for bringing projects under AgentOS control.
+- Enriched Code Context bundles with manifest summaries for `package.json`, `Cargo.toml`, `pyproject.toml`, and `project.godot`, improving shared auth, shared UI, and game-engine handoffs.
+- Added live run wait diagnostics so chat explains when the provider is alive but silent, when a tool or AgentOS command is running, and what the next user action should be.
+- Extended release gates for onboarding plans, Code Context manifest summaries, and run-state diagnostics.
+
 # Agent OS 0.3.33
 
 - Added a visible Code Context attachment flow in chat: the selected project can build a real backend `agentos.code_context.v1` bundle before the next message.
