@@ -19,7 +19,7 @@ pub fn overlay_operations(state: &AppState, graph: &mut GraphData) {
             let id = format!("deleg:{}", d.id.chars().take(12).collect::<String>());
             graph.nodes.push(GraphNode {
                 id: id.clone(),
-                label: format!("⚡{}", d.project),
+                label: format!("delegation: {}", d.project),
                 kind: "delegation".to_string(),
                 path: None,
                 group: Some("operations".to_string()),
@@ -56,7 +56,7 @@ pub fn overlay_operations(state: &AppState, graph: &mut GraphData) {
         graph.nodes.push(GraphNode {
             id: id.clone(),
             label: format!(
-                "📋{} {}/{}",
+                "strategy: {} {}/{}",
                 s.title.chars().take(10).collect::<String>(),
                 done,
                 total
@@ -144,17 +144,17 @@ pub fn build_graph_context(state: &AppState, project: &str) -> String {
             node.metrics.ce
         ));
         if !deps_out.is_empty() {
-            lines.push(format!("  → depends on: {}", deps_out.join(", ")));
+            lines.push(format!("  -> depends on: {}", deps_out.join(", ")));
         }
         if !deps_in.is_empty() {
-            lines.push(format!("  ← depended by: {}", deps_in.join(", ")));
+            lines.push(format!("  <- depended by: {}", deps_in.join(", ")));
         }
     }
 
     if !graph.cycles.is_empty() {
-        lines.push("\n⚠ CYCLES:".to_string());
+        lines.push("\nWARNING CYCLES:".to_string());
         for cycle in &graph.cycles {
-            lines.push(format!("  {}", cycle.join(" → ")));
+            lines.push(format!("  {}", cycle.join(" -> ")));
         }
     }
 

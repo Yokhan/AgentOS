@@ -221,6 +221,9 @@ pub fn describe_pa_command(cmd: &PaCommand) -> String {
             super::pa_commands_ops::OpsPaCommand::GraphRules { project } => {
                 format!("[GRAPH_RULES:{}]", project)
             }
+            super::pa_commands_ops::OpsPaCommand::CodeContext { projects, .. } => {
+                format!("[CODE_CONTEXT:{}]", projects.join(","))
+            }
             super::pa_commands_ops::OpsPaCommand::ProjectOnboardAudit => {
                 "[PROJECT_ONBOARD_AUDIT]".to_string()
             }
@@ -270,6 +273,7 @@ pub fn is_read_only_pa_command(cmd: &PaCommand) -> bool {
             | super::pa_commands_ops::OpsPaCommand::GraphImpact { .. }
             | super::pa_commands_ops::OpsPaCommand::GraphVerify { .. }
             | super::pa_commands_ops::OpsPaCommand::GraphRules { .. }
+            | super::pa_commands_ops::OpsPaCommand::CodeContext { .. }
             | super::pa_commands_ops::OpsPaCommand::ProjectOnboardAudit => true,
             super::pa_commands_ops::OpsPaCommand::ProjectConnect { dry_run, .. }
             | super::pa_commands_ops::OpsPaCommand::ProjectConnectMissing { dry_run, .. } => {
@@ -988,6 +992,26 @@ ERROR: {"type":"error","status":400}"#;
             &cmd.cmd,
             PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::DashboardFull)
         )));
+    }
+
+    #[test]
+    fn code_context_command_parses_as_read_only() {
+        let state = test_state("code-context");
+        let response = r#"[CODE_CONTEXT:ProjectA,ProjectB]shared auth and 3d ui[/CODE_CONTEXT]"#;
+
+        let commands = parse_pa_commands(response, &state);
+
+        assert_eq!(commands.len(), 1);
+        assert!(commands[0].valid);
+        assert!(is_read_only_pa_command(&commands[0].cmd));
+        assert!(matches!(
+            &commands[0].cmd,
+            PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::CodeContext {
+                projects,
+                focus
+            }) if projects == &vec!["ProjectA".to_string(), "ProjectB".to_string()]
+                && focus == "shared auth and 3d ui"
+        ));
     }
 
     #[test]

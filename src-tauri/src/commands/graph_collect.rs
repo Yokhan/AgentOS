@@ -45,7 +45,9 @@ pub const EXCLUDES: &[&str] = &[
     "ia-memory",
 ];
 
-pub const EXTENSIONS: &[&str] = &["rs", "ts", "tsx", "js", "jsx", "py", "gd"];
+pub const EXTENSIONS: &[&str] = &[
+    "rs", "ts", "tsx", "js", "jsx", "py", "gd", "cs", "tscn", "tres", "gdshader", "shader",
+];
 
 pub fn collect_files(dir: &Path) -> Vec<(String, std::path::PathBuf)> {
     // Load .graphignore patterns
@@ -230,7 +232,7 @@ pub fn resolve_import(
             }
             None
         }
-        "gd" => {
+        "gd" | "tscn" | "tres" | "gdshader" | "shader" => {
             let clean = import.trim_start_matches("res://");
             let candidate = format!("file:{}", clean);
             if file_map.values().any(|id| *id == candidate) {

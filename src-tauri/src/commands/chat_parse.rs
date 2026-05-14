@@ -296,7 +296,9 @@ fn build_identity_context(state: &AppState) -> String {
          [GRAPH_DEPENDENTS:project:file] — who depends on this file\n\
          [GRAPH_IMPACT:project:file] — transitive impact analysis (3-hop)\n\
          [GRAPH_VERIFY:project] — verify project: check cycles, instability\n\
-         [GRAPH_RULES:project] — generate CLAUDE.md-compatible dependency rules\n\n\
+         [GRAPH_RULES:project] — generate CLAUDE.md-compatible dependency rules\n\
+         [CODE_CONTEXT:ProjectA,ProjectB]focus[/CODE_CONTEXT] — bounded task-scoped code context bundle for cross-project work\n\
+         Use CODE_CONTEXT before shared auth, shared UI, game-engine/3D, API, routing, or refactor delegations.\n\n\
          Financial:\n\
          [INCOME_RECORD:amount:category]description[/INCOME_RECORD]\n\
          [FINANCIAL_DASHBOARD]\n\n\

@@ -10,6 +10,7 @@ pub mod chat_search;
 pub mod chat_stream;
 pub mod chat_stream_poll;
 pub mod claude_runner;
+pub mod code_context;
 pub mod comms;
 pub mod config;
 pub mod coordinator_wait;

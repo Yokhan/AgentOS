@@ -208,6 +208,7 @@ pub fn build_project_graph(state: &AppState, project: &str) -> Result<GraphData,
     let re_rs = regex::Regex::new(r"(?:use\s+(crate::\w[\w:]*)|mod\s+(\w+))").unwrap();
     let re_py = regex::Regex::new(r"(?:from\s+(\S+)\s+import|import\s+(\S+))").unwrap();
     let re_gd = regex::Regex::new(r#"(?:preload|load)\(\s*['"]([^'"]+)['"]\s*\)"#).unwrap();
+    let re_res = regex::Regex::new(r#"(res://[^"'\s]+)"#).unwrap();
 
     for (rel_path, abs_path) in &files {
         let content = match std::fs::read_to_string(abs_path) {
@@ -224,6 +225,7 @@ pub fn build_project_graph(state: &AppState, project: &str) -> Result<GraphData,
             "rs" => &re_rs,
             "py" => &re_py,
             "gd" => &re_gd,
+            "tscn" | "tres" | "gdshader" | "shader" => &re_res,
             _ => continue,
         };
 

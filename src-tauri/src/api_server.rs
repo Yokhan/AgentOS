@@ -78,6 +78,7 @@ pub async fn start(state: Arc<AppState>, port: u16) {
         .route("/api/graph/impact/{project}/{file}", get(graph_impact))
         .route("/api/graph/impact", post(graph_impact_post))
         .route("/api/graph/verify/{project}", get(graph_verify))
+        .route("/api/code-context", post(code_context_bundle))
         .layer(axum::extract::DefaultBodyLimit::max(1_048_576)) // 1MB max request body
         .layer(
             CorsLayer::new()
@@ -562,6 +563,28 @@ async fn graph_verify(
             "cycles": graph.cycles,
         })),
         Err(e) => Json(json!({"error": e})),
+    }
+}
+
+async fn code_context_bundle(
+    AxState(state): AxState<Arc<AppState>>,
+    Json(body): Json<crate::commands::code_context::CodeContextRequest>,
+) -> impl IntoResponse {
+    let state_for_build = Arc::clone(&state);
+    match tokio::task::spawn_blocking(move || {
+        crate::commands::code_context::build_code_context_bundle_core(&state_for_build, &body)
+    })
+    .await
+    {
+        Ok(Ok(value)) => (StatusCode::OK, Json(value)),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"status":"error","error":error})),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"status":"error","error":error.to_string()})),
+        ),
     }
 }
 

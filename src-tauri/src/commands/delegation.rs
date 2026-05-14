@@ -226,15 +226,15 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
     let chat_file = state.chats_dir.join(format!("{}.jsonl", d.project));
     let ts = state.now_iso();
 
-    // Enrich task with category context + graph dependency context
+    // Enrich task with category context + task-scoped code context.
     let category_ctx = super::category::enrich_delegation_with_category(state, &d.project);
-    let graph_ctx = super::graph_ops::build_graph_context(state, &d.project);
+    let code_ctx = super::code_context::build_task_code_context(state, &d.project, &d.task, 9_000);
     let mut enriched_task = d.task.clone();
     if !category_ctx.is_empty() {
         enriched_task = format!("{}\n{}", enriched_task, category_ctx);
     }
-    if !graph_ctx.is_empty() {
-        enriched_task = format!("{}\n{}", enriched_task, graph_ctx);
+    if !code_ctx.is_empty() {
+        enriched_task = format!("{}\n\n{}", enriched_task, code_ctx);
     }
 
     let user_entry =

@@ -1,3 +1,13 @@
+# Agent OS 0.3.32
+
+- Added production code context bundles (`agentos.code_context.v1`) for orchestrator and project agents.
+- Added `[CODE_CONTEXT:ProjectA,ProjectB]focus[/CODE_CONTEXT]` PA command for bounded cross-project code context.
+- Added `/api/code-context` for external/project agents to request graph-backed context with optional safe file snippets.
+- Delegations now receive task-scoped code context bundles instead of a raw single-project graph dump.
+- Expanded graph scanning for Godot/game-engine projects: `tscn`, `tres`, `gdshader`, `shader`, and `res://` references.
+- Added `docs/CODE_CONTEXT.md` describing the analyzer, agent request flow, API contract, and limits.
+- Normalized graph context labels to ASCII so agent prompts do not inherit mojibake arrows/icons.
+
 # Agent OS 0.3.31
 
 - Added live delegation stream polling to the UI so active project-agent delegations expose stage, tool, output, usage, and completion events instead of looking idle.

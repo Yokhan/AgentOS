@@ -156,6 +156,7 @@ pub fn run() {
             commands::auto_approve::set_auto_approve_rules,
             commands::usage::get_usage_summary,
             commands::cron::get_cron_jobs,
+            commands::code_context::get_code_context_bundle,
             commands::graph::get_overview_graph,
             commands::graph::get_project_graph,
             commands::graph::get_overview_graph_ops,

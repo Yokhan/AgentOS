@@ -126,6 +126,10 @@ pub enum OpsPaCommand {
     GraphRules {
         project: String,
     },
+    CodeContext {
+        projects: Vec<String>,
+        focus: String,
+    },
     // Project onboarding
     ProjectOnboardAudit,
     ProjectConnect {
@@ -229,6 +233,11 @@ static RE_GRAPH_VERIFY: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"\[GRAPH_VERIFY:([^\]]+)\]").unwrap());
 static RE_GRAPH_RULES: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"\[GRAPH_RULES:([^\]]+)\]").unwrap());
+static RE_CODE_CTX_BLOCK: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"(?s)\[CODE_CONTEXT:([^\]]+)\]\s*\n?(.*?)\n?\[/CODE_CONTEXT\]").unwrap()
+});
+static RE_CODE_CTX_INLINE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"\[CODE_CONTEXT:([^\]]+)\]").unwrap());
 static RE_PROJECT_ONBOARD_AUDIT: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"\[PROJECT_ONBOARD_AUDIT\]").unwrap());
 static RE_PROJECT_CONNECT: LazyLock<regex::Regex> = LazyLock::new(|| {
@@ -437,6 +446,17 @@ pub fn parse_ops_commands(response: &str, _state: &AppState) -> Vec<ParsedComman
             project: cap(c.get(1))
         });
     }
+    if let Some(c) = RE_CODE_CTX_BLOCK.captures(response) {
+        push_cmd!(OpsPaCommand::CodeContext {
+            projects: split_projects(&cap(c.get(1))),
+            focus: cap(c.get(2))
+        });
+    } else if let Some(c) = RE_CODE_CTX_INLINE.captures(response) {
+        push_cmd!(OpsPaCommand::CodeContext {
+            projects: split_projects(&cap(c.get(1))),
+            focus: String::new()
+        });
+    }
     if RE_PROJECT_ONBOARD_AUDIT.is_match(response) {
         push_cmd!(OpsPaCommand::ProjectOnboardAudit);
     }
@@ -622,6 +642,27 @@ pub fn execute_ops_command(state: &AppState, cmd: &OpsPaCommand) -> Option<Strin
             rules.push("2. Update all dependent files if signature changes.".to_string());
             rules.push("3. Run type checker (tsc/cargo check/mypy) after changes.".to_string());
             Some(rules.join("\n"))
+        }
+        OpsPaCommand::CodeContext { projects, focus } => {
+            let request = super::code_context::CodeContextRequest {
+                projects: projects.clone(),
+                focus: if focus.trim().is_empty() {
+                    None
+                } else {
+                    Some(focus.clone())
+                },
+                max_chars: Some(18_000),
+                include_files: Some(false),
+                ..Default::default()
+            };
+            match super::code_context::build_code_context_bundle_core(state, &request) {
+                Ok(value) => value
+                    .get("context")
+                    .and_then(|v| v.as_str())
+                    .map(|v| v.to_string())
+                    .or_else(|| Some(value.to_string())),
+                Err(e) => Some(format!("CODE_CONTEXT failed: {}", e)),
+            }
         }
         OpsPaCommand::GraphVerify { project } => {
             let graph = super::graph_scan::build_project_graph(state, project).ok()?;
@@ -829,4 +870,12 @@ fn graph_query_impact(state: &AppState, project: &str, file: &str) -> Option<Str
 
 fn cap(m: Option<regex::Match>) -> String {
     m.map(|m| m.as_str().trim().to_string()).unwrap_or_default()
+}
+
+fn split_projects(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .collect()
 }
