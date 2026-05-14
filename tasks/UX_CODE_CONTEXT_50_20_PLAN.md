@@ -161,6 +161,7 @@
 13. [x] Waiting/blocker item в execution map получил отдельную readable detail panel с действиями approve/reject/retry/status.
 14. [x] Notification center получил фильтры severity/source/project и route/delegation/run context chips.
 15. [x] Добавлен gate `check-notification-center-ui.mjs`.
+16. [x] Execution map lane rail теперь явно показывает owner role: orchestrator / project-agent / reviewer / user / agent.
 
 ### Осталось: высокий уровень
 
@@ -190,7 +191,7 @@
 10. [ ] Убрать остаточный PA/status noise из chat transcript там, где он ещё попадает.
 11. [x] Добавить фильтры notifications по source/severity/project.
 12. [x] Связать notification item с project/route/delegation, если есть id.
-13. [ ] В execution map показывать lane owner: orchestrator / project-agent / reviewer / user.
+13. [x] В execution map показывать lane owner: orchestrator / project-agent / reviewer / user.
 14. [ ] В route header показывать plan/task link, если activeScope его знает.
 15. [ ] В project rail показать active plan/task badge.
 16. [ ] В settings вывести effective provider для orchestrator/delegation/reviewer одной таблицей.

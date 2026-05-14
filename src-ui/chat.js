@@ -1954,6 +1954,28 @@ function executionKindLabel(kind) {
   return labels[kind] || kind || "event";
 }
 
+function executionLaneOwnerLabel(lane) {
+  const source = [
+    lane?.owner,
+    lane?.role,
+    lane?.kind,
+    lane?.id,
+    lane?.label,
+    lane?.provider,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (source.includes("review")) return "reviewer";
+  if (source.includes("user")) return "user";
+  if (source.includes("orchestrator")) return "orchestrator";
+  if (source.includes("project") || source.includes("delegation")) {
+    return "project-agent";
+  }
+  if (source.includes("codex") || source.includes("claude")) return "agent";
+  return "agent";
+}
+
 function isProviderStateEvent(event) {
   const kind = String(event?.kind || "").toLowerCase();
   if (
@@ -2190,7 +2212,7 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const copyMap = () => {
     const lines = events.map((event) => {
       const lane = lanes.find((item) => item.id === event.lane_id);
-      return `${lane?.label || event.lane_id}: ${executionStatusLabel(event.status)} ${executionKindLabel(event.kind)} - ${event.title || ""}`;
+      return `${lane?.label || event.lane_id} [${executionLaneOwnerLabel(lane)}]: ${executionStatusLabel(event.status)} ${executionKindLabel(event.kind)} - ${event.title || ""}`;
     });
     navigator.clipboard
       ?.writeText(lines.join("\n"))
@@ -2435,7 +2457,10 @@ ${[
             style=${`height:${rowH}px`}
           >
             <b>${lane.label}</b>
-            <span>${lane.provider || lane.kind}</span>
+            <span>${executionLaneOwnerLabel(lane)}</span>
+            <small class="exec-map-lane-owner">
+              ${lane.provider || lane.kind || "agent"}
+            </small>
             <em>${executionStatusLabel(lane.status)}</em>
             ${stateLine ? html`<small>${stateLine}</small>` : null}
           </div>`;

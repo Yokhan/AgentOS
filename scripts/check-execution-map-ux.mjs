@@ -36,6 +36,14 @@ const checks = [
       css.includes(".exec-map-waiting-detail-grid"),
   },
   {
+    name: "execution map lanes expose owner role",
+    ok:
+      chat.includes("function executionLaneOwnerLabel") &&
+      chat.includes("executionLaneOwnerLabel(lane)") &&
+      chat.includes("exec-map-lane-owner") &&
+      css.includes(".exec-map-lane-owner"),
+  },
+  {
     name: "retry/status draft refreshes execution map",
     ok:
       chat.includes("const draftMapCommand") &&

@@ -1256,6 +1256,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.exec-map-lane-owner {
+    color: var(--accent) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
 .exec-map-lane-label.live em {
     color: var(--cyan);
 }
