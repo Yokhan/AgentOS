@@ -5,7 +5,9 @@ import { pathToFileURL } from "node:url";
 
 const root = process.cwd();
 const srcDir = path.join(root, "src-ui");
-const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentos-code-context-smoke-"));
+const tempDir = fs.mkdtempSync(
+  path.join(os.tmpdir(), "agentos-code-context-smoke-"),
+);
 fs.writeFileSync(path.join(tempDir, "package.json"), '{"type":"module"}');
 
 const files = [
@@ -29,7 +31,10 @@ for (const file of files) {
   const sourcePath = path.join(srcDir, file);
   const targetPath = path.join(tempDir, file);
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  fs.writeFileSync(targetPath, rewriteImports(fs.readFileSync(sourcePath, "utf8")));
+  fs.writeFileSync(
+    targetPath,
+    rewriteImports(fs.readFileSync(sourcePath, "utf8")),
+  );
 }
 
 let capturedChatStreamBody = null;
@@ -43,6 +48,14 @@ const response = (data) => ({
 
 const fetchStub = async (url, opts = {}) => {
   const pathName = String(url || "");
+  if (pathName.startsWith("http://localhost:")) {
+    return {
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+      text: async () => "",
+    };
+  }
   if (pathName.includes("/api/chat-stream")) {
     capturedChatStreamBody = JSON.parse(String(opts.body || "{}"));
     return {
@@ -145,7 +158,9 @@ if (contextAttachments.value.length !== 0) {
   throw new Error("context attachments were not cleared after send");
 }
 if (codeContextError.value || codeContextPreview.value) {
-  throw new Error("code context preview/error state was not cleared after send");
+  throw new Error(
+    "code context preview/error state was not cleared after send",
+  );
 }
 if (isStreaming.value) {
   throw new Error("sendMessage left chat in streaming state");

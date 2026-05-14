@@ -2,6 +2,7 @@ import fs from "node:fs";
 
 const chat = fs.readFileSync("src-ui/chat.js", "utf8");
 const css = fs.readFileSync("src-ui/styles/chat.css", "utf8");
+const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
 
 const checks = [
   {
@@ -69,6 +70,12 @@ const checks = [
       fs
         .readFileSync("src-ui/api.js", "utf8")
         .includes("codeContextPreview.value = null"),
+  },
+  {
+    name: "execution map heartbeat behavior smoke is registered",
+    ok:
+      fs.existsSync("scripts/smoke-execution-map-noise.mjs") &&
+      pkg.scripts?.["check:ui"]?.includes("smoke-execution-map-noise.mjs"),
   },
 ];
 

@@ -1696,6 +1696,48 @@
     background: transparent;
     border-color: color-mix(in srgb, var(--border) 70%, transparent);
 }
+.route-context-chips {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+}
+.route-context-chip {
+    border: 1px solid color-mix(in srgb, var(--cyan) 32%, var(--border));
+    background: color-mix(in srgb, var(--cyan) 7%, var(--bg));
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 3px 7px;
+    min-height: 24px;
+    max-width: 100%;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+}
+.route-context-chip em {
+    color: var(--cyan);
+    font-style: normal;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+.route-context-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.route-context-chip.kind-task {
+    border-color: color-mix(in srgb, var(--yellow) 45%, var(--border));
+}
+.route-context-chip.kind-task em {
+    color: var(--yellow);
+}
+.route-context-chip:hover {
+    color: var(--text);
+    border-color: var(--cyan);
+}
 .route-warnings span {
     color: var(--yellow);
     border-color: color-mix(in srgb, var(--yellow) 45%, var(--border));

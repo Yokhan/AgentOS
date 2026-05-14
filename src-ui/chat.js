@@ -58,6 +58,7 @@ import {
   showToast,
   chatCollabMode,
   activeRoomTab,
+  activeWorkspaceTab,
   dualSessionData,
   activeDualSession,
   dualBusy,
@@ -218,6 +219,124 @@ function scopeNextTitle(scope, leadLabel) {
 
 function shortModelLabel(model) {
   return String(model || "auto").replace(/^gpt-/, "gpt ");
+}
+
+function compactRouteText(value, limit = 72) {
+  const text = String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "";
+  return text.length > limit ? `${text.slice(0, limit - 3)}...` : text;
+}
+
+function addRouteContextChip(chips, kind, label, value, meta = {}) {
+  const cleanValue = compactRouteText(value, meta.limit || 72);
+  if (!cleanValue) return;
+  const key = [kind, meta.id || cleanValue].join(":");
+  if (chips.some((chip) => chip.key === key)) return;
+  chips.push({
+    key,
+    kind,
+    label,
+    value: cleanValue,
+    title: meta.title || String(value || cleanValue),
+    id: meta.id || "",
+    project: meta.project || "",
+    target: meta.target || "",
+  });
+}
+
+function buildRouteContextChips(scope, map, planState) {
+  const chips = [];
+  const plans = Array.isArray(map?.plans) ? map.plans : [];
+  const currentPlan =
+    plans.find((plan) => plan?.id && plan.id === scope?.plan_id) || plans[0];
+  const nextStep = currentPlan?.next_step || null;
+  const routes = Array.isArray(map?.project_agent_routes)
+    ? map.project_agent_routes
+    : [];
+  const activeRoute =
+    routes.find((route) => route?.next_work_item) ||
+    routes.find((route) => route?.progress?.active_work_item_id) ||
+    null;
+  const nextWorkItem = activeRoute?.next_work_item || null;
+  const project =
+    scope?.project ||
+    nextStep?.project ||
+    nextWorkItem?.project ||
+    map?.project ||
+    planState?.project ||
+    "";
+
+  if (project) {
+    addRouteContextChip(chips, "project", "project", project, {
+      project,
+      target: "project",
+      limit: 36,
+    });
+  }
+
+  if (scope?.kind === "plan") {
+    addRouteContextChip(chips, "plan", "plan", scope.title, {
+      id: scope.plan_id,
+      project,
+      target: "plans",
+    });
+  } else if (currentPlan?.title) {
+    addRouteContextChip(chips, "plan", "plan", currentPlan.title, {
+      id: currentPlan.id,
+      project,
+      target: "plans",
+    });
+  }
+
+  if (scope?.kind === "work_item") {
+    addRouteContextChip(chips, "task", "task", scope.title, {
+      id: scope.work_item_id,
+      project,
+      target: "plans",
+    });
+  } else if (nextWorkItem?.title || nextWorkItem?.task) {
+    addRouteContextChip(
+      chips,
+      "task",
+      "task",
+      nextWorkItem.title || nextWorkItem.task,
+      {
+        id: nextWorkItem.id,
+        project,
+        target: "plans",
+      },
+    );
+  } else if (nextStep?.task) {
+    addRouteContextChip(chips, "task", "next", nextStep.task, {
+      id: nextStep.work_item_id || nextStep.id,
+      project: nextStep.project || project,
+      target: "plans",
+    });
+  }
+
+  if (map?.big_plan?.stage_index && map?.big_plan?.stage_total) {
+    addRouteContextChip(
+      chips,
+      "stage",
+      "stage",
+      `${map.big_plan.stage_index}/${map.big_plan.stage_total} ${map.big_plan.label || ""}`,
+      { target: "plans", limit: 48 },
+    );
+  }
+
+  return chips.slice(0, 5);
+}
+
+function openRouteContextChip(chip) {
+  if (!chip) return;
+  if (chip.project) currentProject.value = chip.project;
+  if (chip.target === "plans") {
+    activeWorkspaceTab.value = "plans";
+    showPlans.value = true;
+    loadPlansData().catch((e) => console.warn("plans refresh:", e));
+  }
 }
 
 function codexModelSourceLabel(codexStatus) {
@@ -479,6 +598,21 @@ function RouteCard({
           </span>`
         : null}
     </div>
+    ${route.contextChips?.length
+      ? html`<div class="route-context-chips">
+          ${route.contextChips.map(
+            (chip) =>
+              html`<button
+                type="button"
+                class=${`route-context-chip kind-${chip.kind}`}
+                title=${chip.title}
+                onClick=${() => openRouteContextChip(chip)}
+              >
+                <em>${chip.label}</em><span>${chip.value}</span>
+              </button>`,
+          )}
+        </div>`
+      : null}
     ${warnings.length
       ? html`<div class="route-warnings">
           ${warnings.map((warning) => html`<span>${warning}</span>`)}
@@ -3552,6 +3686,11 @@ function ChatSidebar() {
     historyTotal: chatPageInfo.value.total || sideMessages.value.length,
     delegations: routeDelegations,
     run: routeRun,
+    contextChips: buildRouteContextChips(
+      scope,
+      orchestrationMap.value,
+      projectPlan.value,
+    ),
     warnings: routeWarnings,
     pendingNote: routeChangeNote,
     canLeadExecute: !!activeOrchestrator?.write_enabled,
@@ -5740,6 +5879,10 @@ export {
   ProgressBar,
   ExecutionMapCard,
   ExecutionTimelineCard,
+  buildRouteContextChips,
+  executionLaneOwnerLabel,
+  isProviderStateEvent,
+  isRenderableMapEvent,
   ChatMsg,
   StreamBubble,
   DelegBtn,

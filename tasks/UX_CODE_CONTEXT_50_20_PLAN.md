@@ -162,6 +162,8 @@
 14. [x] Notification center получил фильтры severity/source/project и route/delegation/run context chips.
 15. [x] Добавлен gate `check-notification-center-ui.mjs`.
 16. [x] Execution map lane rail теперь явно показывает owner role: orchestrator / project-agent / reviewer / user / agent.
+17. [x] Route header получил project/plan/task/stage chips из activeScope и orchestrationMap; клик по plan/task открывает Plans.
+18. [x] Добавлен behavior smoke `smoke-execution-map-noise.mjs`: heartbeat/provider state/root/non-semantic events не становятся узлами карты.
 
 ### Осталось: высокий уровень
 
@@ -185,14 +187,14 @@
 4. [x] Добавить `[CODE_CONTEXT:ProjectA,ProjectB]` UI-flow без ручного набора.
 5. [x] Добавить behavior smoke: attach code context -> send -> envelope appears.
 6. [x] Добавить behavior smoke: reload keeps selected project and route.
-7. [ ] Добавить behavior smoke: execution map does not render heartbeat as nodes.
+7. [x] Добавить behavior smoke: execution map does not render heartbeat as nodes.
 8. [x] Добавить details panel для выбранного waiting item вместо только inline details.
 9. [x] После retry/status/archive обновлять execution map так же, как approve/reject.
 10. [ ] Убрать остаточный PA/status noise из chat transcript там, где он ещё попадает.
 11. [x] Добавить фильтры notifications по source/severity/project.
 12. [x] Связать notification item с project/route/delegation, если есть id.
 13. [x] В execution map показывать lane owner: orchestrator / project-agent / reviewer / user.
-14. [ ] В route header показывать plan/task link, если activeScope его знает.
+14. [x] В route header показывать plan/task link, если activeScope его знает.
 15. [ ] В project rail показать active plan/task badge.
 16. [ ] В settings вывести effective provider для orchestrator/delegation/reviewer одной таблицей.
 17. [ ] В settings вывести GPT account label/snapshot, если backend смог определить.
