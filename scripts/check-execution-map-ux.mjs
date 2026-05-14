@@ -34,6 +34,17 @@ const checks = [
       chat.includes("DELEGATE_STATUS"),
   },
   {
+    name: "heartbeat/provider state stays out of map event nodes",
+    ok:
+      chat.includes("function isProviderStateEvent") &&
+      chat.includes("provider_heartbeat") &&
+      chat.includes("event?.semantic === false") &&
+      chat.includes(
+        "const visibleRawEvents = rawEvents.filter(isRenderableMapEvent)",
+      ) &&
+      chat.includes("смысловых событий нет"),
+  },
+  {
     name: "code context state clears after send",
     ok:
       chat.includes("codeContextPreview.value = null") &&

@@ -155,6 +155,9 @@
 7. [x] Code Context получил кросс-проектный scope через comma-separated project input.
 8. [x] Retry/status/archive draft actions теперь тоже обновляют execution map.
 9. [x] `check-code-context-ui.mjs` проверяет budget/scope wiring.
+10. [x] Добавлен `smoke-code-context-send.mjs`: проверяет, что attached Code Context реально уходит в message payload и очищается после send.
+11. [x] `check-code-context-ui.mjs` теперь требует очистку preview/error и `[USER_TASK]` envelope.
+12. [x] `check-execution-map-ux.mjs` теперь фиксирует контракт: heartbeat/provider state скрывается из event nodes.
 
 ### Осталось: высокий уровень
 
@@ -176,8 +179,8 @@
 2. [x] Перед attach показывать ожидаемый budget и лимиты.
 3. [x] Добавить multi-project context input из chat route panel.
 4. [x] Добавить `[CODE_CONTEXT:ProjectA,ProjectB]` UI-flow без ручного набора.
-5. [ ] Добавить behavior smoke: attach code context -> send -> envelope appears.
-6. [ ] Добавить behavior smoke: reload keeps selected project and route.
+5. [x] Добавить behavior smoke: attach code context -> send -> envelope appears.
+6. [x] Добавить behavior smoke: reload keeps selected project and route.
 7. [ ] Добавить behavior smoke: execution map does not render heartbeat as nodes.
 8. [ ] Добавить details panel для выбранного waiting item вместо только inline details.
 9. [x] После retry/status/archive обновлять execution map так же, как approve/reject.

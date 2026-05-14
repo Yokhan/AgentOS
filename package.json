@@ -10,7 +10,7 @@
     "build": "npx @tauri-apps/cli build",
     "connect:project": "powershell -ExecutionPolicy Bypass -File scripts/connect-project.ps1",
     "clean:cache": "powershell -ExecutionPolicy Bypass -File scripts/clean-build-cache.ps1",
-    "check:ui": "node --check src-ui/app.js && node --check src-ui/api.js && node --check src-ui/chat.js && node --check src-ui/views.js && node --check src-ui/pages.js && node --check src-ui/route-state.js && node --check src-ui/run-state.js && node --check src-ui/store.js && node scripts/check-store-imports.mjs && node scripts/check-mojibake.mjs && node scripts/check-click-wiring.mjs && node scripts/check-code-context-ui.mjs && node scripts/check-execution-map-ux.mjs && node scripts/check-run-state.mjs && node scripts/check-stream-performance.mjs && node scripts/check-ui-overflow.mjs && node scripts/smoke-chat-render.mjs",
+    "check:ui": "node --check src-ui/app.js && node --check src-ui/api.js && node --check src-ui/chat.js && node --check src-ui/views.js && node --check src-ui/pages.js && node --check src-ui/route-state.js && node --check src-ui/run-state.js && node --check src-ui/store.js && node scripts/check-store-imports.mjs && node scripts/check-mojibake.mjs && node scripts/check-click-wiring.mjs && node scripts/check-code-context-ui.mjs && node scripts/check-execution-map-ux.mjs && node scripts/check-run-state.mjs && node scripts/check-stream-performance.mjs && node scripts/check-ui-overflow.mjs && node scripts/smoke-chat-render.mjs && node scripts/smoke-code-context-send.mjs",
     "build:updater": "powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1",
     "test": "cargo test --manifest-path src-tauri/Cargo.toml"
   },

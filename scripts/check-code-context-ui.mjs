@@ -27,7 +27,10 @@ const checks = [
     ok:
       api.includes("--- ATTACHED CONTEXT") &&
       api.includes("--- END ATTACHED CONTEXT ---") &&
-      api.includes("contextAttachments.value = []"),
+      api.includes("[USER_TASK]") &&
+      api.includes("contextAttachments.value = []") &&
+      api.includes('codeContextError.value = ""') &&
+      api.includes("codeContextPreview.value = null"),
   },
   {
     name: "code context UI has visible styling",
