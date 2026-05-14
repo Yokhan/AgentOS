@@ -1631,6 +1631,132 @@ body.chat-resizing {
 .panel .error {
     color: var(--accent);
 }
+.settings-route-panel {
+    margin-bottom: var(--sp-xl);
+}
+.settings-panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-m);
+    margin-bottom: var(--sp-s);
+}
+.settings-panel-head h3 {
+    margin-bottom: 4px;
+}
+.settings-panel-head p {
+    margin: 0;
+    color: var(--t2);
+    font-size: var(--fs-s);
+    line-height: 1.4;
+    max-width: 780px;
+}
+.settings-route-policy {
+    border: 1px solid color-mix(in srgb, var(--cyan) 32%, var(--border));
+    background: color-mix(in srgb, var(--cyan) 7%, var(--bg));
+    color: var(--t2);
+    padding: var(--sp-s);
+    font-size: var(--fs-s);
+    margin-bottom: var(--sp-s);
+}
+.settings-provider-table {
+    display: grid;
+    grid-template-columns:
+        minmax(130px, 1.1fr) minmax(95px, 0.75fr) minmax(95px, 0.75fr)
+        minmax(130px, 1fr) minmax(90px, 0.65fr);
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 64%, transparent);
+    overflow-x: auto;
+}
+.settings-provider-head,
+.settings-provider-cell {
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding: 7px 9px;
+    min-width: 0;
+}
+.settings-provider-head {
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    background: color-mix(in srgb, var(--sf) 80%, transparent);
+}
+.settings-provider-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    color: var(--t2);
+    font-size: var(--fs-s);
+}
+.settings-provider-cell strong {
+    color: var(--text);
+}
+.settings-provider-cell span {
+    color: var(--t3);
+}
+.settings-provider-cell code,
+.settings-provider-note code {
+    color: var(--cyan);
+    background: color-mix(in srgb, var(--sf2) 80%, transparent);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+}
+.settings-provider-health {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+.settings-provider-note {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+    margin-top: var(--sp-s);
+    color: var(--t2);
+    font-size: var(--fs-s);
+}
+.codex-account-card,
+.settings-diagnostics {
+    display: grid;
+    gap: var(--sp-xs);
+}
+.codex-account-card {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border: 1px solid color-mix(in srgb, var(--green) 26%, var(--border));
+    background: color-mix(in srgb, var(--green) 6%, var(--bg));
+    padding: var(--sp-s);
+}
+.codex-account-card div,
+.settings-diagnostics div {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+.codex-account-card span,
+.settings-diagnostics span {
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.codex-account-card strong,
+.settings-diagnostics strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.settings-diagnostics div {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    padding: var(--sp-s);
+}
+.settings-diagnostics small {
+    color: var(--t2);
+    line-height: 1.35;
+}
 .detail .chat-area {
     flex: 1;
     display: flex;

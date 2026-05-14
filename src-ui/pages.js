@@ -162,9 +162,56 @@ function SettingsPage() {
     pd?.config?.delegation_provider ||
     orchestratorProvider;
   const effectiveOrchestrator = roleSettings?.orchestrator || {};
+  const effectiveReviewer = roleSettings?.technical_reviewer || {};
   const effectiveDelegation = roleSettings?.delegation || {};
   const effectiveRouteLabel = (role) =>
     `${role?.provider || "auto"}:${role?.model || "auto"}${role?.effort ? "/" + role.effort : ""}`;
+  const routeModelEffortLabel = (role) =>
+    `${role?.model || "auto"}${role?.effort ? " / " + role.effort : ""}`;
+  const routeStatusLabel = (provider) => {
+    if (provider === "claude") {
+      return claudeEnabled
+        ? claudeAvailable
+          ? "ready"
+          : "missing"
+        : "disabled";
+    }
+    if (provider === "codex") return codexStateLabel.toLowerCase();
+    return "auto";
+  };
+  const routeStatusColor = (provider) => {
+    if (provider === "claude") return claudeStateColor;
+    if (provider === "codex") return codexStateColor;
+    return "var(--t3)";
+  };
+  const effectiveRoutes = [
+    {
+      role: "orchestrator",
+      purpose: "main chat, plans, strategy",
+      configured: orchestratorProvider,
+      effective: effectiveOrchestrator,
+    },
+    {
+      role: "reviewer",
+      purpose: "Duo technical review",
+      configured: reviewerProvider,
+      effective: effectiveReviewer,
+    },
+    {
+      role: "delegation",
+      purpose: "project-agent execution",
+      configured: delegationProvider,
+      effective: effectiveDelegation,
+    },
+  ];
+  const codexModelsCount =
+    Number(codexStatus?.models_count || 0) ||
+    (Array.isArray(codexStatus?.models) ? codexStatus.models.length : 0) ||
+    codexModelOptions.length;
+  const codexModelsSource = codexStatus?.models_source || "fallback";
+  const providerPolicyText = claudeEnabled
+    ? "Claude can be selected, but Codex remains available for every role."
+    : "Claude is disabled globally. Any Claude route resolves to Codex before execution.";
   return html`<div class="content">
     <div
       class="back"
@@ -276,6 +323,64 @@ function SettingsPage() {
       </div>
     </div>
 
+    <div class="panel settings-route-panel">
+      <div class="settings-panel-head">
+        <div>
+          <h3>Effective Provider Routes</h3>
+          <p>
+            Shows what will actually run after fallback rules. This is the
+            source of truth for solo chat, Duo roles and project delegations.
+          </p>
+        </div>
+        <button class="action-btn" onClick=${() => loadPerms()}>refresh</button>
+      </div>
+      <div class="settings-route-policy">${providerPolicyText}</div>
+      <div class="settings-provider-table">
+        <div class="settings-provider-head">role</div>
+        <div class="settings-provider-head">configured</div>
+        <div class="settings-provider-head">effective</div>
+        <div class="settings-provider-head">model / effort</div>
+        <div class="settings-provider-head">health</div>
+        ${effectiveRoutes.map((route) => {
+          const effective = route.effective || {};
+          const provider = effective.provider || route.configured || "auto";
+          return html`
+            <div class="settings-provider-cell">
+              <strong>${route.role}</strong>
+              <span>${route.purpose}</span>
+            </div>
+            <div class="settings-provider-cell">
+              <code>${route.configured || "auto"}</code>
+            </div>
+            <div class="settings-provider-cell">
+              <code>${provider}</code>
+            </div>
+            <div class="settings-provider-cell">
+              <code>${routeModelEffortLabel(effective)}</code>
+            </div>
+            <div
+              class="settings-provider-cell settings-provider-health"
+              style="color:${routeStatusColor(provider)}"
+            >
+              ${routeStatusLabel(provider)}
+            </div>
+          `;
+        })}
+      </div>
+      <div class="settings-provider-note">
+        Codex account:
+        <strong
+          title=${codexAccount?.last_refresh || codexAccount?.source || ""}
+        >
+          ${codexAccountLabel}
+        </strong>
+        · transport:
+        <code>${codexEffectiveTransport}</code>
+        · models:
+        <code>${codexModelsCount} from ${codexModelsSource}</code>
+      </div>
+    </div>
+
     <div
       style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-l);margin-bottom:var(--sp-xl)"
     >
@@ -314,26 +419,6 @@ function SettingsPage() {
             >
               ${claudeEnabled ? "disable" : "enable"}
             </button>
-          </div>
-          <div
-            style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-xs);font-size:var(--fs-s)"
-          >
-            <div
-              style="border:1px solid var(--border);padding:var(--sp-s);background:var(--sf)"
-            >
-              <div style="color:var(--t3);font-family:var(--font-mono)">
-                ORCHESTRATOR
-              </div>
-              <strong>${effectiveRouteLabel(effectiveOrchestrator)}</strong>
-            </div>
-            <div
-              style="border:1px solid var(--border);padding:var(--sp-s);background:var(--sf)"
-            >
-              <div style="color:var(--t3);font-family:var(--font-mono)">
-                DELEGATION
-              </div>
-              <strong>${effectiveRouteLabel(effectiveDelegation)}</strong>
-            </div>
           </div>
           <div>
             <label
@@ -545,6 +630,26 @@ function SettingsPage() {
       <div class="panel">
         <h3>Codex</h3>
         <div style="display:flex;flex-direction:column;gap:var(--sp-s)">
+          <div class="codex-account-card">
+            <div>
+              <span>active GPT account</span>
+              <strong title=${codexAccount?.source || ""}>
+                ${codexAccountLabel}
+              </strong>
+            </div>
+            <div>
+              <span>auth</span>
+              <strong>${codexAccount?.auth_mode || "unknown"}</strong>
+            </div>
+            <div>
+              <span>transport</span>
+              <strong>${codexEffectiveTransport}</strong>
+            </div>
+            <div>
+              <span>models</span>
+              <strong>${codexModelsCount} / ${codexModelsSource}</strong>
+            </div>
+          </div>
           <div>
             <label
               style="display:block;font-family:var(--font-mono);font-size:var(--fs-s);color:var(--t3);margin-bottom:var(--sp-xs)"
@@ -644,85 +749,26 @@ function SettingsPage() {
       style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-l);margin-bottom:var(--sp-xl)"
     >
       <div class="panel">
-        <h3>Advanced Room Roles</h3>
-        <div style="display:flex;flex-direction:column;gap:var(--sp-s)">
+        <h3>Provider Diagnostics</h3>
+        <div class="settings-diagnostics">
           <div>
-            <label
-              style="display:block;font-family:var(--font-mono);font-size:var(--fs-s);color:var(--t3);margin-bottom:var(--sp-xs)"
-              >orchestrator provider</label
-            >
-            <select
-              style="width:100%;background:var(--sf);border:1px solid var(--border);color:var(--text);padding:var(--sp-s);font-family:var(--font-mono);font-size:var(--fs-s)"
-              value=${ps?.roles?.orchestrator_provider ||
-              pd?.config?.orchestrator_provider ||
-              (claudeEnabled ? "claude" : "codex")}
-              onChange=${(e) => {
-                __invoke("set_config", {
-                  key: "orchestrator_provider",
-                  value: e.target.value,
-                }).then(() => {
-                  showToast("Saved", "success");
-                  loadPerms();
-                });
-              }}
-            >
-              ${providerOptions.map(
-                ([value, label]) =>
-                  html`<option value=${value}>${label}</option>`,
-              )}
-            </select>
+            <span>claude</span>
+            <strong style="color:${claudeStateColor}">
+              ${claudeStateLabel}
+            </strong>
+            <small>${claudeStatus?.probe || "no probe data"}</small>
           </div>
           <div>
-            <label
-              style="display:block;font-family:var(--font-mono);font-size:var(--fs-s);color:var(--t3);margin-bottom:var(--sp-xs)"
-              >technical reviewer provider</label
-            >
-            <select
-              style="width:100%;background:var(--sf);border:1px solid var(--border);color:var(--text);padding:var(--sp-s);font-family:var(--font-mono);font-size:var(--fs-s)"
-              value=${ps?.roles?.technical_reviewer_provider ||
-              pd?.config?.technical_reviewer_provider ||
-              "codex"}
-              onChange=${(e) => {
-                __invoke("set_config", {
-                  key: "technical_reviewer_provider",
-                  value: e.target.value,
-                }).then(() => {
-                  showToast("Saved", "success");
-                  loadPerms();
-                });
-              }}
-            >
-              ${providerOptions.map(
-                ([value, label]) =>
-                  html`<option value=${value}>${label}</option>`,
-              )}
-            </select>
+            <span>codex</span>
+            <strong style="color:${codexStateColor}">
+              ${codexStateLabel}
+            </strong>
+            <small>${codexHelperText}</small>
           </div>
-          <div
-            style="font-size:var(--fs-s);color:var(--t2);display:flex;flex-direction:column;gap:var(--sp-xs)"
-          >
-            <div>
-              claude:
-              <span style="color:${claudeStateColor}">${claudeStateLabel}</span>
-            </div>
-            <div>
-              codex:
-              <span
-                style="color:${prov?.codex?.ready
-                  ? "var(--green)"
-                  : prov?.codex?.available
-                    ? "var(--yellow)"
-                    : "var(--accent)"}"
-                >${prov?.codex?.ready
-                  ? "ready"
-                  : prov?.codex?.available
-                    ? prov?.codex?.transport === "acp" &&
-                      prov?.codex?.auth_required
-                      ? "sign in required"
-                      : "needs setup"
-                    : "missing"}</span
-              >
-            </div>
+          <div>
+            <span>routing rule</span>
+            <strong>${claudeEnabled ? "mixed providers" : "codex-only"}</strong>
+            <small>${providerPolicyText}</small>
           </div>
         </div>
       </div>

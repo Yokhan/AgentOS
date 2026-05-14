@@ -1566,6 +1566,10 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
     let technical = technical_reviewer_provider(state);
     let delegation = delegation_provider(state);
     let (_, orchestrator_model, orchestrator_effort) = resolve_orchestrator_settings(state);
+    let technical_model =
+        resolve_provider_model(state, technical, None, Some("technical_reviewer_model"));
+    let technical_effort =
+        resolve_provider_effort(state, technical, None, Some("technical_reviewer_effort"));
     let delegation_model = resolve_delegation_model(state, delegation);
     let delegation_effort = resolve_delegation_effort(state, delegation);
 
@@ -1668,6 +1672,11 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
                 "provider": orchestrator.as_str(),
                 "model": orchestrator_model.unwrap_or_default(),
                 "effort": orchestrator_effort.unwrap_or_default(),
+            },
+            "technical_reviewer": {
+                "provider": technical.as_str(),
+                "model": technical_model.unwrap_or_default(),
+                "effort": technical_effort.unwrap_or_default(),
             },
             "delegation": {
                 "provider": delegation.as_str(),
@@ -1994,6 +2003,14 @@ user
         assert_eq!(
             status["roles"]["orchestrator_provider"].as_str(),
             Some("codex")
+        );
+        assert_eq!(
+            status["role_settings"]["technical_reviewer"]["provider"].as_str(),
+            Some("codex")
+        );
+        assert_eq!(
+            status["role_settings"]["technical_reviewer"]["model"].as_str(),
+            Some("gpt-5.5")
         );
         assert_eq!(
             status["providers"]["claude"]["enabled"].as_bool(),
