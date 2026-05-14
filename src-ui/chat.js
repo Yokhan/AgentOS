@@ -2025,6 +2025,7 @@ function groupWaitingItems(waiting) {
 
 function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const [selectedId, setSelectedId] = useState("");
+  const [selectedWaitingId, setSelectedWaitingId] = useState("");
   const [density, setDensity] = useState(() => {
     try {
       return localStorage.getItem("agentos.execMapDensity") === "dense"
@@ -2066,6 +2067,12 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   const edges = map.edges || [];
   const waiting = map.waiting_for_user || [];
   const waitingGroups = groupWaitingItems(waiting);
+  const waitingItemsById = new Map(
+    waiting.filter((item) => item?.id).map((item) => [item.id, item]),
+  );
+  const selectedWaiting = selectedWaitingId
+    ? waitingItemsById.get(selectedWaitingId)
+    : null;
   const visibleWaitingGroups = waitingGroups.slice(
     0,
     EXEC_WAITING_VISIBLE_LIMIT,
@@ -2099,6 +2106,28 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
   );
   const laneIndex = new Map(lanes.map((lane, index) => [lane.id, index]));
   const selected = selectedId ? eventById.get(selectedId) : null;
+  const canApproveWaiting = (item) => {
+    const action = String(item?.action || "");
+    const status = String(item?.status || "");
+    return (
+      action === "approve" ||
+      status === "pending" ||
+      status === "needs_permission"
+    );
+  };
+  const canRetryWaiting = (item) => {
+    const action = String(item?.action || "");
+    const status = String(item?.status || "");
+    return (
+      action.includes("retry") ||
+      ["failed", "rejected", "cancelled"].includes(status)
+    );
+  };
+  const openWaitingDetails = (item) => {
+    if (!item?.id) return;
+    setSelectedWaitingId(item.id);
+    setSelectedId("");
+  };
   const maxEventIndex = Math.max(
     1,
     ...events.map((event) => finiteNumber(event._eventIndex, 0)),
@@ -2262,16 +2291,12 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
             ? html`<div class="exec-map-waiting-grid">
                 ${visibleWaitingGroups.map((group) => {
                   const item = group.items[0] || group;
-                  const action = String(item.action || "");
-                  const status = String(item.status || "");
-                  const canApprove =
-                    action === "approve" ||
-                    status === "pending" ||
-                    status === "needs_permission";
-                  const canRetry =
-                    action.includes("retry") ||
-                    ["failed", "rejected", "cancelled"].includes(status);
-                  return html`<div class="exec-map-waiting-item">
+                  const canApprove = canApproveWaiting(item);
+                  const canRetry = canRetryWaiting(item);
+                  const isSelected = item.id && item.id === selectedWaitingId;
+                  return html`<div
+                    class=${`exec-map-waiting-item ${isSelected ? "selected" : ""}`}
+                  >
                     <div class="exec-map-waiting-item-top">
                       <b>${group.project}</b>
                       <span>${group.status}</span>
@@ -2281,6 +2306,9 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
                     </div>
                     <p>${group.task || group.status}</p>
                     <div class="exec-map-waiting-actions">
+                      <button onClick=${() => openWaitingDetails(item)}>
+                        details
+                      </button>
                       ${canApprove
                         ? html`<button
                               onClick=${() => refreshAfter(approveDel(item.id))}
@@ -2335,13 +2363,11 @@ ${[
             : html`<div class="exec-map-waiting-strip">
                 ${visibleWaitingGroups.map((group) => {
                   const item = group.items[0] || group;
-                  const action = String(item.action || "");
-                  const status = String(item.status || "");
-                  const canApprove =
-                    action === "approve" ||
-                    status === "pending" ||
-                    status === "needs_permission";
-                  return html`<div class="exec-map-waiting-chip">
+                  const canApprove = canApproveWaiting(item);
+                  const isSelected = item.id && item.id === selectedWaitingId;
+                  return html`<div
+                    class=${`exec-map-waiting-chip ${isSelected ? "selected" : ""}`}
+                  >
                     <b>${group.project}</b>
                     <span>${group.status}</span>
                     ${group.items.length > 1
@@ -2367,6 +2393,9 @@ ${[
                         >
                           status
                         </button>`}
+                    <button onClick=${() => openWaitingDetails(item)}>
+                      details
+                    </button>
                   </div>`;
                 })}
               </div>`}
@@ -2474,7 +2503,10 @@ ${[
             return html`<button
               class=${`exec-event ${cls} ${selectedId === event.id ? "selected" : ""}`}
               style=${`left:${p.x}px;top:${p.y}px;--event-w:${eventW}px;--event-h:${eventH}px`}
-              onClick=${() => setSelectedId(event.id)}
+              onClick=${() => {
+                setSelectedId(event.id);
+                setSelectedWaitingId("");
+              }}
               title=${event.detail || event.title || ""}
             >
               <b>${executionKindLabel(event.kind)}</b>
@@ -2494,6 +2526,63 @@ ${[
           </span>
           ${selected.detail ? html`<p>${selected.detail}</p>` : null}
           <em>${selected.project || ""} ${selected.ts || ""}</em>
+        </div>`
+      : null}
+    ${selectedWaiting
+      ? html`<div class="exec-map-selected exec-map-waiting-detail-panel">
+          <div>
+            <b>${selectedWaiting.project || "waiting item"}</b>
+            <span>
+              ${selectedWaiting.status || "waiting"} /
+              ${selectedWaiting.action || "review"}
+            </span>
+          </div>
+          <div class="exec-map-waiting-detail-grid">
+            <code>id: ${selectedWaiting.id || ""}</code>
+            <code>provider: ${selectedWaiting.provider || "agent"}</code>
+            <code>route: ${selectedWaiting.route_id || ""}</code>
+            <code>delegation: ${selectedWaiting.delegation_id || ""}</code>
+          </div>
+          <p>
+            ${selectedWaiting.task ||
+            selectedWaiting.title ||
+            selectedWaiting.detail ||
+            "No details provided."}
+          </p>
+          <div class="exec-map-waiting-detail-actions">
+            ${canApproveWaiting(selectedWaiting)
+              ? html`<button
+                    onClick=${() =>
+                      refreshAfter(approveDel(selectedWaiting.id))}
+                  >
+                    approve
+                  </button>
+                  <button
+                    onClick=${() => refreshAfter(rejectDel(selectedWaiting.id))}
+                  >
+                    reject
+                  </button>`
+              : null}
+            ${canRetryWaiting(selectedWaiting)
+              ? html`<button
+                  onClick=${() =>
+                    draftMapCommand(
+                      `[DELEGATE_RETRY:${selectedWaiting.id}]Retry this delegation through the selected available provider. Report exact blocker/result.[/DELEGATE_RETRY]`,
+                    )}
+                >
+                  retry
+                </button>`
+              : null}
+            <button
+              onClick=${() =>
+                draftMapCommand(
+                  `[DELEGATE_STATUS:${selectedWaiting.id}]\n[DELEGATE_CLEANUP:1]`,
+                )}
+            >
+              status/archive
+            </button>
+            <button onClick=${() => setSelectedWaitingId("")}>close</button>
+          </div>
         </div>`
       : null}
   </div>`;

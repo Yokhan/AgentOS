@@ -26,6 +26,16 @@ const checks = [
       css.includes(".exec-map-waiting-details"),
   },
   {
+    name: "selected waiting item has a readable detail panel",
+    ok:
+      chat.includes("selectedWaitingId") &&
+      chat.includes("openWaitingDetails") &&
+      chat.includes("exec-map-waiting-detail-panel") &&
+      chat.includes("exec-map-waiting-detail-actions") &&
+      css.includes(".exec-map-waiting-detail-panel") &&
+      css.includes(".exec-map-waiting-detail-grid"),
+  },
+  {
     name: "retry/status draft refreshes execution map",
     ok:
       chat.includes("const draftMapCommand") &&

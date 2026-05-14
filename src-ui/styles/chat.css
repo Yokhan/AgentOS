@@ -1082,6 +1082,11 @@
     padding: 7px 8px;
     min-width: 0;
 }
+.exec-map-waiting-item.selected,
+.exec-map-waiting-chip.selected {
+    border-color: var(--blue);
+    box-shadow: inset 3px 0 0 var(--blue);
+}
 .exec-map-waiting-item-top,
 .exec-map-waiting-actions {
     display: flex;
@@ -1438,6 +1443,45 @@
 .exec-map-selected p {
     grid-column: 1 / -1;
     color: var(--t2);
+}
+.exec-map-waiting-detail-panel {
+    border-color: color-mix(in srgb, var(--yellow) 58%, var(--border));
+    background: color-mix(in srgb, var(--yellow) 7%, var(--bg));
+}
+.exec-map-waiting-detail-panel > div:first-child {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-xs);
+}
+.exec-map-waiting-detail-grid {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 4px;
+}
+.exec-map-waiting-detail-grid code {
+    border: 1px solid var(--border);
+    background: var(--sf);
+    color: var(--t2);
+    padding: 3px 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.exec-map-waiting-detail-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+}
+.exec-map-waiting-detail-actions button {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--yellow);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 3px 8px;
+    cursor: pointer;
 }
 .exec-actions {
     display: flex;

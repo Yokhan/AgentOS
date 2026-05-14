@@ -158,6 +158,7 @@
 10. [x] Добавлен `smoke-code-context-send.mjs`: проверяет, что attached Code Context реально уходит в message payload и очищается после send.
 11. [x] `check-code-context-ui.mjs` теперь требует очистку preview/error и `[USER_TASK]` envelope.
 12. [x] `check-execution-map-ux.mjs` теперь фиксирует контракт: heartbeat/provider state скрывается из event nodes.
+13. [x] Waiting/blocker item в execution map получил отдельную readable detail panel с действиями approve/reject/retry/status.
 
 ### Осталось: высокий уровень
 
@@ -182,7 +183,7 @@
 5. [x] Добавить behavior smoke: attach code context -> send -> envelope appears.
 6. [x] Добавить behavior smoke: reload keeps selected project and route.
 7. [ ] Добавить behavior smoke: execution map does not render heartbeat as nodes.
-8. [ ] Добавить details panel для выбранного waiting item вместо только inline details.
+8. [x] Добавить details panel для выбранного waiting item вместо только inline details.
 9. [x] После retry/status/archive обновлять execution map так же, как approve/reject.
 10. [ ] Убрать остаточный PA/status noise из chat transcript там, где он ещё попадает.
 11. [ ] Добавить фильтры notifications по source/severity/project.
