@@ -132,6 +132,11 @@ pub enum OpsPaCommand {
     },
     // Project onboarding
     ProjectOnboardAudit,
+    ProjectOnboardPlan {
+        segment: String,
+        permission: String,
+        limit: usize,
+    },
     ProjectConnect {
         project: String,
         segment: String,
@@ -240,6 +245,9 @@ static RE_CODE_CTX_INLINE: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"\[CODE_CONTEXT:([^\]]+)\]").unwrap());
 static RE_PROJECT_ONBOARD_AUDIT: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"\[PROJECT_ONBOARD_AUDIT\]").unwrap());
+static RE_PROJECT_ONBOARD_PLAN: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"\[PROJECT_ONBOARD_PLAN(?::([^:\]]+))?(?::([^:\]]+))?(?::(\d+))?\]").unwrap()
+});
 static RE_PROJECT_CONNECT: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(r"\[PROJECT_CONNECT:([^:\]]+)(?::([^:\]]+))?(?::([^:\]]+))?(?::([^\]]+))?\]")
         .unwrap()
@@ -459,6 +467,23 @@ pub fn parse_ops_commands(response: &str, _state: &AppState) -> Vec<ParsedComman
     }
     if RE_PROJECT_ONBOARD_AUDIT.is_match(response) {
         push_cmd!(OpsPaCommand::ProjectOnboardAudit);
+    }
+    if let Some(c) = RE_PROJECT_ONBOARD_PLAN.captures(response) {
+        let segment = cap(c.get(1));
+        let permission = cap(c.get(2));
+        push_cmd!(OpsPaCommand::ProjectOnboardPlan {
+            segment: if segment.is_empty() {
+                "Other".to_string()
+            } else {
+                segment
+            },
+            permission: if permission.is_empty() {
+                "balanced".to_string()
+            } else {
+                permission
+            },
+            limit: c.get(3).and_then(|m| m.as_str().parse().ok()).unwrap_or(5),
+        });
     }
     if let Some(c) = RE_PROJECT_CONNECT.captures(response) {
         let segment = cap(c.get(2));
@@ -690,6 +715,18 @@ pub fn execute_ops_command(state: &AppState, cmd: &OpsPaCommand) -> Option<Strin
         OpsPaCommand::ProjectOnboardAudit => {
             Some(super::project_onboarding::format_onboarding_audit(state))
         }
+        OpsPaCommand::ProjectOnboardPlan {
+            segment,
+            permission,
+            limit,
+        } => Some(super::project_onboarding::format_onboarding_plan(
+            state,
+            super::project_onboarding::ProjectOnboardingPlanOptions {
+                segment: Some(segment.clone()),
+                permission: Some(permission.clone()),
+                limit: Some(*limit),
+            },
+        )),
         OpsPaCommand::ProjectConnect {
             project,
             segment,

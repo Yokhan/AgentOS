@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 use tauri::State;
 
@@ -48,6 +49,16 @@ pub struct ProjectConnectMissingOptions {
     pub permission: Option<String>,
     #[serde(default)]
     pub dry_run: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProjectOnboardingPlanOptions {
+    #[serde(default)]
+    pub segment: Option<String>,
+    #[serde(default)]
+    pub permission: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
 }
 
 fn segments_path(state: &AppState) -> PathBuf {
@@ -152,6 +163,24 @@ fn project_dirs(docs_dir: &Path) -> Vec<PathBuf> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default()
+}
+
+fn git_dirty_count(project_dir: &Path) -> Option<usize> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(project_dir)
+        .args(["status", "--porcelain"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count(),
+    )
 }
 
 fn build_item(
@@ -452,6 +481,133 @@ pub fn connect_missing_inline(
     }))
 }
 
+pub fn format_onboarding_plan(state: &AppState, opts: ProjectOnboardingPlanOptions) -> String {
+    let segment = opts
+        .segment
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "Other".to_string());
+    let permission = opts
+        .permission
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "balanced".to_string());
+    let limit = opts.limit.unwrap_or(5).clamp(1, 20);
+    let items = audit_projects(state);
+    if items.is_empty() {
+        return "Project onboarding plan: git projects were not found under documents_dir."
+            .to_string();
+    }
+
+    let ready = items.iter().filter(|item| item.ready).count();
+    let metadata_candidates = items
+        .iter()
+        .filter(|item| item.needs_segment || item.needs_permission)
+        .collect::<Vec<_>>();
+    let template_candidates = items
+        .iter()
+        .filter(|item| item.needs_template)
+        .collect::<Vec<_>>();
+    let mut safe_template = Vec::new();
+    let mut blocked_template = Vec::new();
+    for item in &template_candidates {
+        let dirty = git_dirty_count(Path::new(&item.path));
+        if dirty == Some(0) {
+            safe_template.push((item, dirty));
+        } else {
+            blocked_template.push((item, dirty));
+        }
+    }
+
+    let mut lines = vec![
+        format!(
+            "**Project onboarding wave plan:** {}/{} ready",
+            ready,
+            items.len()
+        ),
+        format!("- metadata fixes: {} project(s)", metadata_candidates.len()),
+        format!(
+            "- template candidates: {} clean canary / {} blocked or dirty",
+            safe_template.len(),
+            blocked_template.len()
+        ),
+        String::new(),
+        "**Safe next commands:**".to_string(),
+    ];
+    if !metadata_candidates.is_empty() {
+        lines.push(format!(
+            "1. Preview metadata repair: `[PROJECT_CONNECT_MISSING:{}:{}:dry]`",
+            segment, permission
+        ));
+        lines.push(format!(
+            "2. Apply metadata repair after review: `[PROJECT_CONNECT_MISSING:{}:{}]`",
+            segment, permission
+        ));
+    } else {
+        lines.push("1. Metadata is already assigned for all discovered git projects.".to_string());
+    }
+
+    if let Some((item, _)) = safe_template.first() {
+        lines.push(format!(
+            "3. Canary template sync: `[PROJECT_CONNECT:{}:{}:{}:deploy,dry]`, then `[PROJECT_CONNECT:{}:{}:{}:deploy]`",
+            item.name, item.segment, item.permission, item.name, item.segment, item.permission
+        ));
+    } else if !template_candidates.is_empty() {
+        lines.push(
+            "3. No clean canary for template sync. Resolve dirty/blocked projects before deploy."
+                .to_string(),
+        );
+    } else {
+        lines.push("3. No template sync needed by onboarding audit.".to_string());
+    }
+
+    if !safe_template.is_empty() {
+        lines.push(String::new());
+        lines.push(format!("**Clean canary candidates ({} max):**", limit));
+        for (item, _) in safe_template.iter().take(limit) {
+            lines.push(format!(
+                "- {}: template={}, segment={}, permission={}",
+                item.name, item.template_version, item.segment, item.permission
+            ));
+        }
+    }
+    if !blocked_template.is_empty() {
+        lines.push(String::new());
+        lines.push(format!("**Blocked template candidates ({} max):**", limit));
+        for (item, dirty) in blocked_template.iter().take(limit) {
+            let dirty_label = dirty
+                .map(|count| format!("{} dirty file(s)", count))
+                .unwrap_or_else(|| "git status unavailable".to_string());
+            lines.push(format!(
+                "- {}: {}, next={}",
+                item.name,
+                dirty_label,
+                item.next_actions.join(", ")
+            ));
+        }
+    }
+    lines.push(String::new());
+    lines.push(
+        "Rule: do metadata repair in bulk, but deploy templates only as canary waves after clean git status."
+            .to_string(),
+    );
+    lines.join("\n")
+}
+
+#[tauri::command]
+pub async fn project_onboarding_plan(
+    state: State<'_, Arc<AppState>>,
+    opts: ProjectOnboardingPlanOptions,
+) -> Result<Value, String> {
+    let state_arc = Arc::clone(&state);
+    tokio::task::spawn_blocking(move || -> Result<Value, String> {
+        Ok(json!({
+            "status": "ok",
+            "text": format_onboarding_plan(&state_arc, opts),
+        }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 pub async fn project_connect(
     state: State<'_, Arc<AppState>>,
@@ -616,5 +772,48 @@ mod tests {
         assert!(valid_permission("restrictive"));
         assert!(valid_permission("permissive"));
         assert!(!valid_permission("root"));
+    }
+
+    #[test]
+    fn onboarding_plan_returns_safe_commands_and_blockers() {
+        let root = std::env::temp_dir().join(format!(
+            "agentos-onboarding-plan-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let docs = root.join("docs");
+        let project = docs.join("SampleProject");
+        std::fs::create_dir_all(project.join(".git")).unwrap();
+        std::fs::create_dir_all(root.join("n8n")).unwrap();
+        std::fs::write(
+            root.join("n8n").join("config.json"),
+            serde_json::to_string_pretty(&json!({
+                "documents_dir": docs.to_string_lossy(),
+                "project_root": root.to_string_lossy(),
+                "project_permissions": {}
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let state = AppState::new(root.clone());
+        let plan = format_onboarding_plan(
+            &state,
+            ProjectOnboardingPlanOptions {
+                segment: Some("Other".to_string()),
+                permission: Some("balanced".to_string()),
+                limit: Some(3),
+            },
+        );
+
+        assert!(plan.contains("Project onboarding wave plan"));
+        assert!(plan.contains("[PROJECT_CONNECT_MISSING:Other:balanced:dry]"));
+        assert!(plan.contains("[PROJECT_CONNECT_MISSING:Other:balanced]"));
+        assert!(plan.contains("Blocked template candidates"));
+        assert!(plan.contains("SampleProject"));
+
+        let _ = std::fs::remove_dir_all(root);
     }
 }

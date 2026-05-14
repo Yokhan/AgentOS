@@ -790,6 +790,15 @@ function WorkbenchFocus({ all }) {
         >
           open plans
         </button>
+        <button
+          onClick=${() => {
+            activeFilter.value = "unmanaged";
+            composerDraftText.value =
+              "[PROJECT_ONBOARD_PLAN:Other:balanced:5]\nСоставь безопасную волну подключения и восстановления проектов. Сначала metadata dry-run, затем canary template sync только на чистых проектах. Верни точные следующие команды и блокеры.";
+          }}
+        >
+          prepare onboarding wave
+        </button>
       </div>
     </div>
     <div class="workbench-pulse">

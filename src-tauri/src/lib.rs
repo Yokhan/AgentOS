@@ -184,6 +184,7 @@ pub fn run() {
             commands::ops::health_check,
             commands::ops::create_project,
             commands::project_onboarding::project_onboarding_audit,
+            commands::project_onboarding::project_onboarding_plan,
             commands::project_onboarding::project_connect,
             commands::project_onboarding::project_connect_missing,
             commands::project_reports::project_agent_report,

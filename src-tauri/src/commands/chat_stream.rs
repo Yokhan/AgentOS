@@ -270,7 +270,7 @@ pub async fn stream_chat(
     );
     let prompt = if plan_mode {
         format!(
-            "{}\n\n[AGENTOS RUN MODE]\nPlan mode is ON. Read and reason only. Do not edit files and do not run write operations. You may emit read-only AgentOS PA command tags for diagnostics, audits, and dry-runs only, for example [PROJECT_ONBOARD_AUDIT] or [PROJECT_CONNECT_MISSING:Other:balanced:dry]. Do not emit write commands. Return a plan, questions, a read-only diagnostic command, or a concrete blocker. Preserve [RESPONSE POLICY]: match the user's language for prose.",
+            "{}\n\n[AGENTOS RUN MODE]\nPlan mode is ON. Read and reason only. Do not edit files and do not run write operations. You may emit read-only AgentOS PA command tags for diagnostics, audits, and dry-runs only, for example [PROJECT_ONBOARD_PLAN:Other:balanced:5], [PROJECT_ONBOARD_AUDIT] or [PROJECT_CONNECT_MISSING:Other:balanced:dry]. Do not emit write commands. Return a plan, questions, a read-only diagnostic command, or a concrete blocker. Preserve [RESPONSE POLICY]: match the user's language for prose.",
             prompt
         )
     } else {

@@ -185,7 +185,7 @@ fn build_natural_language_intent_context(state: &AppState, user_message: &str) -
             "[PROJECT_CONNECT_MISSING:Other:balanced:dry]".to_string()
         }
     } else {
-        "[PROJECT_ONBOARD_AUDIT]".to_string()
+        "[PROJECT_ONBOARD_PLAN:Other:balanced:5]".to_string()
     };
 
     format!(
@@ -194,7 +194,8 @@ fn build_natural_language_intent_context(state: &AppState, user_message: &str) -
          The user gives natural-language instructions; do not ask them to type PA command tags manually.\n\
          Recommended next PA command: {recommended}\n\
          Rules:\n\
-         - If project names or target segments are unclear, emit [PROJECT_ONBOARD_AUDIT] first.\n\
+         - If project names or target segments are unclear, emit [PROJECT_ONBOARD_PLAN:Other:balanced:5] first.\n\
+         - [PROJECT_ONBOARD_PLAN:Other:balanced:5] is read-only and returns a safe wave plan with canary and dirty-project blockers.\n\
          - For broad/many-project onboarding, preview metadata repair with [PROJECT_CONNECT_MISSING:Other:balanced:dry] unless the user explicitly said to apply now.\n\
          - [PROJECT_CONNECT_MISSING:Other:balanced] only repairs AgentOS metadata: segment + permission. It does not sync templates.\n\
          - Template sync is separate and must be explicit: use [PROJECT_CONNECT:Project:Segment:balanced:deploy] for one confirmed project, not a blind bulk sync.\n\
@@ -276,6 +277,7 @@ fn build_identity_context(state: &AppState) -> String {
          [DEPENDENCY_AUDIT:project] — outdated deps\n\n\
          Project onboarding:\n\
          [PROJECT_ONBOARD_AUDIT] — find unconnected/unmanaged repos and next actions\n\
+         [PROJECT_ONBOARD_PLAN:Other:balanced:5] — read-only safe onboarding wave plan with canary and blockers\n\
          [PROJECT_CONNECT:Project:Segment:balanced] — connect repo to AgentOS segment + permission\n\
          [PROJECT_CONNECT:Project:Segment:balanced:deploy] — connect and sync agent template\n\
          [PROJECT_CONNECT:Project:Segment:balanced:dry] — preview without writes\n\n\
@@ -616,5 +618,14 @@ mod tests {
         let ctx = build_natural_language_intent_context(&state, "Подключи zolt к AgentOS");
 
         assert!(ctx.contains("[PROJECT_CONNECT:zolt:Other:balanced]"));
+    }
+
+    #[test]
+    fn onboarding_intent_routes_unclear_scope_to_safe_wave_plan() {
+        let state = test_state_with_project("zolt");
+        let ctx = build_natural_language_intent_context(&state, "project onboarding is stuck");
+
+        assert!(ctx.contains("[PROJECT_ONBOARD_PLAN:Other:balanced:5]"));
+        assert!(ctx.contains("safe wave plan"));
     }
 }

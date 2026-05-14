@@ -27,7 +27,7 @@ static RE_STRATEGY: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"(?s)\[STRATEGY:([^\]]+)\](.*?)\[/STRATEGY\]").unwrap());
 static RE_BACKTICK_READONLY_COMMAND: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(
-        r"`(DELEGATE_STATUS(?::[^`\]\s]+)?|DELEGATE_LOG(?::[^`\]\s]+)?|DELEGATE_DIFF(?::[^`\]\s]+)?|GIT_STATUS_ALL|TEMPLATE_AUDIT|PROJECT_ONBOARD_AUDIT|DASHBOARD_FULL|HEALTH_CHECK:[^`\]\s]+)`",
+        r"`(DELEGATE_STATUS(?::[^`\]\s]+)?|DELEGATE_LOG(?::[^`\]\s]+)?|DELEGATE_DIFF(?::[^`\]\s]+)?|GIT_STATUS_ALL|TEMPLATE_AUDIT|PROJECT_ONBOARD_AUDIT|PROJECT_ONBOARD_PLAN(?::[^`\]\s]+)?(?::[^`\]\s]+)?(?::\d+)?|DASHBOARD_FULL|HEALTH_CHECK:[^`\]\s]+)`",
     )
     .unwrap()
 });
@@ -227,6 +227,9 @@ pub fn describe_pa_command(cmd: &PaCommand) -> String {
             super::pa_commands_ops::OpsPaCommand::ProjectOnboardAudit => {
                 "[PROJECT_ONBOARD_AUDIT]".to_string()
             }
+            super::pa_commands_ops::OpsPaCommand::ProjectOnboardPlan { .. } => {
+                "[PROJECT_ONBOARD_PLAN]".to_string()
+            }
             super::pa_commands_ops::OpsPaCommand::ProjectConnect { project, .. } => {
                 format!("[PROJECT_CONNECT:{}]", project)
             }
@@ -274,7 +277,8 @@ pub fn is_read_only_pa_command(cmd: &PaCommand) -> bool {
             | super::pa_commands_ops::OpsPaCommand::GraphVerify { .. }
             | super::pa_commands_ops::OpsPaCommand::GraphRules { .. }
             | super::pa_commands_ops::OpsPaCommand::CodeContext { .. }
-            | super::pa_commands_ops::OpsPaCommand::ProjectOnboardAudit => true,
+            | super::pa_commands_ops::OpsPaCommand::ProjectOnboardAudit
+            | super::pa_commands_ops::OpsPaCommand::ProjectOnboardPlan { .. } => true,
             super::pa_commands_ops::OpsPaCommand::ProjectConnect { dry_run, .. }
             | super::pa_commands_ops::OpsPaCommand::ProjectConnectMissing { dry_run, .. } => {
                 *dry_run
@@ -1021,17 +1025,24 @@ ERROR: {"type":"error","status":400}"#;
 
 [PROJECT_ONBOARD_AUDIT]
 
+[PROJECT_ONBOARD_PLAN:Other:balanced:7]
+
 [PROJECT_CONNECT:zolt:Client Projects:balanced:dry]
 
 [PROJECT_CONNECT_MISSING:Other:balanced:dry]"#;
 
         let commands = parse_pa_commands(response, &state);
 
-        assert_eq!(commands.len(), 3);
+        assert_eq!(commands.len(), 4);
         assert!(commands.iter().all(|cmd| cmd.valid));
         assert!(commands.iter().any(|cmd| matches!(
             &cmd.cmd,
             PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::ProjectOnboardAudit)
+        )));
+        assert!(commands.iter().any(|cmd| matches!(
+            &cmd.cmd,
+            PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::ProjectOnboardPlan { segment, permission, limit })
+                if segment == "Other" && permission == "balanced" && *limit == 7
         )));
         assert!(commands.iter().any(|cmd| matches!(
             &cmd.cmd,
@@ -1049,6 +1060,13 @@ ERROR: {"type":"error","status":400}"#;
     fn project_onboarding_dry_run_is_read_only_but_apply_is_not() {
         let audit =
             PaCommand::OpsExt(super::super::pa_commands_ops::OpsPaCommand::ProjectOnboardAudit);
+        let plan = PaCommand::OpsExt(
+            super::super::pa_commands_ops::OpsPaCommand::ProjectOnboardPlan {
+                segment: "Other".to_string(),
+                permission: "balanced".to_string(),
+                limit: 5,
+            },
+        );
         let dry = PaCommand::OpsExt(
             super::super::pa_commands_ops::OpsPaCommand::ProjectConnectMissing {
                 segment: "Other".to_string(),
@@ -1065,6 +1083,7 @@ ERROR: {"type":"error","status":400}"#;
         );
 
         assert!(is_read_only_pa_command(&audit));
+        assert!(is_read_only_pa_command(&plan));
         assert!(is_read_only_pa_command(&dry));
         assert!(!is_read_only_pa_command(&apply));
     }
