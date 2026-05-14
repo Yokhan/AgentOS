@@ -151,6 +151,10 @@
 3. [x] Waiting cards получили `details` с id/project/status/action/full task.
 4. [x] Предупреждение “карта неполная” стало actionable: кнопки `разобрать` и `refresh`.
 5. [x] Добавлен gate `check-execution-map-ux.mjs`.
+6. [x] Code Context получил budget selector: compact / standard / deep.
+7. [x] Code Context получил кросс-проектный scope через comma-separated project input.
+8. [x] Retry/status/archive draft actions теперь тоже обновляют execution map.
+9. [x] `check-code-context-ui.mjs` проверяет budget/scope wiring.
 
 ### Осталось: высокий уровень
 
@@ -159,8 +163,8 @@
 3. [ ] Waiting-state contract: единый backend/UI контракт для `needs_user`, `permission`, `blocked`, `failed`, `retry/archive`.
 4. [ ] Project/plan/task/agent hierarchy: в каждом route показать, к какому плану/этапу/задаче относится работа.
 5. [ ] Provider/account observability: связать provider/model/account с текущим run и дочерними делегациями.
-6. [ ] Context budgets: добавить compact/standard/deep режимы для code context.
-7. [ ] Cross-project context UI: выбирать несколько проектов для shared auth / 3D UI / общей библиотеки.
+6. [x] Context budgets: добавить compact/standard/deep режимы для code context.
+7. [x] Cross-project context UI: выбирать несколько проектов для shared auth / 3D UI / общей библиотеки.
 8. [ ] Recovery smoke: проверить reload/cancel/network drop без потери active run и partial output.
 9. [ ] Settings polish: сделать provider routing, Claude disable, Codex defaults и delegation provider очевидными.
 10. [ ] Onboarding helpers: natural-language path и helper для массового подключения/проверки проектов.
@@ -168,15 +172,15 @@
 
 ### Осталось: конкретные задачи
 
-1. [ ] Добавить context budget selector в чат: compact / standard / deep.
-2. [ ] Перед attach показывать ожидаемый budget и лимиты.
-3. [ ] Добавить multi-project context picker из project rail/route panel.
-4. [ ] Добавить `[CODE_CONTEXT:ProjectA,ProjectB]` UI-flow без ручного набора.
+1. [x] Добавить context budget selector в чат: compact / standard / deep.
+2. [x] Перед attach показывать ожидаемый budget и лимиты.
+3. [x] Добавить multi-project context input из chat route panel.
+4. [x] Добавить `[CODE_CONTEXT:ProjectA,ProjectB]` UI-flow без ручного набора.
 5. [ ] Добавить behavior smoke: attach code context -> send -> envelope appears.
 6. [ ] Добавить behavior smoke: reload keeps selected project and route.
 7. [ ] Добавить behavior smoke: execution map does not render heartbeat as nodes.
 8. [ ] Добавить details panel для выбранного waiting item вместо только inline details.
-9. [ ] После retry/status/archive обновлять execution map так же, как approve/reject.
+9. [x] После retry/status/archive обновлять execution map так же, как approve/reject.
 10. [ ] Убрать остаточный PA/status noise из chat transcript там, где он ещё попадает.
 11. [ ] Добавить фильтры notifications по source/severity/project.
 12. [ ] Связать notification item с project/route/delegation, если есть id.

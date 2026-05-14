@@ -30,6 +30,7 @@ import {
   selectedSoloProvider,
   chatRunMode,
   chatAccessLevel,
+  codeContextBudget,
   isRec,
   attFiles,
   isOn,
@@ -136,6 +137,11 @@ const CHAT_RENDER_RECENT_LIMIT = 90;
 const PA_TRACE_FULL_RECENT_COUNT = 3;
 const PA_TRACE_COMPACT_ROW_LIMIT = 3;
 const EXEC_WAITING_VISIBLE_LIMIT = 4;
+const CODE_CONTEXT_BUDGET_OPTIONS = [
+  ["compact", "compact", 8000],
+  ["standard", "standard", 12000],
+  ["deep", "deep", 24000],
+];
 const APPROVAL_DELEGATION_STATUSES = new Set(["pending", "needs_permission"]);
 const ACTIVE_DELEGATION_STATUSES = new Set([
   "pending",
@@ -280,6 +286,12 @@ function contextSizeLabel(chars) {
   return `${n} chars`;
 }
 
+function codeContextBudgetInfo(value) {
+  const found = CODE_CONTEXT_BUDGET_OPTIONS.find(([key]) => key === value);
+  const [key, label, maxChars] = found || CODE_CONTEXT_BUDGET_OPTIONS[1];
+  return { key, label, maxChars };
+}
+
 function contextMetaLine(item) {
   const projects = Array.isArray(item?.projects)
     ? item.projects.filter(Boolean).join(", ")
@@ -287,6 +299,8 @@ function contextMetaLine(item) {
   return [
     item?.schema || item?.kind || "context",
     projects ? `projects: ${projects}` : "",
+    item?.budget ? `budget: ${item.budget}` : "",
+    item?.maxChars ? `limit: ${contextSizeLabel(item.maxChars)}` : "",
     contextSizeLabel(item?.previewChars),
     item?.truncated ? "truncated" : "",
     item?.warnings?.length ? `${item.warnings.length} warnings` : "",
@@ -2168,6 +2182,10 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
     ].join("\n");
     showToast("Drafted execution-map repair prompt", "success", 1400);
   };
+  const draftMapCommand = (text) => {
+    composerDraftText.value = text;
+    if (onRefresh) onRefresh();
+  };
   return html`<div class=${`exec-map-card ${isStage ? "stage" : ""}`}>
     ${isStage
       ? html`<div class="exec-map-stage-strip">
@@ -2278,14 +2296,18 @@ function ExecutionMapCard({ map, onRefresh, variant = "compact" }) {
                       ${canRetry
                         ? html`<button
                               onClick=${() => {
-                                composerDraftText.value = `[DELEGATE_RETRY:${item.id}]Retry this delegation through the selected available provider. Report exact blocker/result.[/DELEGATE_RETRY]`;
+                                draftMapCommand(
+                                  `[DELEGATE_RETRY:${item.id}]Retry this delegation through the selected available provider. Report exact blocker/result.[/DELEGATE_RETRY]`,
+                                );
                               }}
                             >
                               retry
                             </button>
                             <button
                               onClick=${() => {
-                                composerDraftText.value = `[DELEGATE_STATUS:${item.id}]\n[DELEGATE_CLEANUP:1]`;
+                                draftMapCommand(
+                                  `[DELEGATE_STATUS:${item.id}]\n[DELEGATE_CLEANUP:1]`,
+                                );
                               }}
                             >
                               status/archive
@@ -2338,7 +2360,9 @@ ${[
                           </button>`
                       : html`<button
                           onClick=${() => {
-                            composerDraftText.value = `[DELEGATE_STATUS:${item.id}]\n[DELEGATE_CLEANUP:1]`;
+                            draftMapCommand(
+                              `[DELEGATE_STATUS:${item.id}]\n[DELEGATE_CLEANUP:1]`,
+                            );
                           }}
                         >
                           status
@@ -2588,6 +2612,7 @@ function ChatSidebar() {
   const [chatSearchQuery, setChatSearchQuery] = useState("");
   const [chatSearchResults, setChatSearchResults] = useState([]);
   const [chatSearchBusy, setChatSearchBusy] = useState(false);
+  const [contextProjectDraft, setContextProjectDraft] = useState("");
   const lastLiveMarker = useRef("");
   const duoEnabled = chatCollabMode.value === "duo";
   const duoView = duoEnabled ? normalizeDuoView(activeRoomTab.value) : "chat";
@@ -2687,18 +2712,36 @@ function ChatSidebar() {
     );
     inputRef.current?.focus();
   };
+  const parseCodeContextProjects = () => {
+    const raw = String(contextProjectDraft || "").trim();
+    const fallback = routeState.isGlobal ? "" : routeState.label;
+    const values = raw ? raw.split(/[,;\n]+/) : [fallback];
+    const seen = new Set();
+    return values
+      .map((value) => normalizeProjectKey(value || ""))
+      .filter((value) => value && value !== "_orchestrator")
+      .filter((value) => {
+        if (seen.has(value)) return false;
+        seen.add(value);
+        return true;
+      });
+  };
   const attachCodeContext = async ({
     key,
     label,
     project,
     projects,
     focus,
-    maxChars = 12000,
+    maxChars = null,
+    budget = null,
     includeFiles = false,
   }) => {
+    const budgetInfo = codeContextBudgetInfo(
+      budget || codeContextBudget.value || "standard",
+    );
     const projectList = (projects || [project || currentProject.value])
       .map((value) => normalizeProjectKey(value || ""))
-      .filter(Boolean);
+      .filter((value) => value && value !== "_orchestrator");
     if (!projectList.length) {
       showToast("Pick a project before attaching code context", "error", 2200);
       return;
@@ -2715,7 +2758,7 @@ function ChatSidebar() {
       const bundle = await loadCodeContextBundle({
         projects: projectList,
         focus: requestFocus,
-        max_chars: maxChars,
+        max_chars: maxChars || budgetInfo.maxChars,
         include_files: includeFiles,
       });
       const contextText = String(bundle?.context || "").trim();
@@ -2727,6 +2770,8 @@ function ChatSidebar() {
         schema: bundle?.schema || "agentos.code_context.v1",
         projects: bundle?.projects || projectList,
         focus: bundle?.focus || requestFocus,
+        budget: budgetInfo.key,
+        maxChars: maxChars || budgetInfo.maxChars,
         truncated: !!bundle?.truncated,
         warnings: bundle?.warnings || [],
         previewChars: contextText.length,
@@ -2744,6 +2789,8 @@ function ChatSidebar() {
         schema: "agentos.code_context.v1",
         projects: projectList,
         focus: requestFocus,
+        budget: budgetInfo.key,
+        maxChars: maxChars || budgetInfo.maxChars,
         warnings: [String(e)],
         previewChars: 0,
         source: "command-fallback",
@@ -3435,6 +3482,8 @@ function ChatSidebar() {
     (sum, item) => sum + Number(item.warnings?.length || 0),
     0,
   );
+  const contextScopeProjects = parseCodeContextProjects();
+  const budgetInfo = codeContextBudgetInfo(codeContextBudget.value);
   const allChatMessages = sideMessages.value || [];
   const renderedHiddenCount = showAllRenderedMessages
     ? 0
@@ -3644,20 +3693,55 @@ function ChatSidebar() {
                     html`<option value=${value}>${label}</option>`,
                 )}
               </select>
+              <select
+                class="route-lite-select"
+                value=${codeContextBudget.value}
+                title="Code Context budget"
+                onChange=${(e) => {
+                  codeContextBudget.value = e.target.value;
+                  showToast(
+                    "code context budget: " + e.target.value,
+                    "success",
+                    1200,
+                  );
+                }}
+              >
+                ${CODE_CONTEXT_BUDGET_OPTIONS.map(
+                  ([value, label, maxChars]) =>
+                    html`<option value=${value}>
+                      ctx ${label} (${contextSizeLabel(maxChars)})
+                    </option>`,
+                )}
+              </select>
+              <input
+                class="route-lite-input"
+                value=${contextProjectDraft}
+                placeholder=${routeState.isGlobal
+                  ? "ProjectA, ProjectB"
+                  : routeState.label}
+                title="Comma-separated projects for cross-project Code Context. Empty uses the selected project."
+                onInput=${(e) => setContextProjectDraft(e.target.value)}
+              />
               <button
                 class="route-lite-action"
-                disabled=${routeState.isGlobal || codeContextBusy.value}
-                title=${routeState.isGlobal
-                  ? "Pick a project first"
-                  : "Build and attach a real backend Code Context bundle to the next message"}
+                disabled=${!contextScopeProjects.length ||
+                codeContextBusy.value}
+                title=${contextScopeProjects.length
+                  ? `Attach ${budgetInfo.label} Code Context for ${contextScopeProjects.join(", ")}`
+                  : "Pick a project or type comma-separated projects"}
                 onClick=${() =>
                   attachCodeContext({
-                    key: "code-header:" + routeState.key,
-                    project: routeState.label,
-                    label: routeState.label + " code context",
+                    key: "code-header:" + contextScopeProjects.join(","),
+                    projects: contextScopeProjects,
+                    label:
+                      contextScopeProjects.length > 1
+                        ? contextScopeProjects.join(", ") + " code context"
+                        : contextScopeProjects[0] + " code context",
                     focus:
                       composerText ||
                       "Current project route, architecture risks, and safest next edit path.",
+                    budget: budgetInfo.key,
+                    maxChars: budgetInfo.maxChars,
                   })}
               >
                 ${codeContextBusy.value ? "context..." : "code context"}

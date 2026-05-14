@@ -1874,6 +1874,21 @@
     padding: var(--sp-xs);
     cursor: pointer;
 }
+.route-lite-select,
+.route-lite-input {
+    background: var(--sf);
+    color: var(--t2);
+    border: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: var(--sp-xs);
+}
+.route-lite-input {
+    width: min(180px, 28vw);
+}
+.route-lite-input::placeholder {
+    color: var(--t3);
+}
 .route-lite-action:disabled {
     color: var(--t3);
     border-color: var(--border);

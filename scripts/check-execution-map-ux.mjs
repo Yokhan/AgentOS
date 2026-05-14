@@ -26,6 +26,14 @@ const checks = [
       css.includes(".exec-map-waiting-details"),
   },
   {
+    name: "retry/status draft refreshes execution map",
+    ok:
+      chat.includes("const draftMapCommand") &&
+      chat.includes("draftMapCommand(") &&
+      chat.includes("DELEGATE_RETRY") &&
+      chat.includes("DELEGATE_STATUS"),
+  },
+  {
     name: "code context state clears after send",
     ok:
       chat.includes("codeContextPreview.value = null") &&

@@ -41,7 +41,17 @@ const checks = [
     ok:
       store.includes("const codeContextBusy") &&
       store.includes("codeContextError") &&
-      store.includes("codeContextPreview"),
+      store.includes("codeContextPreview") &&
+      store.includes("const codeContextBudget"),
+  },
+  {
+    name: "code context has budget and multi-project scope",
+    ok:
+      chat.includes("CODE_CONTEXT_BUDGET_OPTIONS") &&
+      chat.includes("parseCodeContextProjects") &&
+      chat.includes("contextProjectDraft") &&
+      css.includes(".route-lite-input") &&
+      css.includes(".route-lite-select"),
   },
 ];
 

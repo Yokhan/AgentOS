@@ -63,6 +63,9 @@ const chatRunMode = signal(
 const chatAccessLevel = signal(
   localStorage.getItem("agentos_chat_access_level") || "write",
 );
+const codeContextBudget = signal(
+  localStorage.getItem("agentos_code_context_budget") || "standard",
+);
 effect(() => {
   if (currentProject.value) {
     localStorage.setItem("agentos_current_project", currentProject.value);
@@ -88,6 +91,9 @@ effect(() =>
 effect(() => localStorage.setItem("agentos_chat_run_mode", chatRunMode.value));
 effect(() =>
   localStorage.setItem("agentos_chat_access_level", chatAccessLevel.value),
+);
+effect(() =>
+  localStorage.setItem("agentos_code_context_budget", codeContextBudget.value),
 );
 effect(() => {
   try {
@@ -214,6 +220,7 @@ effect(() => {
         soloProvider: selectedSoloProvider.value || "",
         claudeModel: selectedClaudeModel.value || "",
         codexModel: selectedCodexModel.value || "",
+        codeContextBudget: codeContextBudget.value || "standard",
       }),
     );
   } catch {}
@@ -260,6 +267,7 @@ export {
   selectedSoloProvider,
   chatRunMode,
   chatAccessLevel,
+  codeContextBudget,
   subModel,
   isRec,
   attFiles,
