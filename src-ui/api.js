@@ -215,6 +215,8 @@ function mergeDelegationItems(
     if (!item?.id) continue;
     next[item.id] = {
       ...(next[item.id] || {}),
+      ...item,
+      id: item.id,
       project: item.project || next[item.id]?.project || "?",
       status: item.status || next[item.id]?.status || "pending",
       task: item.task || next[item.id]?.task,
@@ -229,6 +231,7 @@ async function loadDelegations() {
     const r = await fetch("/api/delegations", { method: "POST" });
     const d = await r.json();
     const items = (d.delegations || []).map((item) => ({
+      ...item,
       id: item.id,
       project: item.project,
       status: item.status || "pending",

@@ -91,8 +91,7 @@ pub fn queue_delegation_internal(state: &AppState, project: &str, task: &str) ->
 }
 
 #[tauri::command]
-pub fn get_delegations(state: State<Arc<AppState>>) -> Value {
-    // Cleanup old done/failed delegations (#61) — keep last 50
+fn cleanup_old_terminal_delegations(state: &AppState) {
     if let Ok(mut d) = state.delegations.lock() {
         if d.len() > 100 {
             let mut old: Vec<String> = d
@@ -110,16 +109,48 @@ pub fn get_delegations(state: State<Arc<AppState>>) -> Value {
             }
         }
     }
+}
+
+pub fn delegations_snapshot(state: &AppState) -> Vec<Value> {
     let delegations = match state.delegations.lock() {
-        Ok(d) => d
-            .values()
-            .filter(|d| !d.status.is_terminal())
-            .map(|d| serde_json::to_value(d).unwrap_or_default())
-            .collect::<Vec<_>>(),
-        Err(_) => Vec::new(),
+        Ok(d) => d.values().cloned().collect::<Vec<_>>(),
+        Err(_) => return Vec::new(),
     };
 
-    json!({"delegations": delegations})
+    let mut active = Vec::new();
+    let mut terminal = Vec::new();
+    for delegation in delegations {
+        let is_terminal = delegation.status.is_terminal();
+        let mut value = serde_json::to_value(&delegation).unwrap_or_default();
+        if let Some(obj) = value.as_object_mut() {
+            obj.insert("terminal".to_string(), json!(is_terminal));
+        }
+        if is_terminal {
+            terminal.push(value);
+        } else {
+            active.push(value);
+        }
+    }
+    terminal.sort_by(|a, b| {
+        b.get("started_at")
+            .or_else(|| b.get("ts"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .cmp(
+                a.get("started_at")
+                    .or_else(|| a.get("ts"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
+            )
+    });
+    active.extend(terminal.into_iter().take(50));
+    active
+}
+
+#[tauri::command]
+pub fn get_delegations(state: State<Arc<AppState>>) -> Value {
+    cleanup_old_terminal_delegations(&state);
+    json!({"delegations": delegations_snapshot(&state)})
 }
 
 /// Core delegation logic — can be called from both Tauri command and API handler

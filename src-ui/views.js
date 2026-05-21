@@ -28,6 +28,7 @@ import {
   permData,
   inboxData,
   delegations,
+  delegStreams,
   theme,
   isLoading,
   clock,
@@ -1371,6 +1372,7 @@ function ExecutionFlowStage() {
 function WorkbenchDock() {
   const tabs = [
     ["flow", "Поток", "ветки и события"],
+    ["delegations", "Делегации", "агенты и аппрувы"],
     ["focus", "Фокус", "что делать сейчас"],
     ["projects", "Проекты", "обзор выбранного среза"],
     ["plans", "Планы", "план и очередь"],
@@ -1651,6 +1653,326 @@ function NotificationsWorkspace() {
   </section>`;
 }
 
+const DELEGATION_RUNNING_STATUSES = new Set([
+  "running",
+  "escalated",
+  "deciding",
+  "verifying",
+]);
+const DELEGATION_APPROVAL_STATUSES = new Set([
+  "pending",
+  "needs_permission",
+  "scheduled",
+]);
+const DELEGATION_TERMINAL_STATUSES = new Set([
+  "done",
+  "failed",
+  "rejected",
+  "cancelled",
+  "error",
+]);
+
+function delegationStatus(d) {
+  return String(d?.status || "pending")
+    .trim()
+    .toLowerCase();
+}
+
+function delegationNeedsUser(d) {
+  const status = delegationStatus(d);
+  return (
+    DELEGATION_APPROVAL_STATUSES.has(status) ||
+    status === "failed" ||
+    status === "error" ||
+    (d?.terminal === false && d?.blockers)
+  );
+}
+
+function delegationTimestamp(d) {
+  return d?.started_at || d?.ts || "";
+}
+
+function delegationAge(d) {
+  const ts = delegationTimestamp(d);
+  const time = ts ? Date.parse(ts) : 0;
+  if (!time || Number.isNaN(time)) return "";
+  const minutes = Math.max(0, Math.round((Date.now() - time) / 60000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
+}
+
+function delegationTone(d) {
+  const status = delegationStatus(d);
+  if (status === "done") return "done";
+  if (status === "failed" || status === "error") return "failed";
+  if (status === "rejected" || status === "cancelled") return "muted";
+  if (DELEGATION_RUNNING_STATUSES.has(status)) return "running";
+  if (DELEGATION_APPROVAL_STATUSES.has(status)) return "needs-user";
+  return "default";
+}
+
+function delegationEntries() {
+  return Object.entries(delegations.value || {})
+    .map(([id, value]) => ({ id, ...(value || {}) }))
+    .sort((a, b) => {
+      const aNeeds = delegationNeedsUser(a) ? 1 : 0;
+      const bNeeds = delegationNeedsUser(b) ? 1 : 0;
+      if (aNeeds !== bNeeds) return bNeeds - aNeeds;
+      const aRunning = DELEGATION_RUNNING_STATUSES.has(delegationStatus(a))
+        ? 1
+        : 0;
+      const bRunning = DELEGATION_RUNNING_STATUSES.has(delegationStatus(b))
+        ? 1
+        : 0;
+      if (aRunning !== bRunning) return bRunning - aRunning;
+      return delegationTimestamp(b).localeCompare(delegationTimestamp(a));
+    });
+}
+
+function delegationProviderSummary(d) {
+  return [
+    d.executor_provider ? `executor: ${d.executor_provider}` : "",
+    d.reviewer_provider ? `reviewer: ${d.reviewer_provider}` : "",
+    d.priority ? `priority: ${d.priority}` : "",
+    d.timeout_secs ? `timeout: ${d.timeout_secs}s` : "",
+  ].filter(Boolean);
+}
+
+function delegationLinkSummary(d) {
+  return [
+    d.batch_id ? `batch ${d.batch_id}` : "",
+    d.plan_id ? `plan ${d.plan_id}` : "",
+    d.work_item_id ? `work ${d.work_item_id}` : "",
+    d.project_session_id ? `session ${d.project_session_id}` : "",
+    d.room_session_id ? `room ${d.room_session_id}` : "",
+  ].filter(Boolean);
+}
+
+function delegationHealthSummary(d) {
+  const gate = d.gate_result?.status || d.gate_result?.result || "";
+  const review = d.review_verdict?.status || "";
+  const usage = d.usage?.cost_usd
+    ? `cost $${Number(d.usage.cost_usd).toFixed(4)}`
+    : "";
+  return [
+    gate ? `gate: ${gate}` : "",
+    review ? `review: ${review}` : "",
+    usage,
+  ].filter(Boolean);
+}
+
+function DelegationCard({ item }) {
+  const status = delegationStatus(item);
+  const tone = delegationTone(item);
+  const stream = delegStreams.value?.[item.id];
+  const provider = delegationProviderSummary(item);
+  const links = delegationLinkSummary(item);
+  const health = delegationHealthSummary(item);
+  const isApproval = DELEGATION_APPROVAL_STATUSES.has(status);
+  const isRunning = DELEGATION_RUNNING_STATUSES.has(status);
+  const canRetry = status === "failed" || status === "error";
+  const shortId = String(item.id || "").slice(0, 18);
+  return html`<article class=${`delegation-work-card ${tone}`}>
+    <div class="delegation-work-top">
+      <div>
+        <b>${item.project || "unknown project"}</b>
+        <span
+          >${status}${delegationAge(item)
+            ? ` / ${delegationAge(item)}`
+            : ""}</span
+        >
+      </div>
+      <code>${shortId}</code>
+    </div>
+    <p>${item.task || "No task text captured"}</p>
+    <div class="delegation-work-meta">
+      ${provider.map((label) => html`<span>${label}</span>`)}
+      ${links.map((label) => html`<span>${label}</span>`)}
+      ${health.map((label) => html`<span>${label}</span>`)}
+      ${stream ? html`<span>stream: ${stream.stage || "running"}</span>` : null}
+    </div>
+    ${stream?.events?.length
+      ? html`<details class="delegation-stream-details">
+          <summary>live stream</summary>
+          ${(stream.events || []).slice(-6).map(
+            (evt) =>
+              html`<div>
+                <b>${evt.type || "event"}</b>
+                <span>
+                  ${evt.stage ||
+                  evt.label ||
+                  evt.tool ||
+                  evt.reason ||
+                  evt.response ||
+                  evt.text ||
+                  ""}
+                </span>
+              </div>`,
+          )}
+        </details>`
+      : null}
+    <div class="delegation-work-actions">
+      ${isApproval
+        ? html`<button class="primary" onClick=${() => approveDel(item.id)}>
+              approve
+            </button>
+            <button onClick=${() => rejectDel(item.id)}>reject</button>`
+        : null}
+      ${isRunning
+        ? html`<button
+            onClick=${() =>
+              executeRouteCommand(`[DELEGATE_CANCEL:${item.id}]`, "cancel")}
+          >
+            cancel
+          </button>`
+        : null}
+      ${canRetry
+        ? html`<button
+            class="primary"
+            onClick=${() =>
+              executeRouteCommand(
+                `[DELEGATE_RETRY:${item.id}]Повтори делегацию через доступный provider. Сначала проверь diff/health, затем верни фактический результат и блокеры.[/DELEGATE_RETRY]`,
+                "retry",
+              )}
+          >
+            retry
+          </button>`
+        : null}
+      <button
+        onClick=${() =>
+          executeRouteCommand(`[DELEGATE_STATUS:${item.id}]`, "status")}
+      >
+        status
+      </button>
+      <button
+        onClick=${() => {
+          currentProject.value = item.project || currentProject.value;
+          activeWorkspaceTab.value = "projects";
+        }}
+      >
+        open project
+      </button>
+    </div>
+  </article>`;
+}
+
+function DelegationsWorkspace() {
+  const [filter, setFilter] = useState("open");
+  useEffect(() => {
+    loadDelegations();
+  }, []);
+  const rows = delegationEntries();
+  const counts = {
+    needs: rows.filter(delegationNeedsUser).length,
+    running: rows.filter((d) =>
+      DELEGATION_RUNNING_STATUSES.has(delegationStatus(d)),
+    ).length,
+    pending: rows.filter((d) =>
+      DELEGATION_APPROVAL_STATUSES.has(delegationStatus(d)),
+    ).length,
+    failed: rows.filter((d) =>
+      ["failed", "error"].includes(delegationStatus(d)),
+    ).length,
+    done: rows.filter((d) => delegationStatus(d) === "done").length,
+  };
+  const visible = rows.filter((item) => {
+    const status = delegationStatus(item);
+    if (filter === "all") return true;
+    if (filter === "needs") return delegationNeedsUser(item);
+    if (filter === "running") return DELEGATION_RUNNING_STATUSES.has(status);
+    if (filter === "pending") return DELEGATION_APPROVAL_STATUSES.has(status);
+    if (filter === "failed") return status === "failed" || status === "error";
+    if (filter === "done") return status === "done";
+    return !DELEGATION_TERMINAL_STATUSES.has(status);
+  });
+  const pending = rows.filter((item) =>
+    DELEGATION_APPROVAL_STATUSES.has(delegationStatus(item)),
+  );
+  return html`<section class="workspace-panel delegations-workspace">
+    <div class="workspace-panel-head">
+      <div>
+        <div class="workbench-eyebrow">delegation control</div>
+        <h2>Делегации и проектные агенты</h2>
+        <p>
+          Единое место для аппрувов, запущенных подагентов, failed-route и
+          свежих результатов. Чат остается разговором, а очередь работы
+          управляется здесь.
+        </p>
+      </div>
+      <div class="workspace-actions">
+        <span>${rows.length} visible</span>
+        <span>${counts.needs} need you</span>
+        <button onClick=${() => loadDelegations()}>refresh</button>
+        <button
+          disabled=${!pending.length}
+          onClick=${async () => {
+            if (!confirm(`Approve ${pending.length} pending delegation(s)?`))
+              return;
+            for (const item of pending) {
+              await approveDel(item.id);
+            }
+            await loadDelegations();
+          }}
+        >
+          approve pending
+        </button>
+      </div>
+    </div>
+    <div class="delegation-summary-grid">
+      <button
+        class=${filter === "needs" ? "active" : ""}
+        onClick=${() => setFilter("needs")}
+      >
+        <b>${counts.needs}</b><span>нужен ты</span>
+      </button>
+      <button
+        class=${filter === "running" ? "active" : ""}
+        onClick=${() => setFilter("running")}
+      >
+        <b>${counts.running}</b><span>работают</span>
+      </button>
+      <button
+        class=${filter === "pending" ? "active" : ""}
+        onClick=${() => setFilter("pending")}
+      >
+        <b>${counts.pending}</b><span>аппрувы</span>
+      </button>
+      <button
+        class=${filter === "failed" ? "active" : ""}
+        onClick=${() => setFilter("failed")}
+      >
+        <b>${counts.failed}</b><span>упали</span>
+      </button>
+      <button
+        class=${filter === "done" ? "active" : ""}
+        onClick=${() => setFilter("done")}
+      >
+        <b>${counts.done}</b><span>готово</span>
+      </button>
+      <button
+        class=${filter === "all" ? "active" : ""}
+        onClick=${() => setFilter("all")}
+      >
+        <b>${rows.length}</b><span>все</span>
+      </button>
+    </div>
+    ${visible.length
+      ? html`<div class="delegation-work-grid">
+          ${visible.map((item) => html`<${DelegationCard} item=${item} />`)}
+        </div>`
+      : html`<div class="workspace-empty">
+          <b>В этом фильтре делегаций нет</b>
+          <span
+            >Если агент говорит, что отправил работу, а здесь пусто, значит он
+            не выдал исполняемый PA-тег или route не создал delegation.</span
+          >
+          <button onClick=${() => setFilter("all")}>показать все</button>
+        </div>`}
+  </section>`;
+}
+
 function WorkspaceCanvas({
   allAgents,
   visibleAgents,
@@ -1660,6 +1982,7 @@ function WorkspaceCanvas({
 }) {
   const tab = activeWorkspaceTab.value || "flow";
   if (tab === "focus") return html`<${WorkbenchFocus} all=${allAgents} />`;
+  if (tab === "delegations") return html`<${DelegationsWorkspace} />`;
   if (tab === "projects" && currentProject.value)
     return html`<${DetailView} />`;
   if (tab === "projects")

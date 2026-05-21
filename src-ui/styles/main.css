@@ -929,6 +929,144 @@ body.chat-resizing {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.delegations-workspace {
+    gap: var(--sp-s);
+}
+.delegation-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(96px, 1fr));
+    gap: var(--sp-s);
+    margin-bottom: var(--sp-s);
+}
+.delegation-summary-grid button {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--sf) 72%, transparent);
+    color: var(--text);
+    padding: var(--sp-s);
+    text-align: left;
+    cursor: pointer;
+}
+.delegation-summary-grid button.active,
+.delegation-summary-grid button:hover {
+    border-color: var(--cyan);
+    box-shadow: inset 2px 0 0 var(--cyan);
+}
+.delegation-summary-grid b {
+    display: block;
+    font-size: var(--fs-xl);
+    line-height: 1;
+}
+.delegation-summary-grid span {
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.delegation-work-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--sp-s);
+}
+.delegation-work-card {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--sf) 70%, transparent);
+    padding: var(--sp-s);
+    display: grid;
+    gap: var(--sp-xs);
+    min-width: 0;
+}
+.delegation-work-card.needs-user {
+    border-color: color-mix(in srgb, var(--yellow) 58%, var(--border));
+    box-shadow: inset 2px 0 0 var(--yellow);
+}
+.delegation-work-card.running {
+    border-color: color-mix(in srgb, var(--cyan) 48%, var(--border));
+    box-shadow: inset 2px 0 0 var(--cyan);
+}
+.delegation-work-card.failed {
+    border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+    box-shadow: inset 2px 0 0 var(--accent);
+}
+.delegation-work-card.done {
+    border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+}
+.delegation-work-card.muted {
+    opacity: 0.68;
+}
+.delegation-work-top {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--sp-s);
+    align-items: flex-start;
+}
+.delegation-work-top b,
+.delegation-work-top code {
+    font-family: var(--font-mono);
+}
+.delegation-work-top span,
+.delegation-work-meta span {
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+}
+.delegation-work-card p {
+    color: var(--text);
+    font-size: var(--fs-s);
+    line-height: 1.45;
+    max-height: 76px;
+    overflow: auto;
+    white-space: pre-wrap;
+}
+.delegation-work-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.delegation-work-meta span {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    padding: 2px 5px;
+}
+.delegation-stream-details {
+    border: 1px solid var(--border);
+    padding: var(--sp-xs);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    color: var(--t2);
+}
+.delegation-stream-details summary {
+    cursor: pointer;
+    color: var(--cyan);
+}
+.delegation-stream-details div {
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr);
+    gap: var(--sp-xs);
+    border-top: 1px dashed var(--border);
+    padding-top: 3px;
+    margin-top: 3px;
+}
+.delegation-work-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+}
+.delegation-work-actions button {
+    border: 1px solid var(--border);
+    background: var(--sf);
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-s);
+    padding: 4px 8px;
+    cursor: pointer;
+}
+.delegation-work-actions button.primary {
+    border-color: var(--cyan);
+    color: var(--cyan);
+}
+.delegation-work-actions button:hover {
+    border-color: var(--text);
+    color: var(--text);
+}
 .compact-grid {
     grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
 }

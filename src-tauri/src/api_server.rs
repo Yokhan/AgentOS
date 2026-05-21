@@ -334,14 +334,7 @@ async fn get_permissions(AxState(state): AxState<Arc<AppState>>) -> impl IntoRes
 }
 
 async fn get_delegations(AxState(state): AxState<Arc<AppState>>) -> impl IntoResponse {
-    let delegations = match state.delegations.lock() {
-        Ok(d) => d
-            .values()
-            .filter(|d| d.status == crate::commands::status::DelegationStatus::Pending)
-            .map(|d| serde_json::to_value(d).unwrap_or_default())
-            .collect::<Vec<_>>(),
-        Err(_) => Vec::new(),
-    };
+    let delegations = crate::commands::delegation::delegations_snapshot(&state);
     Json(json!({"delegations": delegations}))
 }
 
