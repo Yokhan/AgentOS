@@ -701,6 +701,37 @@ function appendPaFeedbackTo(prev, type, text, command = "") {
   });
 }
 
+function paFeedbackNoticeText(m) {
+  const type = m.pa_type || "pa_result";
+  const label =
+    type === "warning"
+      ? "AgentOS warning"
+      : type === "pa_status"
+        ? "AgentOS status"
+        : "AgentOS result";
+  const command = m.pa_command ? `: ${m.pa_command}` : "";
+  return `${label}${command}\n\n${m.msg || ""}`.trim();
+}
+
+function appendOrShowPaFeedback(messages, m) {
+  const prev = messages[messages.length - 1];
+  if (prev && prev.role === "assistant") {
+    appendPaFeedbackTo(
+      prev,
+      m.pa_type || "pa_result",
+      m.msg || "",
+      m.pa_command || "",
+    );
+    return;
+  }
+  messages.push({
+    ...m,
+    role: "system",
+    kind: "pa_feedback_notice",
+    msg: paFeedbackNoticeText(m),
+  });
+}
+
 async function loadChat(p) {
   const chatProjectKey = normalizeProjectKey(p || "_orchestrator");
   const activeProjectKey = normalizeProjectKey(currentProject.value || "");
@@ -746,16 +777,7 @@ async function loadChat(p) {
     const msgs = [];
     for (const m of rawMsgs) {
       if (m.kind === "pa_feedback") {
-        const prev = msgs[msgs.length - 1];
-        if (prev && prev.role === "assistant") {
-          appendPaFeedbackTo(
-            prev,
-            m.pa_type || "pa_result",
-            m.msg || "",
-            m.pa_command || "",
-          );
-          continue;
-        }
+        appendOrShowPaFeedback(msgs, m);
         continue;
       }
       if (m.role === "system") {
@@ -904,16 +926,7 @@ async function loadOlderChat() {
     const older = [];
     for (const m of rawMsgs) {
       if (m.kind === "pa_feedback") {
-        const prev = older[older.length - 1];
-        if (prev && prev.role === "assistant") {
-          appendPaFeedbackTo(
-            prev,
-            m.pa_type || "pa_result",
-            m.msg || "",
-            m.pa_command || "",
-          );
-          continue;
-        }
+        appendOrShowPaFeedback(older, m);
         continue;
       }
       if (m.role === "system") {

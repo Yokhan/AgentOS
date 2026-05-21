@@ -191,13 +191,25 @@ fn append_pa_notification(state: &AppState, event_type: &str, text: &str, comman
 
 fn append_pa_feedback(
     state: &AppState,
-    _chat_file: &Path,
+    chat_file: &Path,
     stream_buf: &Path,
     event_type: &str,
     text: &str,
     command: Option<&str>,
     label: &str,
 ) {
+    crate::commands::jsonl::append_jsonl_logged(
+        chat_file,
+        &json!({
+            "ts": state.now_iso(),
+            "role": "system",
+            "kind": "pa_feedback",
+            "pa_type": event_type,
+            "pa_command": command,
+            "msg": text
+        }),
+        label,
+    );
     append_stream_event(
         stream_buf,
         json!({"type": event_type, "text": text, "command": command}),

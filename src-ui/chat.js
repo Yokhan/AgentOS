@@ -4974,6 +4974,13 @@ function isRoutineSystemTraceMessage(text) {
     .replace(/\s+/g, " ")
     .trim();
   if (!t) return false;
+  if (
+    /warning|error|failed|permission|needs user|approve|confirm|blocked|not parsed|denied/i.test(
+      t,
+    )
+  ) {
+    return false;
+  }
   return [
     /^auto-continuing after \d+ agentos actions?/i,
     /^waiting coordinator:/i,
@@ -5329,7 +5336,8 @@ function ChatMsg({ m, compactPaTrace = false }) {
         <em>${ft(m.ts)}</em>
       </div>`;
     }
-    if (isRoutineSystemTraceMessage(m.msg)) return null;
+    if (m.kind !== "pa_feedback_notice" && isRoutineSystemTraceMessage(m.msg))
+      return null;
     const isSuccess =
       (m.msg || "").includes("✓") || (m.msg || "").includes("complete");
     const isFail =

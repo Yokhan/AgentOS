@@ -12,7 +12,8 @@ const checks = [
       chat.includes("function isRoutineSystemTraceMessage") &&
       chat.includes("auto-continuing after") &&
       chat.includes("waiting coordinator:") &&
-      chat.includes("if (isRoutineSystemTraceMessage(m.msg)) return null"),
+      chat.includes("isRoutineSystemTraceMessage(m.msg)") &&
+      chat.includes('m.kind !== "pa_feedback_notice"'),
   },
   {
     name: "routine trace helper is exported for tests",
