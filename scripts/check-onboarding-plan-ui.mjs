@@ -1,9 +1,18 @@
 import fs from "node:fs";
 
 const views = fs.readFileSync("src-ui/views.js", "utf8");
-const chatParse = fs.readFileSync("src-tauri/src/commands/chat_parse.rs", "utf8");
-const paCommands = fs.readFileSync("src-tauri/src/commands/pa_commands.rs", "utf8");
-const paOps = fs.readFileSync("src-tauri/src/commands/pa_commands_ops.rs", "utf8");
+const chatParse = fs.readFileSync(
+  "src-tauri/src/commands/chat_parse.rs",
+  "utf8",
+);
+const paCommands = fs.readFileSync(
+  "src-tauri/src/commands/pa_commands.rs",
+  "utf8",
+);
+const paOps = fs.readFileSync(
+  "src-tauri/src/commands/pa_commands_ops.rs",
+  "utf8",
+);
 const onboarding = fs.readFileSync(
   "src-tauri/src/commands/project_onboarding.rs",
   "utf8",
@@ -14,11 +23,12 @@ const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
 
 const checks = [
   {
-    name: "focus screen exposes onboarding wave shortcut",
+    name: "focus screen exposes natural-language onboarding wave shortcut",
     ok:
       views.includes("prepare onboarding wave") &&
-      views.includes("[PROJECT_ONBOARD_PLAN:Other:balanced:5]") &&
-      views.includes("activeFilter.value = \"unmanaged\""),
+      views.includes("Подключи проекты к AgentOS безопасной волной") &&
+      views.includes("Не проси меня писать PA-теги руками") &&
+      views.includes('activeFilter.value = "unmanaged"'),
   },
   {
     name: "natural language routing recommends safe onboarding plan",

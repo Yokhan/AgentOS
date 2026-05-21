@@ -1,4 +1,5 @@
 use crate::state::AppState;
+use serde_json::{json, Value};
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
@@ -123,4 +124,47 @@ pub async fn check_and_install_updates<R: Runtime>(app: &AppHandle<R>) -> Result
         "Restarting to finish update.",
     );
     app.restart()
+}
+
+#[tauri::command]
+pub async fn check_app_update(app: tauri::AppHandle) -> Result<Value, String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    crate::log_info!(
+        "[updater] manual check requested (timeout={}s)",
+        UPDATE_CHECK_TIMEOUT_SECS
+    );
+    let update = tokio::time::timeout(
+        Duration::from_secs(UPDATE_CHECK_TIMEOUT_SECS),
+        updater.check(),
+    )
+    .await
+    .map_err(|_| format!("update check timed out after {}s", UPDATE_CHECK_TIMEOUT_SECS))?
+    .map_err(|e| e.to_string())?;
+
+    let Some(update) = update else {
+        crate::log_info!("[updater] manual check: no update available");
+        return Ok(json!({
+            "status": "current",
+            "message": "Agent OS is up to date",
+        }));
+    };
+
+    crate::log_info!(
+        "[updater] manual check found update: current={} latest={}",
+        update.current_version,
+        update.version
+    );
+    Ok(json!({
+        "status": "available",
+        "current_version": update.current_version.to_string(),
+        "version": update.version.to_string(),
+        "message": format!("Agent OS {} is available", update.version),
+    }))
+}
+
+#[tauri::command]
+pub async fn install_app_update(app: tauri::AppHandle) -> Result<Value, String> {
+    crate::log_info!("[updater] manual install requested");
+    check_and_install_updates(&app).await?;
+    Ok(json!({"status": "ok"}))
 }

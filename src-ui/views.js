@@ -794,7 +794,7 @@ function WorkbenchFocus({ all }) {
           onClick=${() => {
             activeFilter.value = "unmanaged";
             composerDraftText.value =
-              "[PROJECT_ONBOARD_PLAN:Other:balanced:5]\nСоставь безопасную волну подключения и восстановления проектов. Сначала metadata dry-run, затем canary template sync только на чистых проектах. Верни точные следующие команды и блокеры.";
+              "Подключи проекты к AgentOS безопасной волной. Сначала составь read-only план, потом предложи metadata dry-run и canary template sync только на чистых проектах. Не проси меня писать PA-теги руками: сам выбери нужные команды и верни блокеры понятным списком.";
           }}
         >
           prepare onboarding wave

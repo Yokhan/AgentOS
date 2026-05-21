@@ -30,5 +30,6 @@ hand; it should explain the action in chat and emit the matching PA command itse
 ## UI Entry Point
 
 The Workbench focus screen has a `prepare onboarding wave` action. It switches the
-project filter to unmanaged projects and drafts `[PROJECT_ONBOARD_PLAN:Other:balanced:5]`
-with the instruction to return commands and blockers.
+project filter to unmanaged projects and drafts a natural-language request to the
+orchestrator. The user should not type PA command tags manually; the orchestrator
+should explain the action and emit `[PROJECT_ONBOARD_PLAN:Other:balanced:5]` itself.

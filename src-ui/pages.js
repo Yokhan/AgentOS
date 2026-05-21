@@ -22,6 +22,7 @@ import {
   chatCollabMode,
   activeRoomTab,
   activeScope,
+  appInfo,
   showToast,
 } from "/store.js";
 import {
@@ -64,6 +65,11 @@ import {
 function SettingsPage() {
   const pd = permData.value;
   const a = agents.value;
+  const [updateState, setUpdateState] = useState({
+    status: "idle",
+    message: "Not checked in this session",
+    checkedAt: "",
+  });
   const ps = pd?.provider_status || {};
   const prov = ps.providers || {};
   const profCount = (k) => pd?.profiles?.[k]?.permissions?.allow?.length || 0;
@@ -212,6 +218,66 @@ function SettingsPage() {
   const providerPolicyText = claudeEnabled
     ? "Claude can be selected, but Codex remains available for every role."
     : "Claude is disabled globally. Any Claude route resolves to Codex before execution.";
+  const checkUpdatesNow = async () => {
+    if (!__IS_TAURI) {
+      setUpdateState({
+        status: "error",
+        message: "Updater is available only in the desktop app",
+        checkedAt: new Date().toLocaleTimeString(),
+      });
+      return;
+    }
+    setUpdateState({
+      status: "checking",
+      message: "Checking GitHub updater manifest...",
+      checkedAt: new Date().toLocaleTimeString(),
+    });
+    try {
+      const res = await __invoke("check_app_update");
+      setUpdateState({
+        status: res?.status || "unknown",
+        message: res?.message || "Update check finished",
+        version: res?.version || "",
+        currentVersion: res?.current_version || appInfo.value?.version || "",
+        checkedAt: new Date().toLocaleTimeString(),
+      });
+      showToast(res?.message || "Update check finished", "info");
+    } catch (e) {
+      setUpdateState({
+        status: "error",
+        message: String(e),
+        checkedAt: new Date().toLocaleTimeString(),
+      });
+      showToast("Update check failed: " + e, "error", 8000);
+    }
+  };
+  const installUpdateNow = async () => {
+    setUpdateState({
+      status: "installing",
+      message: "Downloading and installing update. AgentOS will restart.",
+      checkedAt: new Date().toLocaleTimeString(),
+    });
+    try {
+      await __invoke("install_app_update");
+    } catch (e) {
+      setUpdateState({
+        status: "error",
+        message: String(e),
+        checkedAt: new Date().toLocaleTimeString(),
+      });
+      showToast("Update install failed: " + e, "error", 8000);
+    }
+  };
+  const updateBusy =
+    updateState.status === "checking" || updateState.status === "installing";
+  const updateColor =
+    updateState.status === "available"
+      ? "var(--yellow)"
+      : updateState.status === "error"
+        ? "var(--accent)"
+        : updateState.status === "current"
+          ? "var(--green)"
+          : "var(--t2)";
   return html`<div class="content">
     <div
       class="back"
@@ -280,6 +346,49 @@ function SettingsPage() {
           >
             Normal chat stays primary. Duo mode auto-creates or reuses a hidden
             shared thread for Claude and Codex.
+          </div>
+          <div
+            style="border:1px solid var(--border);background:var(--bg-soft);padding:var(--sp-s);display:flex;justify-content:space-between;gap:var(--sp-s);align-items:flex-start;flex-wrap:wrap"
+          >
+            <div style="min-width:220px;flex:1">
+              <div
+                style="font-family:var(--font-mono);font-size:var(--fs-s);color:var(--t3);text-transform:uppercase;letter-spacing:1px"
+              >
+                application update
+              </div>
+              <div style="font-size:var(--fs-s);color:var(--t2);margin-top:4px">
+                installed:
+                <code>${appInfo.value?.version || "unknown"}</code>
+                ${updateState.checkedAt
+                  ? html` / checked ${updateState.checkedAt}`
+                  : null}
+              </div>
+              <div
+                style="font-size:var(--fs-s);color:${updateColor};margin-top:4px;line-height:1.4"
+              >
+                ${updateState.message}
+              </div>
+            </div>
+            <div style="display:flex;gap:var(--sp-xs);flex-wrap:wrap">
+              <button
+                class="action-btn"
+                disabled=${updateBusy}
+                onClick=${checkUpdatesNow}
+              >
+                ${updateState.status === "checking"
+                  ? "checking..."
+                  : "check now"}
+              </button>
+              ${updateState.status === "available"
+                ? html`<button
+                    class="action-btn"
+                    disabled=${updateBusy}
+                    onClick=${installUpdateNow}
+                  >
+                    install & restart
+                  </button>`
+                : null}
+            </div>
           </div>
         </div>
       </div>
