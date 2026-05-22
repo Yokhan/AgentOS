@@ -140,7 +140,7 @@ window.fetch = function (url, opts = {}) {
   if (path === "/api/permissions" && method === "POST") {
     return __invoke("set_permission", body).then(__fakeResponse);
   }
-  if (path === "/api/delegations" && method === "POST") {
+  if (path === "/api/delegations" && (method === "GET" || method === "POST")) {
     return __invoke("get_delegations", {}).then(__fakeResponse);
   }
 

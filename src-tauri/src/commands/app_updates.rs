@@ -138,7 +138,12 @@ pub async fn check_app_update(app: tauri::AppHandle) -> Result<Value, String> {
         updater.check(),
     )
     .await
-    .map_err(|_| format!("update check timed out after {}s", UPDATE_CHECK_TIMEOUT_SECS))?
+    .map_err(|_| {
+        format!(
+            "update check timed out after {}s",
+            UPDATE_CHECK_TIMEOUT_SECS
+        )
+    })?
     .map_err(|e| e.to_string())?;
 
     let Some(update) = update else {

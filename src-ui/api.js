@@ -171,6 +171,7 @@ const ACTIVE_DELEGATION_STATUSES = new Set([
   "deciding",
   "verifying",
 ]);
+const DELEGATION_LOCAL_HINT_TTL_MS = 10 * 60 * 1000;
 
 function extractDelegationTags(text) {
   const out = [];
@@ -199,21 +200,29 @@ function mergeDelegationItems(
   items = items || [];
   const activeIds = new Set(items.map((item) => item?.id).filter(Boolean));
   const next = {};
-  if (!replace) {
-    for (const [id, existing] of Object.entries(delegations.value || {})) {
-      const status = existing?.status || "";
+  const now = Date.now();
+  for (const [id, existing] of Object.entries(delegations.value || {})) {
+    const status = String(existing?.status || "");
+    if (replace) {
       if (
-        !pruneActive ||
-        !ACTIVE_DELEGATION_STATUSES.has(status) ||
-        activeIds.has(id)
+        !activeIds.has(id) &&
+        shouldPreserveMissingDelegation(existing, now)
       ) {
         next[id] = existing;
       }
+      continue;
+    }
+    if (
+      !pruneActive ||
+      !ACTIVE_DELEGATION_STATUSES.has(status) ||
+      activeIds.has(id)
+    ) {
+      next[id] = existing;
     }
   }
   for (const item of items) {
     if (!item?.id) continue;
-    next[item.id] = {
+    const merged = {
       ...(next[item.id] || {}),
       ...item,
       id: item.id,
@@ -222,13 +231,38 @@ function mergeDelegationItems(
       task: item.task || next[item.id]?.task,
       ts: item.ts || next[item.id]?.ts,
     };
+    if (replace && !item._localHintAt) {
+      delete merged._localHintAt;
+      delete merged._source;
+    }
+    next[item.id] = merged;
   }
   delegations.value = next;
 }
 
+function markLocalDelegationHint(item, source = "chat") {
+  return {
+    ...item,
+    _source: source,
+    _localHintAt: item?._localHintAt || Date.now(),
+  };
+}
+
+function shouldPreserveMissingDelegation(existing, now = Date.now()) {
+  const hintAt = Number(existing?._localHintAt || 0);
+  if (!hintAt) return false;
+  if (now - hintAt > DELEGATION_LOCAL_HINT_TTL_MS) return false;
+  const status = String(existing?.status || "").toLowerCase();
+  return (
+    ACTIVE_DELEGATION_STATUSES.has(status) ||
+    ["done", "failed", "rejected", "cancelled", ""].includes(status)
+  );
+}
+
 async function loadDelegations() {
   try {
-    const r = await fetch("/api/delegations", { method: "POST" });
+    const r = await fetch("/api/delegations");
+    if (!r.ok) throw new Error(`delegations ${r.status}`);
     const d = await r.json();
     const items = (d.delegations || []).map((item) => ({
       ...item,
@@ -855,20 +889,24 @@ async function loadChat(p) {
           : Number(d.next_before),
       hasMore: !!d.has_more,
     };
-    const newDel = { ...delegations.value };
+    const chatDelegationHints = [];
     for (const m of msgs) {
       const dms = extractDelegationTags(m.msg || "");
       for (const dm of dms) {
-        if (!newDel[dm.id]) {
-          newDel[dm.id] = {
-            project: dm.project,
-            status: m.msg.includes("✓") ? "done" : "pending",
-          };
-          if (dm.status) newDel[dm.id].status = dm.status;
+        if (!delegations.value?.[dm.id]) {
+          chatDelegationHints.push(
+            markLocalDelegationHint({
+              id: dm.id,
+              project: dm.project,
+              status: dm.status || (m.msg.includes("✓") ? "done" : "pending"),
+            }),
+          );
         }
       }
     }
-    delegations.value = newDel;
+    if (chatDelegationHints.length) {
+      mergeDelegationItems(chatDelegationHints);
+    }
     await loadDelegations();
   } catch (e) {
     if (myId === _chatLoadId) {
@@ -2204,12 +2242,15 @@ async function sendMessage(msg) {
                   task: evt.task,
                 });
                 mergeDelegationItems([
-                  {
-                    id: evt.id,
-                    project: evt.project,
-                    status: "pending",
-                    task: evt.task,
-                  },
+                  markLocalDelegationHint(
+                    {
+                      id: evt.id,
+                      project: evt.project,
+                      status: "pending",
+                      task: evt.task,
+                    },
+                    "stream",
+                  ),
                 ]);
                 loadDelegations().catch(() => {});
                 markChainDirty();
@@ -2320,11 +2361,18 @@ async function sendMessage(msg) {
     isStreaming.value = false;
     const dms = extractDelegationTags(full);
     if (dms.length) {
-      const nd = { ...delegations.value };
-      for (const dm of dms) {
-        nd[dm.id] = { project: dm.project, status: dm.status || "pending" };
-      }
-      delegations.value = nd;
+      mergeDelegationItems(
+        dms.map((dm) =>
+          markLocalDelegationHint(
+            {
+              id: dm.id,
+              project: dm.project,
+              status: dm.status || "pending",
+            },
+            "completion",
+          ),
+        ),
+      );
     }
     beep();
     // Desktop notification on completion (if window not focused)

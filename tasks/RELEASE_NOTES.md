@@ -1,3 +1,10 @@
+# Agent OS 0.3.37
+
+- Fixed delegation cards disappearing from chat and the Delegations workspace when the UI saw a new delegation before the backend snapshot caught up.
+- Changed delegation snapshot loading to the canonical GET route while keeping the desktop bridge backward-compatible with the previous POST call.
+- Added recent archived delegations to the backend snapshot so completed/failed delegation rows remain visible after cleanup.
+- Added a regression gate for delegation state stability and a Rust snapshot test covering active plus archived delegation visibility.
+
 # Agent OS 0.3.36
 
 - Added persistent AgentOS feedback in chat history so command results, blockers, and orchestration diagnostics do not disappear after refresh or route changes.

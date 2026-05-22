@@ -1,6 +1,6 @@
-use crate::state::AppState;
+use crate::state::{AppState, Delegation};
 use serde_json::{json, Value};
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 use tauri::State;
 
 pub fn queue_delegation_internal(state: &AppState, project: &str, task: &str) -> String {
@@ -111,6 +111,39 @@ fn cleanup_old_terminal_delegations(state: &AppState) {
     }
 }
 
+fn delegation_snapshot_value(delegation: &Delegation, archived: bool) -> Value {
+    let is_terminal = delegation.status.is_terminal();
+    let mut value = serde_json::to_value(delegation).unwrap_or_default();
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert("terminal".to_string(), json!(is_terminal));
+        obj.insert("archived".to_string(), json!(archived));
+    }
+    value
+}
+
+fn read_recent_archived_delegations(
+    state: &AppState,
+    seen: &mut HashSet<String>,
+    limit: usize,
+) -> Vec<Value> {
+    let path = state.root.join("tasks").join(".delegation-archive.jsonl");
+    let content = std::fs::read_to_string(path).unwrap_or_default();
+    let mut values = Vec::new();
+    for line in content.lines().rev() {
+        let Ok(delegation) = serde_json::from_str::<Delegation>(line) else {
+            continue;
+        };
+        if !seen.insert(delegation.id.clone()) {
+            continue;
+        }
+        values.push(delegation_snapshot_value(&delegation, true));
+        if values.len() >= limit {
+            break;
+        }
+    }
+    values
+}
+
 pub fn delegations_snapshot(state: &AppState) -> Vec<Value> {
     let delegations = match state.delegations.lock() {
         Ok(d) => d.values().cloned().collect::<Vec<_>>(),
@@ -119,18 +152,18 @@ pub fn delegations_snapshot(state: &AppState) -> Vec<Value> {
 
     let mut active = Vec::new();
     let mut terminal = Vec::new();
+    let mut seen = HashSet::new();
     for delegation in delegations {
+        seen.insert(delegation.id.clone());
         let is_terminal = delegation.status.is_terminal();
-        let mut value = serde_json::to_value(&delegation).unwrap_or_default();
-        if let Some(obj) = value.as_object_mut() {
-            obj.insert("terminal".to_string(), json!(is_terminal));
-        }
+        let value = delegation_snapshot_value(&delegation, false);
         if is_terminal {
             terminal.push(value);
         } else {
             active.push(value);
         }
     }
+    terminal.extend(read_recent_archived_delegations(state, &mut seen, 50));
     terminal.sort_by(|a, b| {
         b.get("started_at")
             .or_else(|| b.get("ts"))
@@ -907,4 +940,86 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
         "response": final_response,
         "gate_result": gate_result,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::jsonl::append_jsonl_logged;
+    use crate::commands::status::DelegationStatus;
+    use std::path::PathBuf;
+
+    fn test_root(name: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "agentos-delegations-snapshot-test-{}-{}",
+            name,
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(path.join("tasks")).expect("create temp tasks");
+        path
+    }
+
+    fn delegation(id: &str, status: DelegationStatus) -> Delegation {
+        Delegation {
+            id: id.to_string(),
+            project: "HealthTracker".to_string(),
+            task: "Run health check".to_string(),
+            ts: "2026-05-22T08:00:00Z".to_string(),
+            started_at: None,
+            status,
+            response: None,
+            retries: 0,
+            plan_id: None,
+            plan_step: None,
+            escalation_info: None,
+            strategy_id: None,
+            strategy_step_id: None,
+            room_session_id: None,
+            project_session_id: None,
+            work_item_id: None,
+            executor_provider: None,
+            reviewer_provider: None,
+            git_diff: None,
+            usage: None,
+            scheduled_at: None,
+            batch_id: None,
+            priority: None,
+            timeout_secs: None,
+            gate_result: None,
+            review_verdict: None,
+        }
+    }
+
+    #[test]
+    fn snapshot_keeps_active_and_recent_archived_delegations() {
+        let root = test_root("active-archive");
+        let state = AppState::new(root.clone());
+        state.delegations.lock().expect("delegations").insert(
+            "active-1".to_string(),
+            delegation("active-1", DelegationStatus::Pending),
+        );
+        let mut archived = delegation("archived-1", DelegationStatus::Failed);
+        archived.project = "RABproject".to_string();
+        archived.ts = "2026-05-22T09:00:00Z".to_string();
+        append_jsonl_logged(
+            &root.join("tasks").join(".delegation-archive.jsonl"),
+            &serde_json::to_value(&archived).expect("archive json"),
+            "test archive delegation",
+        );
+
+        let snapshot = delegations_snapshot(&state);
+        assert!(snapshot.iter().any(|row| {
+            row.get("id").and_then(|v| v.as_str()) == Some("active-1")
+                && row.get("archived").and_then(|v| v.as_bool()) == Some(false)
+        }));
+        assert!(snapshot.iter().any(|row| {
+            row.get("id").and_then(|v| v.as_str()) == Some("archived-1")
+                && row.get("archived").and_then(|v| v.as_bool()) == Some(true)
+                && row.get("terminal").and_then(|v| v.as_bool()) == Some(true)
+        }));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
 }
