@@ -19,6 +19,7 @@ const files = [
   "store.js",
   "utils.js",
   "views.js",
+  path.join("components", "chat-trace.js"),
   path.join("components", "delegations.js"),
   path.join("components", "notifications.js"),
   path.join("components", "routes.js"),

@@ -19,13 +19,16 @@ const files = [
   "run-state.js",
   "store.js",
   "utils.js",
+  path.join("components", "chat-trace.js"),
   path.join("vendor", "preact-bundle.mjs"),
 ];
 
-function rewriteImports(source) {
+function rewriteImports(source, file) {
+  const dir = path.dirname(file);
+  const prefix = dir === "." ? "./" : "../".repeat(dir.split(path.sep).length);
   return source
-    .replace(/from\s+["']\/([^"']+)["']/g, 'from "./$1"')
-    .replace(/import\s+["']\/([^"']+)["']/g, 'import "./$1"');
+    .replace(/from\s+["']\/([^"']+)["']/g, `from "${prefix}$1"`)
+    .replace(/import\s+["']\/([^"']+)["']/g, `import "${prefix}$1"`);
 }
 
 for (const file of files) {
@@ -34,7 +37,7 @@ for (const file of files) {
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.writeFileSync(
     targetPath,
-    rewriteImports(fs.readFileSync(sourcePath, "utf8")),
+    rewriteImports(fs.readFileSync(sourcePath, "utf8"), file),
   );
 }
 

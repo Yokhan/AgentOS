@@ -21,7 +21,8 @@ Date: 2026-05-22
 7. Moved delegation workspace implementation out of `views.js` into `src-ui/components/delegations.js`.
 8. Moved notification center implementation out of `views.js` into `src-ui/components/notifications.js`.
 9. Moved route decision panels and route command actions out of `views.js` into `src-ui/components/routes.js`.
-10. Added regression gates: `check-delegation-workspace-ui.mjs`, `check-notification-center-ui.mjs` and `check-ui-architecture-boundaries.mjs`.
+10. Moved chat trace rendering out of `chat.js` into `src-ui/components/chat-trace.js`: PA command runs, tool cards, thinking blocks, progress strip and routine system-noise filtering now live outside the chat monolith.
+11. Added regression gates: `check-delegation-workspace-ui.mjs`, `check-notification-center-ui.mjs` and `check-ui-architecture-boundaries.mjs`.
 
 ## Current Boundaries
 
@@ -29,12 +30,13 @@ Date: 2026-05-22
 2. `src-ui/components/delegations.js` owns delegation UX: filters, cards, actions and live stream hints.
 3. `src-ui/components/notifications.js` owns notification filters, grouped rows and clear/refresh actions.
 4. `src-ui/components/routes.js` owns route decision UI and command actions for status, retry, health and approval decisions.
-5. `chat.js` still owns too much: transcript, live map, embedded route widgets and composer. This is the next split target.
-6. `api.js` is still a broad frontend service layer. It should eventually be split by domain: chat, delegation, execution map, strategy/plans, provider settings.
+5. `src-ui/components/chat-trace.js` owns chat execution trace rendering and noise suppression.
+6. `chat.js` still owns too much: transcript, live map, embedded route widgets and composer. This is the next split target.
+7. `api.js` is still a broad frontend service layer. It should eventually be split by domain: chat, delegation, execution map, strategy/plans, provider settings.
 
 ## Remaining Debt
 
-1. Split `chat.js` into smaller modules: chat transcript, execution map, route decision widgets and composer.
+1. Split `chat.js` further into smaller modules: chat transcript, execution map and composer.
 2. Normalize all operational events into one event contract so chat, timeline, notification center and execution map do not infer semantics differently.
 3. Add visual/story smoke coverage for delegation, route decision, notification and execution map workspaces with sample pending/running/failed/done payloads.
 4. Reduce dashboard density by making the center workspace primary and keeping project navigation as a left rail, not a second dashboard.

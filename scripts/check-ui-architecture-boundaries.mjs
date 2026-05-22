@@ -3,6 +3,7 @@ import fs from "node:fs";
 const files = {
   views: "src-ui/views.js",
   chat: "src-ui/chat.js",
+  chatTrace: "src-ui/components/chat-trace.js",
   delegations: "src-ui/components/delegations.js",
   notifications: "src-ui/components/notifications.js",
   routes: "src-ui/components/routes.js",
@@ -22,6 +23,26 @@ const checks = [
   {
     name: "workspace composer stays below current size budget",
     ok: size(files.views) < 70_000,
+  },
+  {
+    name: "chat monolith stays below current size budget",
+    ok: size(files.chat) < 195_000,
+  },
+  {
+    name: "chat trace implementation is outside chat.js",
+    ok:
+      text.chat.includes("/components/chat-trace.js") &&
+      !text.chat.includes("function PaTrace") &&
+      !text.chat.includes("function ToolCard") &&
+      text.chatTrace.includes("function PaTrace") &&
+      text.chatTrace.includes("function ToolCard"),
+  },
+  {
+    name: "chat trace component does not import workspace monoliths",
+    ok:
+      !text.chatTrace.includes("/chat.js") &&
+      !text.chatTrace.includes("/views.js") &&
+      !text.chatTrace.includes("/pages.js"),
   },
   {
     name: "delegation implementation is outside views.js",

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 const chat = fs.readFileSync("src-ui/chat.js", "utf8");
+const chatTrace = fs.readFileSync("src-ui/components/chat-trace.js", "utf8");
 const views = fs.readFileSync("src-ui/views.js", "utf8");
 const css = fs.readFileSync("src-ui/styles/main.css", "utf8");
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
@@ -9,15 +10,17 @@ const checks = [
   {
     name: "routine system trace is hidden from chat transcript",
     ok:
-      chat.includes("function isRoutineSystemTraceMessage") &&
-      chat.includes("auto-continuing after") &&
-      chat.includes("waiting coordinator:") &&
+      chatTrace.includes("function isRoutineSystemTraceMessage") &&
+      chatTrace.includes("auto-continuing after") &&
+      chatTrace.includes("waiting coordinator:") &&
       chat.includes("isRoutineSystemTraceMessage(m.msg)") &&
       chat.includes('m.kind !== "pa_feedback_notice"'),
   },
   {
     name: "routine trace helper is exported for tests",
-    ok: chat.includes("isRoutineSystemTraceMessage,"),
+    ok:
+      chat.includes("isRoutineSystemTraceMessage,") &&
+      chatTrace.includes("isRoutineSystemTraceMessage,"),
   },
   {
     name: "project rail derives active plan/task context",
