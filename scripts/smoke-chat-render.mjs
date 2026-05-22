@@ -19,13 +19,18 @@ const files = [
   "store.js",
   "utils.js",
   "views.js",
+  path.join("components", "delegations.js"),
+  path.join("components", "notifications.js"),
+  path.join("components", "routes.js"),
   path.join("vendor", "preact-bundle.mjs"),
 ];
 
-function rewriteImports(source) {
+function rewriteImports(source, file) {
+  const dir = path.dirname(file);
+  const prefix = dir === "." ? "./" : "../".repeat(dir.split(path.sep).length);
   return source
-    .replace(/from\s+["']\/([^"']+)["']/g, 'from "./$1"')
-    .replace(/import\s+["']\/([^"']+)["']/g, 'import "./$1"');
+    .replace(/from\s+["']\/([^"']+)["']/g, `from "${prefix}$1"`)
+    .replace(/import\s+["']\/([^"']+)["']/g, `import "${prefix}$1"`);
 }
 
 for (const file of files) {
@@ -33,7 +38,7 @@ for (const file of files) {
   const targetPath = path.join(tempDir, file);
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   const source = fs.readFileSync(sourcePath, "utf8");
-  fs.writeFileSync(targetPath, rewriteImports(source));
+  fs.writeFileSync(targetPath, rewriteImports(source, file));
 }
 
 const fetchStub = async () => ({

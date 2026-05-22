@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 const views = fs.readFileSync("src-ui/views.js", "utf8");
+const component = fs.readFileSync("src-ui/components/delegations.js", "utf8");
 const api = fs.readFileSync("src-ui/api.js", "utf8");
 const css = fs.readFileSync("src-ui/styles/main.css", "utf8");
 const delegation = fs.readFileSync(
@@ -14,20 +15,28 @@ const checks = [
   {
     name: "workspace has first-class delegation tab",
     ok:
-      views.includes('["delegations", "Делегации"') &&
-      views.includes("function DelegationsWorkspace") &&
-      views.includes("function DelegationCard") &&
+      views.includes('["delegations"') &&
+      views.includes("DelegationsWorkspaceView") &&
+      component.includes("export function DelegationsWorkspace") &&
+      component.includes("function DelegationCard") &&
       views.includes('tab === "delegations"'),
   },
   {
     name: "delegation workspace exposes decisions and details",
     ok:
-      views.includes("approve pending") &&
-      views.includes("DELEGATE_RETRY") &&
-      views.includes("DELEGATE_STATUS") &&
-      views.includes("executor_provider") &&
-      views.includes("gate_result") &&
-      views.includes("review_verdict"),
+      component.includes("approve pending") &&
+      component.includes("DELEGATE_RETRY") &&
+      component.includes("DELEGATE_STATUS") &&
+      component.includes("executor_provider") &&
+      component.includes("gate_result") &&
+      component.includes("review_verdict"),
+  },
+  {
+    name: "views delegates implementation to component module",
+    ok:
+      !views.includes("function DelegationCard") &&
+      !views.includes("const DELEGATION_RUNNING_STATUSES") &&
+      !views.includes("function DelegationsWorkspace()"),
   },
   {
     name: "frontend preserves full delegation payload",

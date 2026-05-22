@@ -1,33 +1,41 @@
 import fs from "node:fs";
 
 const views = fs.readFileSync("src-ui/views.js", "utf8");
+const component = fs.readFileSync("src-ui/components/notifications.js", "utf8");
 const css = fs.readFileSync("src-ui/styles/main.css", "utf8");
 
 const checks = [
   {
     name: "notification center has source/severity/project filters",
     ok:
-      views.includes("severityFilter") &&
-      views.includes("sourceFilter") &&
-      views.includes("projectFilter") &&
-      views.includes("notification-filters") &&
+      component.includes("severityFilter") &&
+      component.includes("sourceFilter") &&
+      component.includes("projectFilter") &&
+      component.includes("notification-filters") &&
       css.includes(".notification-filters"),
   },
   {
     name: "notification rows expose routing context",
     ok:
-      views.includes("notificationContextLabel") &&
-      views.includes("route_id") &&
-      views.includes("delegation_id") &&
-      views.includes("run_id") &&
-      views.includes("project:"),
+      component.includes("contextLabels") &&
+      component.includes("route_id") &&
+      component.includes("delegation_id") &&
+      component.includes("run_id") &&
+      component.includes("project:"),
   },
   {
     name: "notification center filters visible data before grouping",
     ok:
-      views.includes("const visibleItems = items.filter") &&
-      views.includes("visibleItems.filter") &&
-      views.includes("reset filters"),
+      component.includes("const visibleItems = items.filter") &&
+      component.includes("visibleItems.filter") &&
+      component.includes("reset filters"),
+  },
+  {
+    name: "views delegates notification implementation to component module",
+    ok:
+      views.includes("NotificationsWorkspaceView") &&
+      !views.includes("function NotificationsWorkspace") &&
+      !views.includes("notificationContextLabel"),
   },
 ];
 
