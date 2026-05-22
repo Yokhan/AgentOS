@@ -1,3 +1,12 @@
+# Agent OS 0.3.36
+
+- Added persistent AgentOS feedback in chat history so command results, blockers, and orchestration diagnostics do not disappear after refresh or route changes.
+- Added updater controls and clearer natural onboarding prompts so installed builds expose update state and project connection guidance directly in the UI.
+- Added a first-class delegation workspace for needs-user, running, pending, failed, and completed project-agent work.
+- Split workspace UX into dedicated delegation, notification, and route-decision modules, reducing `views.js` coupling and protecting the dashboard from feature regressions.
+- Split chat trace rendering into `src-ui/components/chat-trace.js`, moving PA command runs, tool cards, thinking blocks, progress strips, diagnostic dumps, and routine noise filtering out of the chat monolith.
+- Added architecture boundary checks and updated render smoke tests so the extracted UX modules remain wired and do not regress back into the monolith.
+
 # Agent OS 0.3.35
 
 - Added explicit startup updater diagnostics so installed builds log whether update checks are scheduled, skipped, checking, downloading, or failed.
