@@ -278,39 +278,40 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// Init
-try {
-  await Promise.all([
-    loadAgents(),
-    loadSegments(),
-    loadFeed(),
-    loadActivity(),
-    loadPlan(),
-    loadQueue(),
-    checkOrch(),
-    chkConn(),
-    loadInbox(),
-    loadPlansData(),
-    loadSignals(),
-    loadNotifications(),
-    loadPerms(),
-    loadAppInfo(),
-    loadDelegations(),
-    loadExecutionMap(),
-    loadOperationSnapshot(),
-  ]);
-  syncRecoveredActiveRun();
-  await loadChat(normalizeProjectKey(currentProject.value || ""));
-} catch (e) {
-  console.error("AgentOS init failed:", e);
-  showDualAgents.value = false;
-  window.__AGENTOS_INIT_ERROR__ = e?.stack || e?.message || String(e);
-} finally {
-  isLoading.value = false;
+function startupTask(label, fn, timeoutMs = 8000) {
+  const started = performance.now();
+  const task = Promise.resolve()
+    .then(fn)
+    .then((value) => ({
+      label,
+      status: "fulfilled",
+      value,
+      durationMs: Math.round(performance.now() - started),
+    }))
+    .catch((error) => ({
+      label,
+      status: "rejected",
+      reason: error?.stack || error?.message || String(error),
+      durationMs: Math.round(performance.now() - started),
+    }));
+  let timer = null;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(
+      () =>
+        resolve({
+          label,
+          status: "timeout",
+          reason: `startup task timed out after ${timeoutMs}ms`,
+          durationMs: timeoutMs,
+        }),
+      timeoutMs,
+    );
+  });
+  return Promise.race([task, timeout]).finally(() => clearTimeout(timer));
 }
 
-// Session separator
-if (!window._sessionMarked) {
+function markSessionStarted() {
+  if (window._sessionMarked) return;
   window._sessionMarked = true;
   const sep = {
     ts: new Date().toISOString(),
@@ -321,12 +322,72 @@ if (!window._sessionMarked) {
     sideMessages.value = [...sideMessages.value, sep];
 }
 
+async function runStartupLoad() {
+  const tasks = [
+    ["loadAgents", loadAgents],
+    ["loadSegments", loadSegments],
+    ["loadFeed", loadFeed],
+    ["loadActivity", loadActivity],
+    ["loadPlan", loadPlan],
+    ["loadQueue", loadQueue],
+    ["checkOrch", checkOrch],
+    ["chkConn", chkConn],
+    ["loadInbox", loadInbox],
+    ["loadPlansData", loadPlansData],
+    ["loadSignals", loadSignals],
+    ["loadNotifications", loadNotifications],
+    ["loadPerms", loadPerms],
+    ["loadAppInfo", loadAppInfo],
+    ["loadDelegations", loadDelegations],
+    ["loadExecutionMap", loadExecutionMap, 12000],
+    ["loadOperationSnapshot", loadOperationSnapshot],
+  ];
+  try {
+    const results = await Promise.all(
+      tasks.map(([label, fn, timeout]) => startupTask(label, fn, timeout)),
+    );
+    const warnings = results.filter((r) => r.status !== "fulfilled");
+    if (warnings.length) {
+      window.__AGENTOS_INIT_WARNINGS__ = warnings;
+      console.warn("AgentOS startup partial load:", warnings);
+    }
+    syncRecoveredActiveRun();
+    const chatResult = await startupTask(
+      "loadChat",
+      () => loadChat(normalizeProjectKey(currentProject.value || "")),
+      8000,
+    );
+    if (chatResult.status !== "fulfilled") {
+      window.__AGENTOS_INIT_WARNINGS__ = [
+        ...(window.__AGENTOS_INIT_WARNINGS__ || []),
+        chatResult,
+      ];
+      console.warn("AgentOS startup chat load skipped:", chatResult);
+    }
+    markSessionStarted();
+  } catch (e) {
+    console.error("AgentOS init failed:", e);
+    showDualAgents.value = false;
+    window.__AGENTOS_INIT_ERROR__ = e?.stack || e?.message || String(e);
+  } finally {
+    isLoading.value = false;
+    startPolling();
+  }
+}
+
 // Render
 try {
   render(html`<${App} />`, document.body);
 } catch (e) {
   renderStartupError(e, "render");
 }
+
+runStartupLoad().catch((e) => {
+  console.error("AgentOS startup runner failed:", e);
+  window.__AGENTOS_INIT_ERROR__ = e?.stack || e?.message || String(e);
+  isLoading.value = false;
+  startPolling();
+});
 
 // Polling
 const _clockInterval = setInterval(() => {
@@ -335,46 +396,51 @@ const _clockInterval = setInterval(() => {
     el.textContent = d.toLocaleTimeString();
   });
 }, 1000);
-setInterval(async () => {
-  loadAgents();
-  loadActivity();
-  loadPlan();
-  loadFeed();
-  loadSignals();
-  loadNotifications();
-  loadDelegations();
-  loadExecutionMap().catch(() => {});
-  loadOperationSnapshot().catch(() => {});
-  await loadInbox();
-  if (inboxData.value.count > 0 && !inboxData.value.needs_user) {
-    const { processInbox } = await import("/api.js");
-    processInbox();
-  }
-}, 15000);
-setInterval(() => {
-  if (chatCollabMode.value === "duo" && activeDualSession.value) {
-    loadDualSession(activeDualSession.value);
-  }
-}, 3000);
 
 let _lastLiveProjectRefresh = 0;
-setInterval(() => {
-  const hasActivity = Object.keys(activities.value || {}).length > 0;
-  const hasDelegation = Object.values(delegations.value || {}).some((d) =>
-    ["pending", "scheduled", "running", "escalated", "deciding"].includes(
-      d?.status,
-    ),
-  );
-  if (!isStreaming.value && !hasActivity && !hasDelegation) return;
-  loadActivity()
-    .then(syncRecoveredActiveRun)
-    .catch(() => {});
-  const now = Date.now();
-  if (now - _lastLiveProjectRefresh > 5000) {
-    _lastLiveProjectRefresh = now;
-    loadDelegations().catch(() => {});
+let _pollingStarted = false;
+function startPolling() {
+  if (_pollingStarted) return;
+  _pollingStarted = true;
+  setInterval(async () => {
+    loadAgents();
+    loadActivity();
+    loadPlan();
+    loadFeed();
+    loadSignals();
+    loadNotifications();
+    loadDelegations();
     loadExecutionMap().catch(() => {});
     loadOperationSnapshot().catch(() => {});
-  }
-  pollDelegationStreams().catch(() => {});
-}, 1000);
+    await loadInbox();
+    if (inboxData.value.count > 0 && !inboxData.value.needs_user) {
+      const { processInbox } = await import("/api.js");
+      processInbox();
+    }
+  }, 15000);
+  setInterval(() => {
+    if (chatCollabMode.value === "duo" && activeDualSession.value) {
+      loadDualSession(activeDualSession.value);
+    }
+  }, 3000);
+  setInterval(() => {
+    const hasActivity = Object.keys(activities.value || {}).length > 0;
+    const hasDelegation = Object.values(delegations.value || {}).some((d) =>
+      ["pending", "scheduled", "running", "escalated", "deciding"].includes(
+        d?.status,
+      ),
+    );
+    if (!isStreaming.value && !hasActivity && !hasDelegation) return;
+    loadActivity()
+      .then(syncRecoveredActiveRun)
+      .catch(() => {});
+    const now = Date.now();
+    if (now - _lastLiveProjectRefresh > 5000) {
+      _lastLiveProjectRefresh = now;
+      loadDelegations().catch(() => {});
+      loadExecutionMap().catch(() => {});
+      loadOperationSnapshot().catch(() => {});
+    }
+    pollDelegationStreams().catch(() => {});
+  }, 1000);
+}

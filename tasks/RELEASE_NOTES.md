@@ -1,3 +1,10 @@
+# Agent OS 0.3.38
+
+- Fixed startup hangs where the main UI waited for heavy startup data loads before the first render.
+- The app shell now renders immediately; agents, maps, operation snapshots, delegations, and chat history load progressively with per-task startup timeouts.
+- Polling starts only after the first startup load pass settles, preventing startup from stacking duplicate map/delegation refreshes.
+- Added a release gate that prevents reintroducing top-level startup `Promise.all` before the first render.
+
 # Agent OS 0.3.37
 
 - Fixed delegation cards disappearing from chat and the Delegations workspace when the UI saw a new delegation before the backend snapshot caught up.
