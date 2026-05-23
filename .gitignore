@@ -22,6 +22,7 @@ tasks/.audit-log.jsonl
 tasks/.operations.jsonl
 tasks/.notifications.jsonl
 tasks/.signals.jsonl
+tasks/.ui-diagnostics.jsonl
 tasks/.strategies.json
 tasks/agent-os.log
 tasks/pa-memory.jsonl
