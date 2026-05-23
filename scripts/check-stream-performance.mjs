@@ -11,7 +11,8 @@ const ops = read("src-tauri/src/commands/operation_state.rs");
 const checks = [
   {
     name: "poll_stream reads from byte offset",
-    ok: poll.includes("SeekFrom::Start(safe_offset as u64)") &&
+    ok:
+      poll.includes("SeekFrom::Start(safe_offset as u64)") &&
       poll.includes("byte_offset"),
   },
   {
@@ -38,8 +39,21 @@ const checks = [
   {
     name: "live polling avoids heavy dashboard reloads while streaming",
     ok:
-      app.includes("now - _lastLiveProjectRefresh > 5000") &&
-      !/now - _lastLiveProjectRefresh > 5000[\s\S]{0,260}loadAgents/.test(app),
+      app.includes("LIVE_HEAVY_REFRESH_MS = 15000") &&
+      app.includes("now - _lastLiveProjectRefresh > LIVE_HEAVY_REFRESH_MS") &&
+      !/now - _lastLiveProjectRefresh > LIVE_HEAVY_REFRESH_MS[\s\S]{0,260}loadAgents/.test(
+        app,
+      ),
+  },
+  {
+    name: "main execution map has no component-owned polling interval",
+    ok:
+      !/function ExecutionFlowStage\(\)[\s\S]{0,1200}setInterval/.test(
+        fs.readFileSync("src-ui/views.js", "utf8"),
+      ) &&
+      fs
+        .readFileSync("src-ui/views.js", "utf8")
+        .includes("const timer = setTimeout(refresh, 500)"),
   },
   {
     name: "operation snapshots are compact",

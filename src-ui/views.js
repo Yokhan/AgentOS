@@ -853,11 +853,10 @@ function ExecutionFlowStage() {
           );
       });
     };
-    refresh();
-    const timer = setInterval(refresh, 3000);
+    const timer = setTimeout(refresh, 500);
     return () => {
       disposed = true;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
   }, []);
   const laneCount = (map?.lanes || []).length;

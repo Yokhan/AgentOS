@@ -339,8 +339,6 @@ async function runStartupLoad() {
     ["loadPerms", loadPerms],
     ["loadAppInfo", loadAppInfo],
     ["loadDelegations", loadDelegations],
-    ["loadExecutionMap", loadExecutionMap, 12000],
-    ["loadOperationSnapshot", loadOperationSnapshot],
   ];
   try {
     const results = await Promise.all(
@@ -365,6 +363,11 @@ async function runStartupLoad() {
       console.warn("AgentOS startup chat load skipped:", chatResult);
     }
     markSessionStarted();
+    setTimeout(() => {
+      Promise.allSettled([loadExecutionMap(), loadOperationSnapshot()]).catch(
+        (e) => console.warn("deferred execution state load failed:", e),
+      );
+    }, 1200);
   } catch (e) {
     console.error("AgentOS init failed:", e);
     showDualAgents.value = false;
@@ -401,6 +404,7 @@ let _lastLiveProjectRefresh = 0;
 let _pollingStarted = false;
 let _baselinePollInFlight = false;
 let _livePollInFlight = false;
+const LIVE_HEAVY_REFRESH_MS = 15000;
 function isComposerElementActive() {
   const active = document.activeElement;
   return !!(active && active.closest && active.closest(".ch-inp"));
@@ -458,7 +462,8 @@ function startPolling() {
       syncRecoveredActiveRun();
       const now = Date.now();
       const refreshHeavy =
-        !shouldDeferHeavyPolling() && now - _lastLiveProjectRefresh > 5000;
+        !shouldDeferHeavyPolling() &&
+        now - _lastLiveProjectRefresh > LIVE_HEAVY_REFRESH_MS;
       if (refreshHeavy) _lastLiveProjectRefresh = now;
       await Promise.allSettled([
         ...(shouldDeferHeavyPolling() ? [] : [pollDelegationStreams()]),

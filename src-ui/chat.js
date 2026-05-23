@@ -2982,13 +2982,6 @@ function ChatSidebar() {
   const markComposerInteraction = () => {
     window.__AGENTOS_COMPOSER_ACTIVE_UNTIL = Date.now() + 2500;
   };
-  const composerInteractionActive = () => {
-    const active = document.activeElement;
-    return !!(
-      Date.now() < Number(window.__AGENTOS_COMPOSER_ACTIVE_UNTIL || 0) ||
-      (active?.closest && active.closest(".ch-inp"))
-    );
-  };
   const clearComposerDomText = () => {
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -3363,45 +3356,10 @@ function ChatSidebar() {
     ).catch((e) => console.warn("scope load failed:", e));
   }, [duoEnabled, currentProject.value, activeDualSession.value]);
   useEffect(() => {
-    if (composerInteractionActive()) return;
-    loadOrchestrationMap(
-      currentProject.value || "",
-      activeDualSession.value || null,
-    ).catch((e) => console.warn("orchestration map load failed:", e));
-  }, [
-    currentProject.value,
-    activeDualSession.value,
-    dualBusy.value,
-    Object.keys(delegations.value || {}).length,
-    plansData.value.length,
-  ]);
-  useEffect(() => {
     loadEventContract().catch((e) =>
       console.warn("event contract load failed:", e),
     );
   }, []);
-  useEffect(() => {
-    if (composerInteractionActive()) return;
-    loadExecutionTimeline("", activeDualSession.value || null, 80).catch((e) =>
-      console.warn("execution timeline load failed:", e),
-    );
-  }, [
-    activeDualSession.value,
-    dualBusy.value,
-    activeRun.value?.status,
-    Object.keys(delegations.value || {}).length,
-  ]);
-  useEffect(() => {
-    if (composerInteractionActive()) return;
-    loadExecutionMap("", activeDualSession.value || null, 120).catch((e) =>
-      console.warn("execution map load failed:", e),
-    );
-  }, [
-    activeDualSession.value,
-    dualBusy.value,
-    activeRun.value?.status,
-    Object.keys(delegations.value || {}).length,
-  ]);
   useEffect(() => {
     if (!duoEnabled) return;
     const normalized = normalizeDuoView(activeRoomTab.value);
