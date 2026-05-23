@@ -49,6 +49,7 @@ import {
   orchestrationMap,
   activeDualSession,
   appInfo,
+  safeMode,
   showToast,
 } from "/store.js";
 import {
@@ -225,6 +226,31 @@ function Header() {
     </h1>
     <div class="r">
       ${pending ? html`<span class="badge">${pending}</span>` : ""}
+      ${safeMode.value
+        ? html`<button
+            class="hdr-active"
+            title="Safe mode disables heavy graph/live-map polling"
+            onClick=${() => {
+              safeMode.value = false;
+              showToast("Safe mode disabled", "success", 1800);
+            }}
+          >
+            safe on
+          </button>`
+        : html`<button
+            title="Enable safe mode if the UI starts freezing"
+            onClick=${() => {
+              safeMode.value = true;
+              showGraph.value = false;
+              showToast(
+                "Safe mode enabled: heavy live views disabled",
+                "warn",
+                2500,
+              );
+            }}
+          >
+            safe
+          </button>`}
       <button
         class=${showPlans.value ? "hdr-active" : ""}
         onClick=${() => {
@@ -266,6 +292,10 @@ function Header() {
       <button
         class=${isGraph ? "hdr-active" : ""}
         onClick=${() => {
+          if (safeMode.value) {
+            showToast("Graph is disabled in safe mode", "warn", 2500);
+            return;
+          }
           showGraph.value = !showGraph.value;
           showPlans.value = false;
           showStrategy.value = false;
@@ -679,6 +709,12 @@ function AnalyticsBar() {
         </div>`
       : null}
     <div style="flex:1"></div>
+    ${safeMode.value
+      ? html`<div class="metric" title="Heavy live UI polling is disabled">
+          <span>safe:</span
+          ><span class="v" style="color:var(--yellow)">on</span>
+        </div>`
+      : null}
     <div class="metric">
       <span style="color:var(--t3)">${currentSoloSelectionLabel()}</span>
     </div>
@@ -864,6 +900,33 @@ function ExecutionFlowStage() {
     map?.counts?.visual_events ??
     map?.counts?.events ??
     (map?.events || []).length;
+  if (safeMode.value) {
+    return html`<section class="main-execution-stage">
+      <div class="main-execution-head">
+        <div>
+          <div class="workbench-eyebrow">live execution flow</div>
+          <h2>Live map is paused</h2>
+          <p>
+            Safe mode is on. Chat, project list, and core commands stay
+            available; heavy graph/live-map polling is disabled.
+          </p>
+        </div>
+        <div class="main-execution-meta">
+          <button
+            onClick=${() => {
+              safeMode.value = false;
+              Promise.allSettled([
+                loadExecutionMap("", activeDualSession.value || null, 180),
+                loadOrchestrationMap("", activeDualSession.value || null),
+              ]);
+            }}
+          >
+            disable safe mode
+          </button>
+        </div>
+      </div>
+    </section>`;
+  }
   return html`<section class="main-execution-stage">
     <div class="main-execution-head">
       <div>

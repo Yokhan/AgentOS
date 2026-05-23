@@ -24,6 +24,7 @@ import {
   projectPlan,
   permData,
   inboxData,
+  safeMode,
   showToast,
 } from "/store.js";
 import {
@@ -52,9 +53,18 @@ import {
   loadExecutionMap,
   loadOperationSnapshot,
   loadAppInfo,
+  recordUiDiagnostic,
 } from "/api.js";
 import { App } from "/views.js";
 import { normalizeProjectKey, projectParam } from "/route-state.js";
+import { installUiDiagnostics, setSafeModeLocal } from "/resilience.js";
+
+installUiDiagnostics({ recordRemote: recordUiDiagnostic });
+window.__AGENTOS_SAFE_MODE__ = !!safeMode.value;
+window.__AGENTOS_SET_SAFE_MODE__ = (enabled, reload = true) => {
+  safeMode.value = !!enabled;
+  setSafeModeLocal(!!enabled, reload);
+};
 
 function escapeHtml(value) {
   return String(value || "")
@@ -92,6 +102,7 @@ function renderStartupError(error, phase = "render") {
         <button onclick="localStorage.removeItem('agentos_current_project');localStorage.setItem('agentos_active_room_tab','chat');location.reload()">Open main</button>
         <button onclick="navigator.clipboard&&navigator.clipboard.writeText(document.querySelector('#boot-report').textContent)">Copy report</button>
         <button onclick="localStorage.setItem('agentos_active_room_tab','chat');localStorage.removeItem('agentos_workspace_tab');location.reload()">Disable broken view</button>
+        <button onclick="localStorage.setItem('agentos_safe_mode','1');localStorage.setItem('agentos_active_room_tab','chat');location.reload()">Enable safe mode</button>
       </div>
       <pre style="white-space:pre-wrap;word-break:break-word;background:#0d1520;border:1px solid #223247;padding:16px;border-radius:10px;max-height:42vh;overflow:auto">${escapeHtml(stack)}</pre>
       <details style="margin-top:16px" open>
@@ -205,6 +216,10 @@ effect(() => {
   localStorage.setItem("theme", theme.value);
 });
 
+effect(() => {
+  window.__AGENTOS_SAFE_MODE__ = !!safeMode.value;
+});
+
 // Keyboard shortcuts
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && (e.key === "r" || e.key === "R")) {
@@ -272,6 +287,10 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "g" || e.key === "G") {
+    if (safeMode.value) {
+      showToast("Graph is disabled in safe mode", "warn", 2500);
+      return;
+    }
     showGraph.value = !showGraph.value;
     if (showGraph.value) loadGraph("overview");
     return;
@@ -363,11 +382,13 @@ async function runStartupLoad() {
       console.warn("AgentOS startup chat load skipped:", chatResult);
     }
     markSessionStarted();
-    setTimeout(() => {
-      Promise.allSettled([loadExecutionMap(), loadOperationSnapshot()]).catch(
-        (e) => console.warn("deferred execution state load failed:", e),
-      );
-    }, 1200);
+    if (!safeMode.value) {
+      setTimeout(() => {
+        Promise.allSettled([loadExecutionMap(), loadOperationSnapshot()]).catch(
+          (e) => console.warn("deferred execution state load failed:", e),
+        );
+      }, 1200);
+    }
   } catch (e) {
     console.error("AgentOS init failed:", e);
     showDualAgents.value = false;
@@ -422,7 +443,7 @@ function startPolling() {
     if (_baselinePollInFlight) return;
     _baselinePollInFlight = true;
     try {
-      const deferHeavy = shouldDeferHeavyPolling();
+      const deferHeavy = shouldDeferHeavyPolling() || safeMode.value;
       await Promise.allSettled([
         loadAgents(),
         loadActivity(),
@@ -461,12 +482,12 @@ function startPolling() {
       await loadActivity();
       syncRecoveredActiveRun();
       const now = Date.now();
+      const deferHeavy = shouldDeferHeavyPolling() || safeMode.value;
       const refreshHeavy =
-        !shouldDeferHeavyPolling() &&
-        now - _lastLiveProjectRefresh > LIVE_HEAVY_REFRESH_MS;
+        !deferHeavy && now - _lastLiveProjectRefresh > LIVE_HEAVY_REFRESH_MS;
       if (refreshHeavy) _lastLiveProjectRefresh = now;
       await Promise.allSettled([
-        ...(shouldDeferHeavyPolling() ? [] : [pollDelegationStreams()]),
+        ...(deferHeavy ? [] : [pollDelegationStreams()]),
         ...(refreshHeavy
           ? [loadDelegations(), loadExecutionMap(), loadOperationSnapshot()]
           : []),

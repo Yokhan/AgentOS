@@ -240,6 +240,11 @@ const codeContextBusy = signal(false);
 const codeContextError = signal("");
 const codeContextPreview = signal(null);
 const appInfo = signal({ version: "dev" });
+const safeMode = signal(localStorage.getItem("agentos_safe_mode") === "1");
+const uiDiagnostics = signal([]);
+effect(() => {
+  localStorage.setItem("agentos_safe_mode", safeMode.value ? "1" : "0");
+});
 
 // Clock interval (global, no cleanup needed for desktop app)
 setInterval(() => (clock.value = new Date().toLocaleTimeString()), 1000);
@@ -336,5 +341,7 @@ export {
   codeContextError,
   codeContextPreview,
   appInfo,
+  safeMode,
+  uiDiagnostics,
   showToast,
 };

@@ -71,6 +71,8 @@ import {
   codeContextError,
   codeContextPreview,
   appInfo,
+  safeMode,
+  uiDiagnostics,
   showToast,
 } from "/store.js";
 import { normalizeSoloSelection } from "/provider-caps.js";
@@ -108,6 +110,42 @@ function coalesceLoad(key, loader) {
     .finally(() => _coalescedLoads.delete(key));
   _coalescedLoads.set(key, promise);
   return promise;
+}
+
+function safeModeBlocksHeavyLoad(kind, fallbackValue) {
+  if (!safeMode.value) return false;
+  if (fallbackValue !== undefined) return fallbackValue;
+  return true;
+}
+
+function safeModePayload(kind, project = "") {
+  return {
+    status: "safe_mode",
+    kind,
+    project: project || currentProject.value || "_orchestrator",
+    safe_mode: true,
+    reason: "Heavy live UI loaders are disabled in safe mode.",
+  };
+}
+
+async function recordUiDiagnostic(event) {
+  const payload = {
+    ts: new Date().toISOString(),
+    ...event,
+    route: {
+      project: currentProject.value || "_orchestrator",
+      streaming: !!isStreaming.value,
+      safe_mode: !!safeMode.value,
+    },
+  };
+  uiDiagnostics.value = [...(uiDiagnostics.value || []), payload].slice(-120);
+  if (!__IS_TAURI) return { status: "ok", local: true };
+  try {
+    return await __invoke("record_ui_diagnostic", { event: payload });
+  } catch (e) {
+    console.warn("recordUiDiagnostic:", e);
+    return { status: "error", error: String(e) };
+  }
 }
 
 function trimDraftText(value) {
@@ -159,6 +197,15 @@ function compactExecutionMapSignature(map) {
 }
 
 async function loadOperationSnapshot() {
+  if (safeModeBlocksHeavyLoad("operationSnapshot")) {
+    operationSnapshot.value = operationSnapshot.value || {
+      operations: [],
+      active_count: 0,
+      safe_mode: true,
+    };
+    operationEvents.value = [];
+    return operationSnapshot.value;
+  }
   return coalesceLoad("operationSnapshot", async () => {
     if (!__IS_TAURI) {
       operationSnapshot.value = { operations: [], active_count: 0 };
@@ -1115,6 +1162,15 @@ async function loadGoals() {
 }
 async function loadGraph(level = "overview") {
   const nextLevel = level || "overview";
+  if (safeModeBlocksHeavyLoad("graph")) {
+    graphLevel.value = nextLevel;
+    graphSelected.value = null;
+    graphData.value = {
+      ...safeModePayload("graph", nextLevel),
+      error: "Graph is disabled in safe mode.",
+    };
+    return graphData.value;
+  }
   return coalesceLoad(`graph:${nextLevel}`, async () => {
     graphLevel.value = nextLevel;
     graphSelected.value = null;
@@ -1250,6 +1306,24 @@ async function loadOrchestrationMap(
   project = currentProject.value || "",
   sessionId = activeDualSession.value || null,
 ) {
+  if (safeModeBlocksHeavyLoad("orchestrationMap")) {
+    orchestrationMap.value = orchestrationMap.value || {
+      ...safeModePayload("orchestrationMap", project),
+      big_plan: null,
+      scope: activeScope.value || null,
+      project: project || "",
+      plans: [],
+      project_sessions: [],
+      work_items: [],
+      project_agent_routes: [],
+      delegations: {
+        counts: { pending: 0, running: 0, failed: 0, done: 0 },
+        items: [],
+      },
+      leases: { active: 0, items: [] },
+    };
+    return orchestrationMap.value;
+  }
   const key = `orchestrationMap:${project || ""}:${sessionId || ""}`;
   return coalesceLoad(key, async () => {
     if (!__IS_TAURI) {
@@ -1297,6 +1371,15 @@ async function loadExecutionTimeline(
   sessionId = activeDualSession.value || null,
   limit = 80,
 ) {
+  if (safeModeBlocksHeavyLoad("executionTimeline")) {
+    executionTimeline.value = executionTimeline.value || {
+      ...safeModePayload("executionTimeline", project),
+      schema_version: "agentos.event.v1",
+      counts: { items: 0, warnings: 0 },
+      items: [],
+    };
+    return executionTimeline.value;
+  }
   const key = `executionTimeline:${project || ""}:${sessionId || ""}:${limit}`;
   return coalesceLoad(key, async () => {
     if (!__IS_TAURI) {
@@ -1334,6 +1417,19 @@ async function loadExecutionMap(
   sessionId = activeDualSession.value || null,
   limit = 120,
 ) {
+  if (safeModeBlocksHeavyLoad("executionMap")) {
+    executionMap.value = executionMap.value || {
+      ...safeModePayload("executionMap", project),
+      schema_version: "agentos.execution_map.v2",
+      event_schema_version: "agentos.event.v1",
+      counts: { lanes: 0, events: 0, edges: 0, waiting: 0, blocked: 0 },
+      lanes: [],
+      events: [],
+      edges: [],
+      waiting_for_user: [],
+    };
+    return executionMap.value;
+  }
   const key = `executionMap:${project || ""}:${sessionId || ""}:${limit}`;
   return coalesceLoad(key, async () => {
     if (!__IS_TAURI) {
@@ -2981,6 +3077,7 @@ export {
   loadEventContract,
   loadOperationSnapshot,
   loadAppInfo,
+  recordUiDiagnostic,
   loadCodeContextBundle,
   generateStrategy,
   createAdhocPlanFromRoom,

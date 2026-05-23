@@ -188,6 +188,7 @@ pub fn run() {
             commands::graph::get_graph_at_commit,
             // Config
             commands::config::get_app_info,
+            commands::config::record_ui_diagnostic,
             commands::app_updates::check_app_update,
             commands::app_updates::install_app_update,
             commands::config::get_permissions,

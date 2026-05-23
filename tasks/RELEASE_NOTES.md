@@ -1,3 +1,11 @@
+# Agent OS 0.3.42
+
+- Added UI resilience diagnostics: long tasks, event-loop stalls, window errors, and unhandled rejections are captured and persisted to `tasks/.ui-diagnostics.jsonl`.
+- Added safe mode for freezing recovery: graph, live execution map, orchestration map, timeline, operation snapshot, and delegation stream polling can be disabled while chat and core project data stay usable.
+- Made heavy live loaders safe-mode aware and kept automatic polling centralized in `app.js`.
+- Added a startup-error safe-mode escape hatch and visible safe-mode controls in the header and live-map stage.
+- Documented why UI freezes were architecturally possible and added `check-ui-resilience.mjs` to prevent removing the diagnostics/safe-mode guardrails.
+
 # Agent OS 0.3.39
 
 - Fixed chat composer freezes by removing per-keystroke `ChatPanel` rerenders from the input path.

@@ -12,6 +12,34 @@ pub fn get_app_info() -> Value {
 }
 
 #[tauri::command]
+pub fn record_ui_diagnostic(state: State<Arc<AppState>>, event: Value) -> Value {
+    let kind = event
+        .get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    let severity = event
+        .get("severity")
+        .and_then(|v| v.as_str())
+        .unwrap_or("warn")
+        .to_string();
+    let tasks_dir = state.root.join("tasks");
+    let _ = std::fs::create_dir_all(&tasks_dir);
+    let path = tasks_dir.join(".ui-diagnostics.jsonl");
+    let entry = json!({
+        "ts": state.now_iso(),
+        "version": env!("CARGO_PKG_VERSION"),
+        "source": "ui",
+        "kind": kind,
+        "severity": severity,
+        "event": event,
+    });
+    super::jsonl::append_jsonl_logged(&path, &entry, "ui diagnostic");
+    crate::log_warn!("[ui] diagnostic: {} {}", severity, kind);
+    json!({"status": "ok"})
+}
+
+#[tauri::command]
 pub fn get_permissions(state: State<Arc<AppState>>) -> Value {
     permissions_snapshot(&state)
 }
