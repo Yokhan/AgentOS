@@ -399,23 +399,33 @@ const _clockInterval = setInterval(() => {
 
 let _lastLiveProjectRefresh = 0;
 let _pollingStarted = false;
+let _baselinePollInFlight = false;
+let _livePollInFlight = false;
 function startPolling() {
   if (_pollingStarted) return;
   _pollingStarted = true;
   setInterval(async () => {
-    loadAgents();
-    loadActivity();
-    loadPlan();
-    loadFeed();
-    loadSignals();
-    loadNotifications();
-    loadDelegations();
-    loadExecutionMap().catch(() => {});
-    loadOperationSnapshot().catch(() => {});
-    await loadInbox();
-    if (inboxData.value.count > 0 && !inboxData.value.needs_user) {
-      const { processInbox } = await import("/api.js");
-      processInbox();
+    if (_baselinePollInFlight) return;
+    _baselinePollInFlight = true;
+    try {
+      await Promise.allSettled([
+        loadAgents(),
+        loadActivity(),
+        loadPlan(),
+        loadFeed(),
+        loadSignals(),
+        loadNotifications(),
+        loadDelegations(),
+        loadExecutionMap(),
+        loadOperationSnapshot(),
+        loadInbox(),
+      ]);
+      if (inboxData.value.count > 0 && !inboxData.value.needs_user) {
+        const { processInbox } = await import("/api.js");
+        processInbox();
+      }
+    } finally {
+      _baselinePollInFlight = false;
     }
   }, 15000);
   setInterval(() => {
@@ -423,7 +433,8 @@ function startPolling() {
       loadDualSession(activeDualSession.value);
     }
   }, 3000);
-  setInterval(() => {
+  setInterval(async () => {
+    if (_livePollInFlight) return;
     const hasActivity = Object.keys(activities.value || {}).length > 0;
     const hasDelegation = Object.values(delegations.value || {}).some((d) =>
       ["pending", "scheduled", "running", "escalated", "deciding"].includes(
@@ -431,16 +442,21 @@ function startPolling() {
       ),
     );
     if (!isStreaming.value && !hasActivity && !hasDelegation) return;
-    loadActivity()
-      .then(syncRecoveredActiveRun)
-      .catch(() => {});
-    const now = Date.now();
-    if (now - _lastLiveProjectRefresh > 5000) {
-      _lastLiveProjectRefresh = now;
-      loadDelegations().catch(() => {});
-      loadExecutionMap().catch(() => {});
-      loadOperationSnapshot().catch(() => {});
+    _livePollInFlight = true;
+    try {
+      await loadActivity();
+      syncRecoveredActiveRun();
+      const now = Date.now();
+      const refreshHeavy = now - _lastLiveProjectRefresh > 5000;
+      if (refreshHeavy) _lastLiveProjectRefresh = now;
+      await Promise.allSettled([
+        pollDelegationStreams(),
+        ...(refreshHeavy
+          ? [loadDelegations(), loadExecutionMap(), loadOperationSnapshot()]
+          : []),
+      ]);
+    } finally {
+      _livePollInFlight = false;
     }
-    pollDelegationStreams().catch(() => {});
   }, 1000);
 }

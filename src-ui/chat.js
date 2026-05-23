@@ -2884,7 +2884,6 @@ function ChatSidebar() {
   const [viewportMode, setViewportMode] = useState("following");
   const [unreadLive, setUnreadLive] = useState(0);
   const [routeChangeNote, setRouteChangeNote] = useState("");
-  const [composerText, setComposerText] = useState("");
   const [showAllRenderedMessages, setShowAllRenderedMessages] = useState(false);
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState("");
@@ -2943,6 +2942,9 @@ function ChatSidebar() {
   const [duoComposerAction, setDuoComposerAction] = useState("ask_both");
   const [duoComposerTarget, setDuoComposerTarget] = useState("");
   const [duoAdvancedOpen, setDuoAdvancedOpen] = useState(false);
+  const composerTextRef = useRef("");
+  const composerPreviewTimer = useRef(null);
+  const [composerPreviewVersion, setComposerPreviewVersion] = useState(0);
   const participants = dualSessionData.value?.session?.participants || [];
   const duoSession = dualSessionData.value?.session || null;
   const activeOrchestratorId = duoSession?.orchestrator_participant_id || "";
@@ -2966,13 +2968,33 @@ function ChatSidebar() {
   const scopeActions = (scope.available_actions || [])
     .filter((a) => a?.id && a?.label)
     .slice(0, 3);
+  const refreshComposerPreview = () => {
+    setComposerPreviewVersion((v) => v + 1);
+  };
+  const scheduleComposerPreviewRefresh = () => {
+    clearTimeout(composerPreviewTimer.current);
+    composerPreviewTimer.current = setTimeout(refreshComposerPreview, 180);
+  };
+  const setComposerDomText = (value, { preview = false } = {}) => {
+    composerTextRef.current = value || "";
+    if (preview) refreshComposerPreview();
+  };
+  const clearComposerDomText = () => {
+    if (inputRef.current) {
+      inputRef.current.value = "";
+      inputRef.current.style.height = "36px";
+    }
+    setComposerDomText("", { preview: true });
+  };
   const insertPrompt = (text) => {
     const target = inputRef.current;
     if (!target) return;
     const current = target.value.trim();
     target.value = current ? `${current}\n${text}` : text;
-    setComposerText(target.value);
-    target.dispatchEvent(new Event("input", { bubbles: true }));
+    target.style.height = "auto";
+    target.style.height = Math.min(target.scrollHeight, 150) + "px";
+    setComposerDomText(target.value, { preview: true });
+    handleSlash(target.value);
     target.focus();
   };
   const attachContext = (item) => {
@@ -3026,7 +3048,7 @@ function ChatSidebar() {
     }
     const requestFocus = (
       focus ||
-      composerText ||
+      composerTextRef.current ||
       scope.summary ||
       "current task"
     ).trim();
@@ -3493,14 +3515,11 @@ function ChatSidebar() {
       v.startsWith("/") &&
       execSlash(v.trim())
     ) {
-      inputRef.current.value = "";
-      setComposerText("");
+      clearComposerDomText();
       return;
     }
     const msg = v.trim();
-    inputRef.current.value = "";
-    inputRef.current.style.height = "36px";
-    setComposerText("");
+    clearComposerDomText();
     inpHist.unshift(v);
     hIdx = -1;
     if (pastedImg.value) {
@@ -3597,10 +3616,12 @@ function ChatSidebar() {
     if (e.key === "ArrowUp" && !inputRef.current?.value && inpHist.length) {
       hIdx = Math.min(hIdx + 1, inpHist.length - 1);
       inputRef.current.value = inpHist[hIdx];
+      setComposerDomText(inputRef.current.value, { preview: true });
     }
     if (e.key === "ArrowDown" && hIdx >= 0) {
       hIdx--;
       inputRef.current.value = hIdx >= 0 ? inpHist[hIdx] : "";
+      setComposerDomText(inputRef.current.value, { preview: true });
     }
   };
   const onDrop = (e) => {
@@ -3744,13 +3765,14 @@ function ChatSidebar() {
   );
   const composerPreview = buildComposerPreview({
     route,
-    draft: composerText,
+    draft: composerTextRef.current,
     duoEnabled,
     duoAction: duoComposerAction,
     target: roomTarget?.label || activeOrchestrator?.label || "",
     contextCount: attachedContext.length,
     fileCount: attFiles.value.length,
   });
+  void composerPreviewVersion;
   composerPreview.contextDetail = codeContextItems.length
     ? `${codeContextItems.length} code bundle · ${contextSizeLabel(
         codeContextItems.reduce(
@@ -4021,7 +4043,7 @@ function ChatSidebar() {
                         ? contextScopeProjects.join(", ") + " code context"
                         : contextScopeProjects[0] + " code context",
                     focus:
-                      composerText ||
+                      composerTextRef.current ||
                       "Current project route, architecture risks, and safest next edit path.",
                     budget: budgetInfo.key,
                     maxChars: budgetInfo.maxChars,
@@ -4529,7 +4551,7 @@ function ChatSidebar() {
               clrDr();
               const ta = document.querySelector(".ch-inp textarea");
               if (ta) ta.value = "";
-              setComposerText("");
+              setComposerDomText("", { preview: true });
             }}
             >discard</span
           >
@@ -4646,7 +4668,8 @@ function ChatSidebar() {
         onInput=${(e) => {
           e.target.style.height = "auto";
           e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px";
-          setComposerText(e.target.value);
+          composerTextRef.current = e.target.value;
+          scheduleComposerPreviewRefresh();
           handleSlash(e.target.value);
           clearTimeout(draftT);
           draftT = setTimeout(saveDr, 2000);

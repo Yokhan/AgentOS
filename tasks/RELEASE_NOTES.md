@@ -1,3 +1,10 @@
+# Agent OS 0.3.39
+
+- Fixed chat composer freezes by removing per-keystroke `ChatPanel` rerenders from the input path.
+- Added stable signatures for delegation and activity snapshots so live polling no longer replaces unchanged reactive state every second.
+- Prevented overlapping live/baseline poll loops when backend calls are slow.
+- Added `check-chat-composer-performance.mjs` to the UI release gate.
+
 # Agent OS 0.3.38
 
 - Fixed startup hangs where the main UI waited for heavy startup data loads before the first render.

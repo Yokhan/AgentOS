@@ -96,6 +96,8 @@ async function loadAppInfo() {
 
 let _operationSnapshotSignature = "";
 let _executionMapSignature = "";
+let _activitySignature = "";
+let _delegationsSignature = "";
 
 function compactOperationSnapshotSignature(snapshot) {
   const ops = Array.isArray(snapshot?.operations) ? snapshot.operations : [];
@@ -173,6 +175,38 @@ const ACTIVE_DELEGATION_STATUSES = new Set([
 ]);
 const DELEGATION_LOCAL_HINT_TTL_MS = 10 * 60 * 1000;
 
+function compactDelegationsSignature(map) {
+  return Object.entries(map || {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([id, item]) =>
+      [
+        id,
+        item?.project || "",
+        item?.status || "",
+        item?.task || "",
+        item?.ts || "",
+        item?._source || "",
+        item?._localHintAt ? Math.floor(Number(item._localHintAt) / 5000) : "",
+      ].join("|"),
+    )
+    .join("\n");
+}
+
+function compactActivitySignature(map) {
+  return Object.entries(map || {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([project, item]) =>
+      [
+        project,
+        item?.action || "",
+        item?.detail || "",
+        item?.started || "",
+        item?.pid || "",
+      ].join("|"),
+    )
+    .join("\n");
+}
+
 function extractDelegationTags(text) {
   const out = [];
   const tagRe = /<delegation\b([^>]*)\/>/g;
@@ -237,6 +271,9 @@ function mergeDelegationItems(
     }
     next[item.id] = merged;
   }
+  const signature = compactDelegationsSignature(next);
+  if (signature === _delegationsSignature) return;
+  _delegationsSignature = signature;
   delegations.value = next;
 }
 
@@ -1794,9 +1831,14 @@ async function loadActivity() {
   try {
     const r = await fetch("/api/activity");
     const d = await r.json();
-    activities.value = d.activities || {};
+    const next = d.activities || {};
+    const signature = compactActivitySignature(next);
+    if (signature !== _activitySignature) {
+      _activitySignature = signature;
+      activities.value = next;
+    }
     // Show recovery notification if tasks were running when page loaded
-    const acts = d.activities || {};
+    const acts = next;
     const pending = Object.entries(acts);
     if (pending.length && !window._recoveryShown) {
       window._recoveryShown = true;
@@ -2836,6 +2878,7 @@ async function pollDelegationStreams() {
   );
   if (!active.length) return;
   const updated = { ...delegStreams.value };
+  let changed = false;
   for (const [id] of active) {
     try {
       const res = await __invoke("poll_delegation_stream", {
@@ -2845,12 +2888,13 @@ async function pollDelegationStreams() {
       delegStreamOffsets[id] = res?.offset ?? delegStreamOffsets[id] ?? 0;
       if ((res?.events || []).length) {
         updated[id] = summarizeDelegationStream(updated[id], res.events || []);
+        changed = true;
       }
     } catch (e) {
       console.warn("pollDelegationStreams:", id, e);
     }
   }
-  delegStreams.value = updated;
+  if (changed) delegStreams.value = updated;
 }
 
 // ===== HELPERS =====
