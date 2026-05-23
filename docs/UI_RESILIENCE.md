@@ -60,6 +60,33 @@ If the UI freezes or the startup error screen appears:
 3. Inspect `tasks/.ui-diagnostics.jsonl`.
 4. Fix the source of long tasks or event-loop lag before disabling safe mode.
 
+## How We Know What Froze
+
+Run this after a freeze or forced close:
+
+```powershell
+npm.cmd run diagnose:hang
+```
+
+The collector writes a timestamped folder under `tasks/diagnostics/` with:
+
+- `classification.json` - first-pass verdict.
+- `events-application.json` - Agent OS `AppHangB1`, WebView, WER, installer events.
+- `events-system.json` - kernel, watchdog, display, GPU, and power events.
+- `wer-index.json` - WER report folders and readable `Report.wer` heads.
+- `live-kernel-reports.json` - metadata for Windows live kernel dumps.
+- `tasks_agent-os.log.tail.txt` and other Agent OS tail logs.
+
+Classification rules:
+
+- `event_loop_lag` or `long_task` near the freeze means UI/WebView main-thread starvation is likely.
+- `AppHangB1` for `agent-os.exe` proves Windows saw Agent OS stop responding, but does not identify which layer caused it.
+- `LiveKernelEvent`, `AMD_WATCHDOG`, `WATCHDOG`, TDR, or display-driver events near the same time mean GPU/driver/OS involvement.
+- Backend logs continuing while the UI is frozen points to UI/WebView.
+- Backend logs stopping before the UI freezes points to native/backend deadlock or process death.
+
+Some WER archives require admin rights. If `wer-index.json` shows `ReportWerAccessible: false`, rerun the collector from an elevated PowerShell before deleting crash reports.
+
 ## Non-Negotiable Rule
 
 If a feature needs live refresh, it must feed the centralized polling owner or expose a manual refresh button. It must not add another component-owned polling loop.

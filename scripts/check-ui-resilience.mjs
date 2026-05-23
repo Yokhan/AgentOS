@@ -9,6 +9,7 @@ const resilience = read("src-ui/resilience.js");
 const config = read("src-tauri/src/commands/config.rs");
 const lib = read("src-tauri/src/lib.rs");
 const docs = read("docs/UI_RESILIENCE.md");
+const hangDiagnostics = read("scripts/collect-hang-diagnostics.ps1");
 const pkg = JSON.parse(read("package.json"));
 
 const checks = [
@@ -22,14 +23,16 @@ const checks = [
   {
     name: "startup installs diagnostics before polling",
     ok:
-      app.includes("installUiDiagnostics({ recordRemote: recordUiDiagnostic })") &&
-      app.indexOf("installUiDiagnostics") < app.indexOf("runStartupLoad"),
+      app.includes(
+        "installUiDiagnostics({ recordRemote: recordUiDiagnostic })",
+      ) && app.indexOf("installUiDiagnostics") < app.indexOf("runStartupLoad"),
   },
   {
     name: "safe mode state is persisted centrally",
     ok:
-      store.includes('const safeMode = signal(localStorage.getItem("agentos_safe_mode") === "1")') &&
-      store.includes("safeMode,"),
+      store.includes(
+        'const safeMode = signal(localStorage.getItem("agentos_safe_mode") === "1")',
+      ) && store.includes("safeMode,"),
   },
   {
     name: "heavy loaders are safe-mode aware",
@@ -65,6 +68,20 @@ const checks = [
       docs.includes("Why this was architecturally possible") &&
       docs.includes("Only `app.js` owns automatic polling") &&
       docs.includes("Components may request manual refresh"),
+  },
+  {
+    name: "hang diagnostics collector separates UI, apphang, and watchdog signals",
+    ok:
+      hangDiagnostics.includes("classification.json") &&
+      hangDiagnostics.includes("event_loop_lag|long_task") &&
+      hangDiagnostics.includes("LiveKernelEvent|AMD_WATCHDOG") &&
+      hangDiagnostics.includes("AppHangB1"),
+  },
+  {
+    name: "hang diagnostics are documented and runnable",
+    ok:
+      docs.includes("npm.cmd run diagnose:hang") &&
+      pkg.scripts?.["diagnose:hang"]?.includes("collect-hang-diagnostics.ps1"),
   },
   {
     name: "gate is registered in check:ui",

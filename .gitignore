@@ -29,6 +29,7 @@ tasks/pa-memory.jsonl
 tasks/goals.md
 tasks/queue.md
 tasks/attachments/
+tasks/diagnostics/
 
 # OS
 .DS_Store
