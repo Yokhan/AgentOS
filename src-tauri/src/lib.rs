@@ -1,3 +1,4 @@
+use std::net::TcpListener;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{
@@ -11,6 +12,22 @@ mod commands;
 pub mod logger;
 mod scanner;
 mod state;
+
+const SINGLE_INSTANCE_PORT: u16 = 3329;
+
+fn acquire_single_instance_guard() -> Option<TcpListener> {
+    match TcpListener::bind(("127.0.0.1", SINGLE_INSTANCE_PORT)) {
+        Ok(listener) => Some(listener),
+        Err(err) => {
+            log_error!(
+                "Agent OS is already running or single-instance guard port {} is busy: {}",
+                SINGLE_INSTANCE_PORT,
+                err
+            );
+            None
+        }
+    }
+}
 
 /// Find the project root.
 /// Priority: AGENT_OS_ROOT env → bootstrap file → walk up from exe →
@@ -96,6 +113,9 @@ pub fn run() {
     let root = project_root();
     persist_bootstrap_root(&root);
     logger::init(&root);
+    let Some(_single_instance_guard) = acquire_single_instance_guard() else {
+        return;
+    };
     log_info!(
         "Agent OS v{} starting - root: {:?}",
         env!("CARGO_PKG_VERSION"),

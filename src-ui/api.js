@@ -98,6 +98,23 @@ let _operationSnapshotSignature = "";
 let _executionMapSignature = "";
 let _activitySignature = "";
 let _delegationsSignature = "";
+const _coalescedLoads = new Map();
+const MAX_DRAFT_CHARS = 24000;
+
+function coalesceLoad(key, loader) {
+  if (_coalescedLoads.has(key)) return _coalescedLoads.get(key);
+  const promise = Promise.resolve()
+    .then(loader)
+    .finally(() => _coalescedLoads.delete(key));
+  _coalescedLoads.set(key, promise);
+  return promise;
+}
+
+function trimDraftText(value) {
+  const text = String(value || "");
+  if (text.length <= MAX_DRAFT_CHARS) return text;
+  return text.slice(-MAX_DRAFT_CHARS);
+}
 
 function compactOperationSnapshotSignature(snapshot) {
   const ops = Array.isArray(snapshot?.operations) ? snapshot.operations : [];
@@ -142,25 +159,30 @@ function compactExecutionMapSignature(map) {
 }
 
 async function loadOperationSnapshot() {
-  if (!__IS_TAURI) {
-    operationSnapshot.value = { operations: [], active_count: 0 };
-    operationEvents.value = [];
-    return operationSnapshot.value;
-  }
-  try {
-    const snapshot = await __invoke("get_operation_snapshot");
-    const next = snapshot || { operations: [], active_count: 0 };
-    const signature = compactOperationSnapshotSignature(next);
-    if (signature !== _operationSnapshotSignature || !operationSnapshot.value) {
-      _operationSnapshotSignature = signature;
-      operationSnapshot.value = next;
+  return coalesceLoad("operationSnapshot", async () => {
+    if (!__IS_TAURI) {
+      operationSnapshot.value = { operations: [], active_count: 0 };
+      operationEvents.value = [];
+      return operationSnapshot.value;
     }
-    operationEvents.value = [];
-    return operationSnapshot.value;
-  } catch (e) {
-    console.warn("loadOperationSnapshot:", e);
-    return operationSnapshot.value;
-  }
+    try {
+      const snapshot = await __invoke("get_operation_snapshot");
+      const next = snapshot || { operations: [], active_count: 0 };
+      const signature = compactOperationSnapshotSignature(next);
+      if (
+        signature !== _operationSnapshotSignature ||
+        !operationSnapshot.value
+      ) {
+        _operationSnapshotSignature = signature;
+        operationSnapshot.value = next;
+      }
+      operationEvents.value = [];
+      return operationSnapshot.value;
+    } catch (e) {
+      console.warn("loadOperationSnapshot:", e);
+      return operationSnapshot.value;
+    }
+  });
 }
 
 let recog = null;
@@ -297,22 +319,24 @@ function shouldPreserveMissingDelegation(existing, now = Date.now()) {
 }
 
 async function loadDelegations() {
-  try {
-    const r = await fetch("/api/delegations");
-    if (!r.ok) throw new Error(`delegations ${r.status}`);
-    const d = await r.json();
-    const items = (d.delegations || []).map((item) => ({
-      ...item,
-      id: item.id,
-      project: item.project,
-      status: item.status || "pending",
-      task: item.task,
-      ts: item.ts,
-    }));
-    mergeDelegationItems(items, { replace: true });
-  } catch (e) {
-    console.warn("loadDelegations:", e);
-  }
+  return coalesceLoad("delegations", async () => {
+    try {
+      const r = await fetch("/api/delegations");
+      if (!r.ok) throw new Error(`delegations ${r.status}`);
+      const d = await r.json();
+      const items = (d.delegations || []).map((item) => ({
+        ...item,
+        id: item.id,
+        project: item.project,
+        status: item.status || "pending",
+        task: item.task,
+        ts: item.ts,
+      }));
+      mergeDelegationItems(items, { replace: true });
+    } catch (e) {
+      console.warn("loadDelegations:", e);
+    }
+  });
 }
 
 function togVoice() {
@@ -382,7 +406,10 @@ let draftT = null;
 function saveDr() {
   const ta = document.querySelector(".ch-inp textarea");
   if (ta?.value?.trim()) {
-    localStorage.setItem("dr_" + (currentProject.value || "o"), ta.value);
+    localStorage.setItem(
+      "dr_" + (currentProject.value || "o"),
+      trimDraftText(ta.value),
+    );
     hasDraft.value = true;
   } else hasDraft.value = false;
 }
@@ -391,7 +418,11 @@ function loadDr() {
   if (d) {
     const ta = document.querySelector(".ch-inp textarea");
     if (ta) {
-      ta.value = d;
+      const text = trimDraftText(d);
+      if (text !== d) {
+        localStorage.setItem("dr_" + (currentProject.value || "o"), text);
+      }
+      ta.value = text;
       hasDraft.value = true;
     }
   }
@@ -1083,18 +1114,21 @@ async function loadGoals() {
   }
 }
 async function loadGraph(level = "overview") {
-  graphLevel.value = level || "overview";
-  graphSelected.value = null;
-  graphData.value = null;
-  try {
-    graphData.value =
-      level === "overview"
-        ? await __invoke("get_overview_graph")
-        : await __invoke("get_project_graph", { project: level });
-    showGraph.value = true;
-  } catch (e) {
-    graphData.value = { error: String(e) };
-  }
+  const nextLevel = level || "overview";
+  return coalesceLoad(`graph:${nextLevel}`, async () => {
+    graphLevel.value = nextLevel;
+    graphSelected.value = null;
+    graphData.value = null;
+    try {
+      graphData.value =
+        nextLevel === "overview"
+          ? await __invoke("get_overview_graph")
+          : await __invoke("get_project_graph", { project: nextLevel });
+      showGraph.value = true;
+    } catch (e) {
+      graphData.value = { error: String(e) };
+    }
+  });
 }
 async function loadSignals() {
   if (!__IS_TAURI) {
@@ -1216,43 +1250,46 @@ async function loadOrchestrationMap(
   project = currentProject.value || "",
   sessionId = activeDualSession.value || null,
 ) {
-  if (!__IS_TAURI) {
-    orchestrationMap.value = {
-      status: "ok",
-      big_plan: {
-        stage: "project_agent_routing",
-        stage_index: 6,
-        stage_total: 6,
-        label: "Project-agent routing + release hardening",
-      },
-      scope: activeScope.value || null,
-      project: project || "",
-      plans: [],
-      project_sessions: [],
-      work_items: [],
-      project_agent_routes: [],
-      delegations: {
-        counts: { pending: 0, running: 0, failed: 0, done: 0 },
-        items: [],
-      },
-      leases: { active: 0, items: [] },
-      graph_context: {
-        available: false,
+  const key = `orchestrationMap:${project || ""}:${sessionId || ""}`;
+  return coalesceLoad(key, async () => {
+    if (!__IS_TAURI) {
+      orchestrationMap.value = {
+        status: "ok",
+        big_plan: {
+          stage: "project_agent_routing",
+          stage_index: 6,
+          stage_total: 6,
+          label: "Project-agent routing + release hardening",
+        },
+        scope: activeScope.value || null,
         project: project || "",
-        reason: __IS_TAURI ? "" : "desktop command unavailable",
-      },
-    };
-    return orchestrationMap.value;
-  }
-  const res = await __invoke("get_orchestration_map", {
-    project: project || null,
-    roomSessionId: sessionId || null,
+        plans: [],
+        project_sessions: [],
+        work_items: [],
+        project_agent_routes: [],
+        delegations: {
+          counts: { pending: 0, running: 0, failed: 0, done: 0 },
+          items: [],
+        },
+        leases: { active: 0, items: [] },
+        graph_context: {
+          available: false,
+          project: project || "",
+          reason: __IS_TAURI ? "" : "desktop command unavailable",
+        },
+      };
+      return orchestrationMap.value;
+    }
+    const res = await __invoke("get_orchestration_map", {
+      project: project || null,
+      roomSessionId: sessionId || null,
+    });
+    if (res?.status === "ok") {
+      orchestrationMap.value = res;
+      return res;
+    }
+    throw new Error(res?.error || "Cannot resolve orchestration map");
   });
-  if (res?.status === "ok") {
-    orchestrationMap.value = res;
-    return res;
-  }
-  throw new Error(res?.error || "Cannot resolve orchestration map");
 }
 
 async function loadExecutionTimeline(
@@ -1260,33 +1297,36 @@ async function loadExecutionTimeline(
   sessionId = activeDualSession.value || null,
   limit = 80,
 ) {
-  if (!__IS_TAURI) {
-    executionTimeline.value = {
-      status: "ok",
-      schema_version: "agentos.event.v1",
-      project: project || "_orchestrator",
-      big_plan: {
-        stage: "project_agent_routing",
-        stage_index: 6,
-        stage_total: 6,
-        label: "Project-agent routing + release hardening",
-      },
-      contract: eventContract.value || null,
-      counts: { items: 0, warnings: 0 },
-      items: [],
-    };
-    return executionTimeline.value;
-  }
-  const res = await __invoke("get_execution_timeline", {
-    project: project || null,
-    roomSessionId: sessionId || null,
-    limit,
+  const key = `executionTimeline:${project || ""}:${sessionId || ""}:${limit}`;
+  return coalesceLoad(key, async () => {
+    if (!__IS_TAURI) {
+      executionTimeline.value = {
+        status: "ok",
+        schema_version: "agentos.event.v1",
+        project: project || "_orchestrator",
+        big_plan: {
+          stage: "project_agent_routing",
+          stage_index: 6,
+          stage_total: 6,
+          label: "Project-agent routing + release hardening",
+        },
+        contract: eventContract.value || null,
+        counts: { items: 0, warnings: 0 },
+        items: [],
+      };
+      return executionTimeline.value;
+    }
+    const res = await __invoke("get_execution_timeline", {
+      project: project || null,
+      roomSessionId: sessionId || null,
+      limit,
+    });
+    if (res?.status === "ok") {
+      executionTimeline.value = res;
+      return res;
+    }
+    throw new Error(res?.error || "Cannot load execution timeline");
   });
-  if (res?.status === "ok") {
-    executionTimeline.value = res;
-    return res;
-  }
-  throw new Error(res?.error || "Cannot load execution timeline");
 }
 
 async function loadExecutionMap(
@@ -1294,65 +1334,68 @@ async function loadExecutionMap(
   sessionId = activeDualSession.value || null,
   limit = 120,
 ) {
-  if (!__IS_TAURI) {
-    executionMap.value = {
-      status: "ok",
-      schema_version: "agentos.execution_map.v2",
-      event_schema_version: "agentos.event.v1",
-      project: project || "_orchestrator",
-      big_plan: {
-        stage: "branching_execution_map",
-        stage_index: 10,
-        stage_total: 10,
-        label: "Branching execution map + live orchestration visibility",
-      },
-      counts: { lanes: 1, events: 1, edges: 0, waiting: 0, blocked: 0 },
-      lanes: [
-        {
-          id: "orchestrator",
-          kind: "orchestrator",
-          label: "Orchestrator",
-          project: "_orchestrator",
-          status: "idle",
-          provider: "orchestrator",
-          order: 0,
+  const key = `executionMap:${project || ""}:${sessionId || ""}:${limit}`;
+  return coalesceLoad(key, async () => {
+    if (!__IS_TAURI) {
+      executionMap.value = {
+        status: "ok",
+        schema_version: "agentos.execution_map.v2",
+        event_schema_version: "agentos.event.v1",
+        project: project || "_orchestrator",
+        big_plan: {
+          stage: "branching_execution_map",
+          stage_index: 10,
+          stage_total: 10,
+          label: "Branching execution map + live orchestration visibility",
         },
-      ],
-      events: [
-        {
-          id: "evt-root",
-          lane_id: "orchestrator",
-          source: "system",
-          kind: "root",
-          status: "idle",
-          title: "Orchestrator context",
-          detail: "No recent execution events.",
-          ts: new Date().toISOString(),
-          sequence: 0,
-          event_index: 0,
-          offset_ms: 0,
-          time_label: "+0s",
-        },
-      ],
-      edges: [],
-      waiting_for_user: [],
-    };
-    return executionMap.value;
-  }
-  const res = await __invoke("get_execution_map", {
-    project: project || null,
-    roomSessionId: sessionId || null,
-    limit,
-  });
-  if (res?.status === "ok") {
-    const signature = compactExecutionMapSignature(res);
-    if (signature !== _executionMapSignature) {
-      _executionMapSignature = signature;
-      executionMap.value = res;
+        counts: { lanes: 1, events: 1, edges: 0, waiting: 0, blocked: 0 },
+        lanes: [
+          {
+            id: "orchestrator",
+            kind: "orchestrator",
+            label: "Orchestrator",
+            project: "_orchestrator",
+            status: "idle",
+            provider: "orchestrator",
+            order: 0,
+          },
+        ],
+        events: [
+          {
+            id: "evt-root",
+            lane_id: "orchestrator",
+            source: "system",
+            kind: "root",
+            status: "idle",
+            title: "Orchestrator context",
+            detail: "No recent execution events.",
+            ts: new Date().toISOString(),
+            sequence: 0,
+            event_index: 0,
+            offset_ms: 0,
+            time_label: "+0s",
+          },
+        ],
+        edges: [],
+        waiting_for_user: [],
+      };
+      return executionMap.value;
     }
-    return res;
-  }
-  throw new Error(res?.error || "Cannot load execution map");
+    const res = await __invoke("get_execution_map", {
+      project: project || null,
+      roomSessionId: sessionId || null,
+      limit,
+    });
+    if (res?.status === "ok") {
+      const signature = compactExecutionMapSignature(res);
+      if (signature !== _executionMapSignature) {
+        _executionMapSignature = signature;
+        executionMap.value = res;
+      }
+      return res;
+    }
+    throw new Error(res?.error || "Cannot load execution map");
+  });
 }
 
 async function loadEventContract() {

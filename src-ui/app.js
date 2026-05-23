@@ -401,6 +401,16 @@ let _lastLiveProjectRefresh = 0;
 let _pollingStarted = false;
 let _baselinePollInFlight = false;
 let _livePollInFlight = false;
+function isComposerElementActive() {
+  const active = document.activeElement;
+  return !!(active && active.closest && active.closest(".ch-inp"));
+}
+
+function shouldDeferHeavyPolling() {
+  const activeUntil = Number(window.__AGENTOS_COMPOSER_ACTIVE_UNTIL || 0);
+  return isComposerElementActive() || Date.now() < activeUntil;
+}
+
 function startPolling() {
   if (_pollingStarted) return;
   _pollingStarted = true;
@@ -408,6 +418,7 @@ function startPolling() {
     if (_baselinePollInFlight) return;
     _baselinePollInFlight = true;
     try {
+      const deferHeavy = shouldDeferHeavyPolling();
       await Promise.allSettled([
         loadAgents(),
         loadActivity(),
@@ -416,8 +427,7 @@ function startPolling() {
         loadSignals(),
         loadNotifications(),
         loadDelegations(),
-        loadExecutionMap(),
-        loadOperationSnapshot(),
+        ...(deferHeavy ? [] : [loadExecutionMap(), loadOperationSnapshot()]),
         loadInbox(),
       ]);
       if (inboxData.value.count > 0 && !inboxData.value.needs_user) {
@@ -447,10 +457,11 @@ function startPolling() {
       await loadActivity();
       syncRecoveredActiveRun();
       const now = Date.now();
-      const refreshHeavy = now - _lastLiveProjectRefresh > 5000;
+      const refreshHeavy =
+        !shouldDeferHeavyPolling() && now - _lastLiveProjectRefresh > 5000;
       if (refreshHeavy) _lastLiveProjectRefresh = now;
       await Promise.allSettled([
-        pollDelegationStreams(),
+        ...(shouldDeferHeavyPolling() ? [] : [pollDelegationStreams()]),
         ...(refreshHeavy
           ? [loadDelegations(), loadExecutionMap(), loadOperationSnapshot()]
           : []),

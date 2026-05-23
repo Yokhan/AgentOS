@@ -2979,6 +2979,16 @@ function ChatSidebar() {
     composerTextRef.current = value || "";
     if (preview) refreshComposerPreview();
   };
+  const markComposerInteraction = () => {
+    window.__AGENTOS_COMPOSER_ACTIVE_UNTIL = Date.now() + 2500;
+  };
+  const composerInteractionActive = () => {
+    const active = document.activeElement;
+    return !!(
+      Date.now() < Number(window.__AGENTOS_COMPOSER_ACTIVE_UNTIL || 0) ||
+      (active?.closest && active.closest(".ch-inp"))
+    );
+  };
   const clearComposerDomText = () => {
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -3353,6 +3363,7 @@ function ChatSidebar() {
     ).catch((e) => console.warn("scope load failed:", e));
   }, [duoEnabled, currentProject.value, activeDualSession.value]);
   useEffect(() => {
+    if (composerInteractionActive()) return;
     loadOrchestrationMap(
       currentProject.value || "",
       activeDualSession.value || null,
@@ -3370,6 +3381,7 @@ function ChatSidebar() {
     );
   }, []);
   useEffect(() => {
+    if (composerInteractionActive()) return;
     loadExecutionTimeline("", activeDualSession.value || null, 80).catch((e) =>
       console.warn("execution timeline load failed:", e),
     );
@@ -3380,6 +3392,7 @@ function ChatSidebar() {
     Object.keys(delegations.value || {}).length,
   ]);
   useEffect(() => {
+    if (composerInteractionActive()) return;
     loadExecutionMap("", activeDualSession.value || null, 120).catch((e) =>
       console.warn("execution map load failed:", e),
     );
@@ -4624,6 +4637,10 @@ function ChatSidebar() {
       />
       <textarea
         ref=${inputRef}
+        spellcheck="false"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
         placeholder=${isStreaming.value
           ? "waiting for response..."
           : duoWorkspaceInCanvas
@@ -4665,7 +4682,10 @@ function ChatSidebar() {
         rows="1"
         style=${isStreaming.value ? "opacity:0.5" : ""}
         onKeyDown=${onKey}
+        onPointerDown=${markComposerInteraction}
+        onFocus=${markComposerInteraction}
         onInput=${(e) => {
+          markComposerInteraction();
           e.target.style.height = "auto";
           e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px";
           composerTextRef.current = e.target.value;
