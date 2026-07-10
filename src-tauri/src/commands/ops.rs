@@ -13,6 +13,22 @@ fn resolve_template_root(root: &Path, docs_dir: &Path) -> PathBuf {
     root.to_path_buf()
 }
 
+fn parse_template_version(content: &str) -> Option<String> {
+    content.lines().find_map(|line| {
+        let (_, value) = line.split_once("Template Version:")?;
+        let version = value.trim().trim_end_matches("-->").trim();
+        (!version.is_empty()).then(|| version.to_string())
+    })
+}
+
+fn read_template_version(template_root: &Path) -> Option<String> {
+    ["AGENTS.md", "CLAUDE.md"].iter().find_map(|name| {
+        std::fs::read_to_string(template_root.join(name))
+            .ok()
+            .and_then(|content| parse_template_version(&content))
+    })
+}
+
 /// Deploy template to a project via sync-template.sh
 #[tauri::command]
 pub async fn deploy_template(
@@ -21,6 +37,7 @@ pub async fn deploy_template(
 ) -> Result<Value, String> {
     let project_dir = state.validate_project(&project).map_err(|e| e)?;
     let template_root = resolve_template_root(&state.root, &state.docs_dir);
+    let template_version = read_template_version(&template_root);
     let script = template_root.join("scripts").join("sync-template.sh");
     if !script.exists() {
         return Ok(json!({"status": "error", "error": "sync-template.sh not found"}));
@@ -41,6 +58,7 @@ pub async fn deploy_template(
                     "status": if out.status.success() { "ok" } else { "error" },
                     "project": project,
                     "template_root": template_root,
+                    "template_version": template_version,
                     "stdout": stdout,
                     "stderr": stderr,
                 })
@@ -121,6 +139,7 @@ pub async fn create_project(
     orchestrator: bool,
 ) -> Result<Value, String> {
     let template_root = resolve_template_root(&state.root, &state.docs_dir);
+    let template_version = read_template_version(&template_root);
     let setup = template_root.join("setup.sh");
     if !setup.exists() {
         return Ok(json!({"status": "error", "error": "setup.sh not found"}));
@@ -162,6 +181,7 @@ pub async fn create_project(
                     "project": name,
                     "orchestrator": orchestrator,
                     "template_root": template_root,
+                    "template_version": template_version,
                     "output": stdout,
                 })
             }
@@ -196,10 +216,11 @@ pub fn execute_deploy_inline(
     {
         Ok(out) => {
             let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let summary = super::claude_runner::safe_truncate(&s, 200);
             if out.status.success() {
-                format!("OK: {}", &s[..s.len().min(200)])
+                format!("OK: {}", summary)
             } else {
-                format!("Failed: {}", &s[..s.len().min(200)])
+                format!("Failed: {}", summary)
             }
         }
         Err(e) => format!("Error: {}", e),
@@ -350,5 +371,18 @@ pub fn add_to_queue(state: State<Arc<AppState>>, task: String) -> Value {
         }) {
         Ok(_) => json!({"status": "ok"}),
         Err(e) => json!({"status": "error", "error": e.to_string()}),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_template_version;
+
+    #[test]
+    fn parses_template_version_marker() {
+        assert_eq!(
+            parse_template_version("# Agent Instructions\n<!-- Template Version: 4.6.1 -->\n"),
+            Some("4.6.1".to_string())
+        );
     }
 }

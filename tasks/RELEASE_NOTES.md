@@ -1,3 +1,9 @@
+# Agent OS 0.3.43
+
+- Updated the canonical sibling agent template checkout to the released `agent-project-template v4.6.1` protocol.
+- Template deployment and project creation now report the exact consumed template version.
+- Made inline template-sync summaries safe for Unicode output from the updated template scripts.
+
 # Agent OS 0.3.42
 
 - Added UI resilience diagnostics: long tasks, event-loop stalls, window errors, and unhandled rejections are captured and persisted to `tasks/.ui-diagnostics.jsonl`.
