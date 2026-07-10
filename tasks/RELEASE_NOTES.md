@@ -1,8 +1,9 @@
-# Agent OS 0.3.43
+# Agent OS 0.3.44
 
 - Updated the canonical sibling agent template checkout to the released `agent-project-template v4.6.1` protocol.
 - Template deployment and project creation now report the exact consumed template version.
 - Made inline template-sync summaries safe for Unicode output from the updated template scripts.
+- Made UI architecture size gates independent of Windows CRLF checkout conversion.
 
 # Agent OS 0.3.42
 

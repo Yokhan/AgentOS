@@ -17,16 +17,17 @@ const text = Object.fromEntries(
   ]),
 );
 
-const size = (path) => fs.statSync(path).size;
+const normalizedSize = (path) =>
+  Buffer.byteLength(fs.readFileSync(path, "utf8").replace(/\r\n/g, "\n"), "utf8");
 
 const checks = [
   {
     name: "workspace composer stays below current size budget",
-    ok: size(files.views) < 70_000,
+    ok: normalizedSize(files.views) < 70_000,
   },
   {
     name: "chat monolith stays below current size budget",
-    ok: size(files.chat) < 195_000,
+    ok: normalizedSize(files.chat) < 195_000,
   },
   {
     name: "chat trace implementation is outside chat.js",
