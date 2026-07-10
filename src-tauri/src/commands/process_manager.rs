@@ -85,41 +85,38 @@ pub fn is_cancelled(state: &AppState, chat_key: &str) -> bool {
 }
 
 pub fn kill_existing(state: &AppState, chat_key: &str) -> Option<u32> {
-    if let Ok(mut pids) = state.running_pids.lock() {
-        if let Some(pid) = pids.remove(chat_key) {
-            #[cfg(target_os = "windows")]
-            {
-                let _ = super::claude_runner::silent_cmd("taskkill")
-                    .args(["/F", "/T", "/PID", &pid.to_string()])
-                    .output();
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                let _ = super::claude_runner::silent_cmd("kill")
-                    .args(["-9", &pid.to_string()])
-                    .output();
-            }
-            return Some(pid);
-        }
+    let pid = state
+        .running_pids
+        .lock()
+        .ok()
+        .and_then(|mut pids| pids.remove(chat_key));
+    if let Some(pid) = pid {
+        kill_pid_tree(pid);
     }
-    None
+    pid
 }
 
 pub fn kill_all_tracked(state: &AppState) {
-    if let Ok(mut pids) = state.running_pids.lock() {
-        for (_, pid) in pids.drain() {
-            #[cfg(target_os = "windows")]
-            {
-                let _ = super::claude_runner::silent_cmd("taskkill")
-                    .args(["/F", "/T", "/PID", &pid.to_string()])
-                    .output();
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                let _ = super::claude_runner::silent_cmd("kill")
-                    .args(["-9", &pid.to_string()])
-                    .output();
-            }
-        }
+    let pids: Vec<u32> = state
+        .running_pids
+        .lock()
+        .map(|mut tracked| tracked.drain().map(|(_, pid)| pid).collect())
+        .unwrap_or_default();
+    for pid in pids {
+        kill_pid_tree(pid);
+    }
+}
+
+fn kill_pid_tree(pid: u32) {
+    #[cfg(target_os = "windows")]
+    let result = super::claude_runner::silent_cmd("taskkill")
+        .args(["/F", "/T", "/PID", &pid.to_string()])
+        .output();
+    #[cfg(not(target_os = "windows"))]
+    let result = super::claude_runner::silent_cmd("kill")
+        .args(["-9", &pid.to_string()])
+        .output();
+    if let Err(error) = result {
+        crate::log_warn!("[process] failed to kill pid={}: {}", pid, error);
     }
 }

@@ -100,7 +100,9 @@ let _operationSnapshotSignature = "";
 let _executionMapSignature = "";
 let _activitySignature = "";
 let _delegationsSignature = "";
+let _agentsSignature = "";
 const _coalescedLoads = new Map();
+const _loadGenerations = new Map();
 const MAX_DRAFT_CHARS = 24000;
 
 function coalesceLoad(key, loader) {
@@ -110,6 +112,16 @@ function coalesceLoad(key, loader) {
     .finally(() => _coalescedLoads.delete(key));
   _coalescedLoads.set(key, promise);
   return promise;
+}
+
+function nextLoadGeneration(kind) {
+  const generation = (_loadGenerations.get(kind) || 0) + 1;
+  _loadGenerations.set(kind, generation);
+  return generation;
+}
+
+function isLatestLoad(kind, generation) {
+  return _loadGenerations.get(kind) === generation;
 }
 
 function safeModeBlocksHeavyLoad(kind, fallbackValue) {
@@ -194,6 +206,23 @@ function compactExecutionMapSignature(map) {
       .map((item) => [item.id, item.project, item.status].join("|"))
       .join(","),
   ].join("\n---\n");
+}
+
+function compactAgentsSignature(items) {
+  return (items || [])
+    .map((agent) =>
+      [
+        agent.name,
+        agent.status,
+        agent.task,
+        agent.blockers,
+        agent.uncommitted,
+        agent.behind,
+        agent.ahead,
+        agent.last_commit,
+      ].join("|"),
+    )
+    .join("\n");
 }
 
 async function loadOperationSnapshot() {
@@ -794,15 +823,23 @@ function handlePaste(e) {
   }
 }
 async function loadAgents() {
-  try {
-    const r = await fetch("/api/agents");
-    if (!r.ok) throw new Error("API error " + r.status);
-    const d = await r.json();
-    if (d.agents) agents.value = d.agents;
-    if (d.error) showToast(d.error, "error");
-  } catch (e) {
-    showToast("Cannot reach dashboard server", "error");
-  }
+  return coalesceLoad("agents", async () => {
+    try {
+      const r = await fetch("/api/agents");
+      if (!r.ok) throw new Error("API error " + r.status);
+      const d = await r.json();
+      if (d.agents) {
+        const signature = compactAgentsSignature(d.agents);
+        if (signature !== _agentsSignature) {
+          _agentsSignature = signature;
+          agents.value = d.agents;
+        }
+      }
+      if (d.error) showToast(d.error, "error");
+    } catch (e) {
+      showToast("Cannot reach dashboard server", "error");
+    }
+  });
 }
 async function checkOrch() {
   try {
@@ -1269,9 +1306,10 @@ async function loadActiveScope(
   project = currentProject.value || "",
   sessionId = activeDualSession.value || null,
 ) {
+  const generation = nextLoadGeneration("activeScope");
   const fallbackProject = project || "";
   if (!__IS_TAURI) {
-    activeScope.value = {
+    const next = {
       kind: fallbackProject ? "project" : "global",
       label: fallbackProject ? "Project" : "Global",
       title: fallbackProject || "_orchestrator",
@@ -1289,14 +1327,15 @@ async function loadActiveScope(
         ? `Duo actions apply to project: ${fallbackProject}`
         : "Duo is operating at global orchestration level.",
     };
-    return activeScope.value;
+    if (isLatestLoad("activeScope", generation)) activeScope.value = next;
+    return next;
   }
   const res = await __invoke("get_active_scope", {
     project: fallbackProject || null,
     roomSessionId: sessionId || null,
   });
   if (res?.status === "ok" && res.scope) {
-    activeScope.value = res.scope;
+    if (isLatestLoad("activeScope", generation)) activeScope.value = res.scope;
     return res.scope;
   }
   throw new Error(res?.error || "Cannot resolve active scope");
@@ -1326,8 +1365,9 @@ async function loadOrchestrationMap(
   }
   const key = `orchestrationMap:${project || ""}:${sessionId || ""}`;
   return coalesceLoad(key, async () => {
+    const generation = nextLoadGeneration("orchestrationMap");
     if (!__IS_TAURI) {
-      orchestrationMap.value = {
+      const next = {
         status: "ok",
         big_plan: {
           stage: "project_agent_routing",
@@ -1352,14 +1392,19 @@ async function loadOrchestrationMap(
           reason: __IS_TAURI ? "" : "desktop command unavailable",
         },
       };
-      return orchestrationMap.value;
+      if (isLatestLoad("orchestrationMap", generation)) {
+        orchestrationMap.value = next;
+      }
+      return next;
     }
     const res = await __invoke("get_orchestration_map", {
       project: project || null,
       roomSessionId: sessionId || null,
     });
     if (res?.status === "ok") {
-      orchestrationMap.value = res;
+      if (isLatestLoad("orchestrationMap", generation)) {
+        orchestrationMap.value = res;
+      }
       return res;
     }
     throw new Error(res?.error || "Cannot resolve orchestration map");
@@ -1382,8 +1427,9 @@ async function loadExecutionTimeline(
   }
   const key = `executionTimeline:${project || ""}:${sessionId || ""}:${limit}`;
   return coalesceLoad(key, async () => {
+    const generation = nextLoadGeneration("executionTimeline");
     if (!__IS_TAURI) {
-      executionTimeline.value = {
+      const next = {
         status: "ok",
         schema_version: "agentos.event.v1",
         project: project || "_orchestrator",
@@ -1397,7 +1443,10 @@ async function loadExecutionTimeline(
         counts: { items: 0, warnings: 0 },
         items: [],
       };
-      return executionTimeline.value;
+      if (isLatestLoad("executionTimeline", generation)) {
+        executionTimeline.value = next;
+      }
+      return next;
     }
     const res = await __invoke("get_execution_timeline", {
       project: project || null,
@@ -1405,7 +1454,9 @@ async function loadExecutionTimeline(
       limit,
     });
     if (res?.status === "ok") {
-      executionTimeline.value = res;
+      if (isLatestLoad("executionTimeline", generation)) {
+        executionTimeline.value = res;
+      }
       return res;
     }
     throw new Error(res?.error || "Cannot load execution timeline");
@@ -1432,8 +1483,9 @@ async function loadExecutionMap(
   }
   const key = `executionMap:${project || ""}:${sessionId || ""}:${limit}`;
   return coalesceLoad(key, async () => {
+    const generation = nextLoadGeneration("executionMap");
     if (!__IS_TAURI) {
-      executionMap.value = {
+      const next = {
         status: "ok",
         schema_version: "agentos.execution_map.v2",
         event_schema_version: "agentos.event.v1",
@@ -1475,7 +1527,8 @@ async function loadExecutionMap(
         edges: [],
         waiting_for_user: [],
       };
-      return executionMap.value;
+      if (isLatestLoad("executionMap", generation)) executionMap.value = next;
+      return next;
     }
     const res = await __invoke("get_execution_map", {
       project: project || null,
@@ -1484,7 +1537,7 @@ async function loadExecutionMap(
     });
     if (res?.status === "ok") {
       const signature = compactExecutionMapSignature(res);
-      if (signature !== _executionMapSignature) {
+      if (isLatestLoad("executionMap", generation) && signature !== _executionMapSignature) {
         _executionMapSignature = signature;
         executionMap.value = res;
       }

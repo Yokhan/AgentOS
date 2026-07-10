@@ -1114,7 +1114,7 @@ fn wait_with_optional_pid_tracking(
     }
 
     let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
+    let wait_thread = thread::spawn(move || {
         let _ = tx.send(child.wait_with_output());
     });
 
@@ -1122,8 +1122,9 @@ fn wait_with_optional_pid_tracking(
     let timeout = provider_timeout(state);
     let mut missing_since: Option<Instant> = None;
     let mut last_process_probe = Instant::now()
-        .checked_sub(Duration::from_secs(1))
+        .checked_sub(Duration::from_secs(5))
         .unwrap_or_else(Instant::now);
+    let mut terminated_early = false;
     let output = loop {
         match rx.recv_timeout(Duration::from_millis(250)) {
             Ok(output) => break output,
@@ -1138,12 +1139,13 @@ fn wait_with_optional_pid_tracking(
                         pid
                     );
                     kill_pid_tree(pid);
+                    terminated_early = true;
                     break Err(io::Error::new(
                         io::ErrorKind::Interrupted,
                         "provider cancelled by user",
                     ));
                 }
-                if last_process_probe.elapsed() >= Duration::from_secs(1) {
+                if last_process_probe.elapsed() >= Duration::from_secs(5) {
                     last_process_probe = Instant::now();
                     if process_exists(pid) {
                         missing_since = None;
@@ -1155,6 +1157,8 @@ fn wait_with_optional_pid_tracking(
                                 chat_key.unwrap_or("_unknown"),
                                 pid
                             );
+                            kill_pid_tree(pid);
+                            terminated_early = true;
                             break Err(io::Error::new(
                                 io::ErrorKind::BrokenPipe,
                                 "provider process exited but output pipe did not close",
@@ -1170,6 +1174,7 @@ fn wait_with_optional_pid_tracking(
                         pid
                     );
                     kill_pid_tree(pid);
+                    terminated_early = true;
                     break Err(io::Error::new(
                         io::ErrorKind::TimedOut,
                         format!("provider timed out after {} seconds", timeout.as_secs()),
@@ -1186,6 +1191,23 @@ fn wait_with_optional_pid_tracking(
     };
     if let Some(key) = chat_key {
         untrack_pid_if_match(state, key, pid);
+    }
+    let wait_thread_stopped = if terminated_early {
+        !matches!(
+            rx.recv_timeout(Duration::from_secs(5)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        )
+    } else {
+        true
+    };
+    if wait_thread_stopped {
+        let _ = wait_thread.join();
+    } else {
+        crate::log_warn!(
+            "[provider:{}] pid={} wait thread did not stop after process termination",
+            chat_key.unwrap_or("_unknown"),
+            pid
+        );
     }
     output
 }

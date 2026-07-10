@@ -3,9 +3,10 @@
 //! Rotates when file exceeds 5MB.
 
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 static LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
+static LOG_WRITE_LOCK: Mutex<()> = Mutex::new(());
 const MAX_LOG_SIZE: u64 = 5 * 1024 * 1024; // 5MB
 
 /// Initialize logger with the app root path. Call once at startup.
@@ -20,6 +21,9 @@ pub fn log(level: &str, msg: &str) {
     let ts = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ");
     let line = format!("[{}] {} {}\n", ts, level, msg);
     eprint!("{}", line);
+    let _guard = LOG_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
 
     // Rotate if needed
     if let Ok(meta) = std::fs::metadata(path) {

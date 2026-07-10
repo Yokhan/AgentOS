@@ -61,6 +61,18 @@ function __fakeResponse(data) {
   };
 }
 
+function __fakeErrorResponse(error) {
+  const message = String(error?.message || error || "Command failed");
+  const data = { status: "error", error: message };
+  const json = JSON.stringify(data);
+  return {
+    ok: false,
+    status: 500,
+    json: () => Promise.resolve(data),
+    text: () => Promise.resolve(json),
+  };
+}
+
 const _origFetch = window.fetch;
 window.fetch = function (url, opts = {}) {
   if (!__IS_TAURI) {
@@ -87,7 +99,7 @@ window.fetch = function (url, opts = {}) {
   if (__API_ROUTES[key]) {
     return __invoke(__API_ROUTES[key].cmd, body)
       .then(__fakeResponse)
-      .catch((e) => __fakeResponse({ error: String(e) }));
+      .catch(__fakeErrorResponse);
   }
 
   // Parameterized routes

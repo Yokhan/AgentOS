@@ -5,7 +5,9 @@ use crate::state::AppState;
 use serde_json::{json, Value};
 use std::io::BufRead;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::{Duration, Instant};
 use tauri::State;
 
 /// Run the selected provider for a delegation step.
@@ -137,55 +139,42 @@ pub fn run_delegation_streaming(
     let token_budget: u64 = 150_000;
     let heartbeat_timeout_secs: u64 = 120;
 
-    // Heartbeat fix (#1): spawn watchdog thread that kills child if no events for 120s
+    // The watchdog is explicitly stopped and joined so it cannot outlive the delegation.
     let child_pid = child.id();
-    let heartbeat_flag = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-    ));
-    let hb = heartbeat_flag.clone();
-    let stream_buf_hb = stream_buf.to_path_buf();
-    std::thread::spawn(move || {
-        loop {
-            std::thread::sleep(std::time::Duration::from_secs(15));
-            let last = hb.load(std::sync::atomic::Ordering::Relaxed);
-            if last == 0 {
-                break;
-            } // sentinel: reader finished normally
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            if now - last > heartbeat_timeout_secs {
-                crate::log_warn!(
-                    "[deleg-stream] HEARTBEAT: no events for {}s, killing pid {}",
-                    now - last,
-                    child_pid
-                );
-                // Append safety event
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .append(true)
-                    .open(&stream_buf_hb)
-                {
-                    use std::io::Write;
-                    let _ = writeln!(f, r#"{{"type":"safety","reason":"heartbeat_timeout"}}"#);
-                }
-                #[cfg(target_os = "windows")]
-                {
-                    let _ = std::process::Command::new("taskkill")
-                        .args(["/F", "/PID", &child_pid.to_string()])
-                        .output();
-                }
-                #[cfg(not(target_os = "windows"))]
-                {
-                    let _ = std::process::Command::new("kill")
-                        .args(["-9", &child_pid.to_string()])
-                        .output();
-                }
-                break;
+    let heartbeat = Arc::new(Mutex::new(Instant::now()));
+    let watchdog_heartbeat = heartbeat.clone();
+    let watchdog_timed_out = Arc::new(AtomicBool::new(false));
+    let watchdog_timeout_flag = watchdog_timed_out.clone();
+    let (watchdog_stop_tx, watchdog_stop_rx) = mpsc::channel();
+    let watchdog = std::thread::spawn(move || loop {
+        match watchdog_stop_rx.recv_timeout(Duration::from_secs(15)) {
+            Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+        let elapsed = watchdog_heartbeat
+            .lock()
+            .map(|last| last.elapsed())
+            .unwrap_or_default();
+        if elapsed > Duration::from_secs(heartbeat_timeout_secs) {
+            watchdog_timeout_flag.store(true, Ordering::Release);
+            crate::log_warn!(
+                "[deleg-stream] HEARTBEAT: no events for {}s, killing pid {}",
+                elapsed.as_secs(),
+                child_pid
+            );
+            #[cfg(target_os = "windows")]
+            {
+                let _ = super::claude_runner::silent_cmd("taskkill")
+                    .args(["/F", "/T", "/PID", &child_pid.to_string()])
+                    .output();
             }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = std::process::Command::new("kill")
+                    .args(["-9", &child_pid.to_string()])
+                    .output();
+            }
+            break;
         }
     });
 
@@ -213,13 +202,9 @@ pub fn run_delegation_streaming(
             };
             let etype = evt.get("type").and_then(|t| t.as_str()).unwrap_or("");
             event_count += 1;
-            heartbeat_flag.store(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-                std::sync::atomic::Ordering::Relaxed,
-            );
+            if let Ok(mut last) = heartbeat.lock() {
+                *last = Instant::now();
+            }
 
             match etype {
                 "stream_event" => {
@@ -317,7 +302,7 @@ pub fn run_delegation_streaming(
                     &mut buf_file,
                     &json!({"type":"safety","reason":"token_budget","tokens":total_tokens}),
                 );
-                let _ = child.kill();
+                super::process_manager::kill_existing(state, &chat_key);
                 full_text = format!(
                     "Error: token budget exceeded ({} tokens). Process killed.",
                     total_tokens
@@ -328,8 +313,23 @@ pub fn run_delegation_streaming(
         }
     }
 
-    // Signal watchdog to stop
-    heartbeat_flag.store(0, std::sync::atomic::Ordering::Relaxed);
+    let _ = watchdog_stop_tx.send(());
+    if watchdog.join().is_err() {
+        crate::log_warn!(
+            "[deleg-stream] watchdog thread panicked for pid={}",
+            child_pid
+        );
+    }
+    if watchdog_timed_out.load(Ordering::Acquire) {
+        super::jsonl::append_jsonl_logged(
+            stream_buf,
+            &json!({"type":"safety","reason":"heartbeat_timeout"}),
+            "delegation heartbeat timeout",
+        );
+        if full_text.is_empty() {
+            full_text = "Error: delegation provider stopped after heartbeat timeout.".to_string();
+        }
+    }
 
     // Cleanup
     let _ = child.wait();

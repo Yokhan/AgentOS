@@ -1,3 +1,11 @@
+# Agent OS 0.3.45
+
+- Bounded repository scanning to four workers, removed git I/O from cache locks, and kept live delegation overlays fresh without rescanning every project.
+- Centralized heavy UI refresh, rejected stale route responses, and reduced polling pressure without hiding execution or orchestration data.
+- Removed process-registry lock contention during termination, reduced Windows process probes, and made delegation watchdog shutdown deterministic.
+- Serialized concurrent JSONL and log writes and surfaced persistence failures instead of reporting false success.
+- Added pre-merge CI plus concurrent-write and scanner-concurrency regression tests.
+
 # Agent OS 0.3.44
 
 - Updated the canonical sibling agent template checkout to the released `agent-project-template v4.6.1` protocol.

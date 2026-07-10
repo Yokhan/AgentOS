@@ -7,6 +7,16 @@ const chat = read("src-ui/chat.js");
 const stream = read("src-tauri/src/commands/chat_stream.rs");
 const poll = read("src-tauri/src/commands/chat_stream_poll.rs");
 const ops = read("src-tauri/src/commands/operation_state.rs");
+const views = read("src-ui/views.js");
+
+function functionSource(source, name) {
+  const start = source.indexOf(`function ${name}(`);
+  if (start < 0) return "";
+  const next = source.indexOf("\nfunction ", start + 1);
+  return source.slice(start, next < 0 ? source.length : next);
+}
+
+const executionFlowStage = functionSource(views, "ExecutionFlowStage");
 
 const checks = [
   {
@@ -39,7 +49,7 @@ const checks = [
   {
     name: "live polling avoids heavy dashboard reloads while streaming",
     ok:
-      app.includes("LIVE_HEAVY_REFRESH_MS = 15000") &&
+      app.includes("LIVE_HEAVY_REFRESH_MS = 30000") &&
       app.includes("now - _lastLiveProjectRefresh > LIVE_HEAVY_REFRESH_MS") &&
       !/now - _lastLiveProjectRefresh > LIVE_HEAVY_REFRESH_MS[\s\S]{0,260}loadAgents/.test(
         app,
@@ -48,12 +58,8 @@ const checks = [
   {
     name: "main execution map has no component-owned polling interval",
     ok:
-      !/function ExecutionFlowStage\(\)[\s\S]{0,1200}setInterval/.test(
-        fs.readFileSync("src-ui/views.js", "utf8"),
-      ) &&
-      fs
-        .readFileSync("src-ui/views.js", "utf8")
-        .includes("const timer = setTimeout(refresh, 500)"),
+      executionFlowStage.length > 0 &&
+      !/(setInterval|setTimeout)/.test(executionFlowStage),
   },
   {
     name: "operation snapshots are compact",

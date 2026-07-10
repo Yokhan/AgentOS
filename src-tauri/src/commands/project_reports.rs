@@ -136,8 +136,6 @@ pub fn project_agent_report_core(
             "source": request.source,
         })),
     );
-    super::agents::invalidate_scan_cache(state);
-
     Ok(json!({
         "status": "ok",
         "id": id,

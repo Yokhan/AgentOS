@@ -331,7 +331,6 @@ fn unblock_ready_chain_steps(state: &Arc<AppState>) {
     }
     if changed {
         state.save_delegations();
-        super::agents::invalidate_scan_cache(state);
     }
 }
 

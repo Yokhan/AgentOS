@@ -377,6 +377,8 @@ pub struct AppState {
 
     // Caches
     pub scan_cache: Mutex<ScanCache>,
+    /// Serializes expensive repository scans without holding the cache mutex during I/O.
+    pub scan_refresh_lock: Mutex<()>,
     pub segments: Mutex<HashMap<String, Vec<String>>>,
     pub project_segment: Mutex<HashMap<String, String>>,
 
@@ -450,6 +452,7 @@ impl AppState {
             n8n_url,
             start_time: Instant::now(),
             scan_cache: Mutex::new(ScanCache::default()),
+            scan_refresh_lock: Mutex::new(()),
             segments: Mutex::new(segments),
             project_segment: Mutex::new(project_segment),
             delegations: Mutex::new(delegations),
@@ -508,10 +511,12 @@ impl AppState {
                 let root_str = root.to_string_lossy();
                 if current != root_str.as_ref() {
                     cfg["project_root"] = serde_json::json!(root_str.as_ref());
-                    let _ = crate::commands::claude_runner::atomic_write(
+                    if let Err(error) = crate::commands::claude_runner::atomic_write(
                         config_path,
                         &serde_json::to_string_pretty(&cfg).unwrap_or_default(),
-                    );
+                    ) {
+                        crate::log_warn!("[state] project root save failed: {}", error);
+                    }
                 }
             }
         }
@@ -667,45 +672,52 @@ impl AppState {
 
     pub fn save_delegations(&self) {
         if let Ok(delegations) = self.delegations.lock() {
-            let _ = crate::commands::claude_runner::atomic_write(
-                &self.delegations_path,
-                &serde_json::to_string_pretty(&*delegations).unwrap_or_default(),
-            );
+            self.save_json(&self.delegations_path, &*delegations, "delegations");
         }
     }
 
     pub fn save_sessions(&self) {
         if let Ok(sessions) = self.sessions.lock() {
-            let _ = crate::commands::claude_runner::atomic_write(
-                &self.sessions_path,
-                &serde_json::to_string_pretty(&*sessions).unwrap_or_default(),
-            );
+            self.save_json(&self.sessions_path, &*sessions, "sessions");
         }
     }
 
     pub fn save_project_sessions(&self) {
         if let Ok(project_sessions) = self.project_sessions.lock() {
-            let _ = crate::commands::claude_runner::atomic_write(
+            self.save_json(
                 &self.project_sessions_path,
-                &serde_json::to_string_pretty(&*project_sessions).unwrap_or_default(),
+                &*project_sessions,
+                "project sessions",
             );
         }
     }
 
     pub fn save_work_items(&self) {
         if let Ok(work_items) = self.work_items.lock() {
-            let _ = crate::commands::claude_runner::atomic_write(
-                &self.work_items_path,
-                &serde_json::to_string_pretty(&*work_items).unwrap_or_default(),
-            );
+            self.save_json(&self.work_items_path, &*work_items, "work items");
         }
     }
 
     pub fn save_file_leases(&self) {
         if let Ok(file_leases) = self.file_leases.lock() {
-            let _ = crate::commands::claude_runner::atomic_write(
-                &self.file_leases_path,
-                &serde_json::to_string_pretty(&*file_leases).unwrap_or_default(),
+            self.save_json(&self.file_leases_path, &*file_leases, "file leases");
+        }
+    }
+
+    fn save_json<T: serde::Serialize>(&self, path: &std::path::Path, value: &T, label: &str) {
+        let content = match serde_json::to_string_pretty(value) {
+            Ok(content) => content,
+            Err(error) => {
+                crate::log_error!("[state] {} serialization failed: {}", label, error);
+                return;
+            }
+        };
+        if let Err(error) = crate::commands::claude_runner::atomic_write(path, &content) {
+            crate::log_error!(
+                "[state] {} save failed at {}: {}",
+                label,
+                path.display(),
+                error
             );
         }
     }

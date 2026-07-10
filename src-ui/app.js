@@ -50,6 +50,7 @@ import {
   ensureDualSession,
   loadDualSession,
   loadActiveScope,
+  loadOrchestrationMap,
   loadExecutionMap,
   loadOperationSnapshot,
   loadAppInfo,
@@ -205,6 +206,18 @@ effect(() => {
   loadActiveScope(p || "", activeDualSession.value || null).catch((e) =>
     console.warn("scope load failed:", e),
   );
+  if (!safeMode.value) {
+    Promise.allSettled([
+      loadExecutionMap(p || "", activeDualSession.value || null),
+      loadOrchestrationMap(p || "", activeDualSession.value || null),
+    ]).then((results) => {
+      results
+        .filter((result) => result.status === "rejected")
+        .forEach((result) =>
+          console.warn("project execution state load failed:", result.reason),
+        );
+    });
+  }
 });
 
 // Theme effect
@@ -384,9 +397,11 @@ async function runStartupLoad() {
     markSessionStarted();
     if (!safeMode.value) {
       setTimeout(() => {
-        Promise.allSettled([loadExecutionMap(), loadOperationSnapshot()]).catch(
-          (e) => console.warn("deferred execution state load failed:", e),
-        );
+        Promise.allSettled([
+          loadExecutionMap(),
+          loadOrchestrationMap(),
+          loadOperationSnapshot(),
+        ]).catch((e) => console.warn("deferred execution state load failed:", e));
       }, 1200);
     }
   } catch (e) {
@@ -425,7 +440,8 @@ let _lastLiveProjectRefresh = 0;
 let _pollingStarted = false;
 let _baselinePollInFlight = false;
 let _livePollInFlight = false;
-const LIVE_HEAVY_REFRESH_MS = 15000;
+const BASELINE_REFRESH_MS = 30000;
+const LIVE_HEAVY_REFRESH_MS = 30000;
 function isComposerElementActive() {
   const active = document.activeElement;
   return !!(active && active.closest && active.closest(".ch-inp"));
@@ -452,7 +468,13 @@ function startPolling() {
         loadSignals(),
         loadNotifications(),
         loadDelegations(),
-        ...(deferHeavy ? [] : [loadExecutionMap(), loadOperationSnapshot()]),
+        ...(deferHeavy
+          ? []
+          : [
+              loadExecutionMap(),
+              loadOrchestrationMap(),
+              loadOperationSnapshot(),
+            ]),
         loadInbox(),
       ]);
       if (inboxData.value.count > 0 && !inboxData.value.needs_user) {
@@ -462,7 +484,7 @@ function startPolling() {
     } finally {
       _baselinePollInFlight = false;
     }
-  }, 15000);
+  }, BASELINE_REFRESH_MS);
   setInterval(() => {
     if (chatCollabMode.value === "duo" && activeDualSession.value) {
       loadDualSession(activeDualSession.value);
@@ -489,11 +511,16 @@ function startPolling() {
       await Promise.allSettled([
         ...(deferHeavy ? [] : [pollDelegationStreams()]),
         ...(refreshHeavy
-          ? [loadDelegations(), loadExecutionMap(), loadOperationSnapshot()]
+          ? [
+              loadDelegations(),
+              loadExecutionMap(),
+              loadOrchestrationMap(),
+              loadOperationSnapshot(),
+            ]
           : []),
       ]);
     } finally {
       _livePollInFlight = false;
     }
-  }, 1000);
+  }, 2000);
 }

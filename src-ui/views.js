@@ -874,27 +874,6 @@ function WorkbenchFocus({ all }) {
 function ExecutionFlowStage() {
   const map = executionMap.value;
   const orchestration = orchestrationMap.value;
-  useEffect(() => {
-    let disposed = false;
-    const refresh = () => {
-      if (disposed) return;
-      Promise.allSettled([
-        loadExecutionMap("", activeDualSession.value || null, 180),
-        loadOrchestrationMap("", activeDualSession.value || null),
-      ]).then((results) => {
-        results
-          .filter((result) => result.status === "rejected")
-          .forEach((result) =>
-            console.warn("main execution refresh failed:", result.reason),
-          );
-      });
-    };
-    const timer = setTimeout(refresh, 500);
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-    };
-  }, []);
   const laneCount = (map?.lanes || []).length;
   const eventCount =
     map?.counts?.visual_events ??

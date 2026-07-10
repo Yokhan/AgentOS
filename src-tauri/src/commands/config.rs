@@ -92,10 +92,17 @@ pub fn set_permission(state: State<Arc<AppState>>, project: String, profile: Str
         .to_string();
     cfg["project_permissions"][&project] = json!(profile);
 
-    if let Ok(content) = serde_json::to_string_pretty(&cfg) {
-        let _ = super::claude_runner::atomic_write(&state.config_path, &content);
-        state.invalidate_config();
+    let content = match serde_json::to_string_pretty(&cfg) {
+        Ok(content) => content,
+        Err(error) => {
+            return json!({"status": "error", "error": format!("Cannot serialize config: {}", error)});
+        }
+    };
+    if let Err(error) = super::claude_runner::atomic_write(&state.config_path, &content) {
+        crate::log_error!("[config] permission save failed: {}", error);
+        return json!({"status": "error", "error": format!("Cannot save config: {}", error)});
     }
+    state.invalidate_config();
 
     // Audit trail
     let audit_path = state.root.join("tasks").join(".audit-log.jsonl");

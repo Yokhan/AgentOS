@@ -5,36 +5,19 @@ use std::sync::Arc;
 use std::time::Instant;
 use tauri::State;
 
-const CACHE_TTL_SECS: u64 = 30;
-
-pub fn invalidate_scan_cache(state: &AppState) {
-    if let Ok(mut cache) = state.scan_cache.lock() {
-        cache.data = None;
-        cache.updated = None;
-    }
-}
+const CACHE_TTL_SECS: u64 = 60;
 
 /// Shared agent-fetching logic — used by both Tauri command and HTTP API
 pub fn get_agents_cached(state: &AppState) -> Value {
-    let mut cache = match state.scan_cache.lock() {
-        Ok(c) => c,
-        Err(_) => return json!({"agents": [], "error": "lock error"}),
+    let base = match get_or_refresh_scan(state) {
+        Ok(value) => value,
+        Err(error) => return json!({"agents": [], "error": error}),
     };
-
-    // Return cached if fresh
-    if let (Some(data), Some(updated)) = (&cache.data, &cache.updated) {
-        if updated.elapsed().as_secs() < CACHE_TTL_SECS {
-            return data.clone();
-        }
-    }
-
-    // Scan projects
-    let ps = state
-        .project_segment
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    let mut projects = scanner::scan_projects(&state.docs_dir, &ps);
-    drop(ps);
+    let mut projects: Vec<crate::scanner::ProjectInfo> = base
+        .get("agents")
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default();
 
     // Check chat history for recent activity
     let history_file = state.root.join("tasks").join(".chat-history.jsonl");
@@ -127,15 +110,54 @@ pub fn get_agents_cached(state: &AppState) -> Value {
         }
     }
 
-    let result = json!({
+    json!({
         "agents": projects,
         "timestamp": state.now_iso(),
+    })
+}
+
+fn fresh_cached_scan(state: &AppState) -> Option<Value> {
+    let cache = state.scan_cache.lock().ok()?;
+    match (&cache.data, &cache.updated) {
+        (Some(data), Some(updated)) if updated.elapsed().as_secs() < CACHE_TTL_SECS => {
+            Some(data.clone())
+        }
+        _ => None,
+    }
+}
+
+fn get_or_refresh_scan(state: &AppState) -> Result<Value, String> {
+    if let Some(data) = fresh_cached_scan(state) {
+        return Ok(data);
+    }
+
+    let _refresh_guard = state
+        .scan_refresh_lock
+        .lock()
+        .map_err(|_| "scan refresh lock poisoned".to_string())?;
+    if let Some(data) = fresh_cached_scan(state) {
+        return Ok(data);
+    }
+
+    let project_segment = state
+        .project_segment
+        .lock()
+        .map(|segments| segments.clone())
+        .unwrap_or_else(|error| error.into_inner().clone());
+    let projects = scanner::scan_projects(&state.docs_dir, &project_segment);
+    let result = json!({
+        "agents": projects,
+        "scanned_at": state.now_iso(),
     });
 
+    let mut cache = state
+        .scan_cache
+        .lock()
+        .map_err(|_| "scan cache lock poisoned".to_string())?;
     cache.data = Some(result.clone());
     cache.updated = Some(Instant::now());
 
-    result
+    Ok(result)
 }
 
 #[tauri::command]
