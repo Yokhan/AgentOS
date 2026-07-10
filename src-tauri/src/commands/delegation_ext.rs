@@ -283,7 +283,7 @@ fn exec_timeout(state: &AppState, id: &str, seconds: u64) -> Option<String> {
 }
 
 fn exec_template_save(state: &AppState, name: &str, task: &str) -> Option<String> {
-    let mut templates = super::delegation_models::load_templates(&state.root);
+    let mut templates = super::delegation_models::load_templates(&state.data_dir);
     // Update existing or add new
     if let Some(t) = templates.iter_mut().find(|t| t.name == name) {
         t.task = task.to_string();
@@ -295,7 +295,7 @@ fn exec_template_save(state: &AppState, name: &str, task: &str) -> Option<String
             used_count: 0,
         });
     }
-    super::delegation_models::save_templates(&state.root, &templates);
+    super::delegation_models::save_templates(&state.data_dir, &templates);
     crate::log_info!("[deleg_ext] template saved: {}", name);
     Some(format!(
         "**Template saved:** {} ({} chars)",
@@ -305,11 +305,11 @@ fn exec_template_save(state: &AppState, name: &str, task: &str) -> Option<String
 }
 
 fn exec_template_use(state: &AppState, name: &str, projects: &[String]) -> Option<String> {
-    let mut templates = super::delegation_models::load_templates(&state.root);
+    let mut templates = super::delegation_models::load_templates(&state.data_dir);
     let template = templates.iter_mut().find(|t| t.name == name)?;
     let task = template.task.clone();
     template.used_count += 1;
-    super::delegation_models::save_templates(&state.root, &templates);
+    super::delegation_models::save_templates(&state.data_dir, &templates);
 
     // Create delegations for each project using template task
     let batch_id = format!(

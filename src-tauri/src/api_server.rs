@@ -87,7 +87,7 @@ pub async fn start(state: Arc<AppState>, port: u16) {
                 .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]),
         )
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_check))
-        .with_state(state);
+        .with_state(state.clone());
 
     // Try port, fallback to port+1, port+2
     for p in [port, port + 1, port + 2] {
@@ -99,7 +99,15 @@ pub async fn start(state: Arc<AppState>, port: u16) {
                     addr,
                     &token_for_log[..8.min(token_for_log.len())]
                 );
-                if let Err(e) = axum::serve(listener, app).await {
+                let shutdown_state = state.clone();
+                if let Err(e) = axum::serve(listener, app)
+                    .with_graceful_shutdown(async move {
+                        while !shutdown_state.is_shutdown_requested() {
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        }
+                    })
+                    .await
+                {
                     crate::log_error!("API server crashed: {}", e);
                 }
                 return;
@@ -265,7 +273,7 @@ async fn send_chat(
 }
 
 async fn get_feed(AxState(state): AxState<Arc<AppState>>) -> impl IntoResponse {
-    let feed_path = state.root.join("tasks").join(".chat-history.jsonl");
+    let feed_path = state.tasks_dir.join(".chat-history.jsonl");
     let mut items = Vec::new();
     if let Ok(content) = std::fs::read_to_string(&feed_path) {
         for line in content.lines().rev().take(20) {
@@ -278,7 +286,7 @@ async fn get_feed(AxState(state): AxState<Arc<AppState>>) -> impl IntoResponse {
 }
 
 async fn get_activity(AxState(state): AxState<Arc<AppState>>) -> impl IntoResponse {
-    let tasks_file = state.root.join("tasks").join(".running-tasks.json");
+    let tasks_file = state.tasks_dir.join(".running-tasks.json");
     let tasks: Value = std::fs::read_to_string(&tasks_file)
         .ok()
         .and_then(|c| serde_json::from_str(&c).ok())
@@ -313,20 +321,29 @@ async fn get_config(AxState(state): AxState<Arc<AppState>>) -> impl IntoResponse
 async fn set_config(
     AxState(state): AxState<Arc<AppState>>,
     Json(body): Json<Value>,
-) -> impl IntoResponse {
-    // Merge incoming fields into existing config instead of overwriting
-    let mut cfg = state.config();
-    if let (Some(existing), Some(incoming)) = (cfg.as_object_mut(), body.as_object()) {
-        for (k, v) in incoming {
-            existing.insert(k.clone(), v.clone());
+) -> (StatusCode, Json<Value>) {
+    let result = state.update_config(|cfg| {
+        let incoming = body
+            .as_object()
+            .ok_or_else(|| "Config request must be a JSON object".to_string())?;
+        if !cfg.is_object() {
+            *cfg = json!({});
         }
+        let existing = cfg
+            .as_object_mut()
+            .ok_or_else(|| "Stored config must be a JSON object".to_string())?;
+        for (key, value) in incoming {
+            existing.insert(key.clone(), value.clone());
+        }
+        Ok(())
+    });
+    match result {
+        Ok(_) => (StatusCode::OK, Json(json!({"status": "saved"}))),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"status": "error", "error": error})),
+        ),
     }
-    let _ = crate::commands::claude_runner::atomic_write(
-        &state.config_path,
-        &serde_json::to_string_pretty(&cfg).unwrap_or_default(),
-    );
-    state.invalidate_config();
-    Json(json!({"status": "saved"}))
 }
 
 async fn get_permissions(AxState(state): AxState<Arc<AppState>>) -> impl IntoResponse {

@@ -20,7 +20,7 @@ pub fn get_agents_cached(state: &AppState) -> Value {
         .unwrap_or_default();
 
     // Check chat history for recent activity
-    let history_file = state.root.join("tasks").join(".chat-history.jsonl");
+    let history_file = state.tasks_dir.join(".chat-history.jsonl");
     if let Ok(content) = std::fs::read_to_string(&history_file) {
         let lines: Vec<&str> = content.lines().collect();
         let recent_lines = &lines[lines.len().saturating_sub(10)..];

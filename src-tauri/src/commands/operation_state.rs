@@ -340,7 +340,7 @@ pub fn emit(state: &AppState, input: OperationEventInput) {
     };
 
     if let Some(event) = event {
-        let audit_path = state.root.join("tasks").join(".operations.jsonl");
+        let audit_path = state.tasks_dir.join(".operations.jsonl");
         super::jsonl::append_jsonl_logged(
             &audit_path,
             &json!({

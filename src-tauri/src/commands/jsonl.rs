@@ -2,10 +2,12 @@
 //! All chat saves, delegation logs, audit entries go through here.
 
 use serde_json::Value;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
 static JSONL_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+pub const RECENT_READ_MAX_BYTES: u64 = 8 * 1024 * 1024;
 
 fn write_line(file: &mut std::fs::File, value: &Value) -> std::io::Result<()> {
     use std::io::Write;
@@ -52,6 +54,37 @@ pub fn append_jsonl_pair(path: &Path, a: &Value, b: &Value, context: &str) {
     }
 }
 
+/// Read newest lines without loading an unbounded append-only file into memory.
+pub fn read_recent_lines(
+    path: &Path,
+    max_lines: usize,
+    max_bytes: u64,
+) -> std::io::Result<Vec<String>> {
+    if max_lines == 0 {
+        return Ok(Vec::new());
+    }
+    let mut file = std::fs::File::open(path)?;
+    let len = file.metadata()?.len();
+    let start = len.saturating_sub(max_bytes);
+    file.seek(SeekFrom::Start(start))?;
+    let mut bytes = Vec::with_capacity((len - start).min(max_bytes) as usize);
+    file.read_to_end(&mut bytes)?;
+    let mut content = String::from_utf8_lossy(&bytes).into_owned();
+    if start > 0 {
+        if let Some(first_newline) = content.find('\n') {
+            content.drain(..=first_newline);
+        } else {
+            return Ok(Vec::new());
+        }
+    }
+    Ok(content
+        .lines()
+        .rev()
+        .take(max_lines)
+        .map(str::to_string)
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,5 +123,21 @@ mod tests {
             .iter()
             .all(|line| serde_json::from_str::<Value>(line).is_ok()));
         let _ = std::fs::remove_file(path.as_ref());
+    }
+
+    #[test]
+    fn recent_lines_reads_bounded_tail_in_newest_first_order() {
+        let path = std::env::temp_dir().join(format!(
+            "agentos-jsonl-tail-{}-{}.jsonl",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        std::fs::write(&path, "one\ntwo\nthree\nfour\n").expect("seed tail file");
+        let lines = read_recent_lines(&path, 2, RECENT_READ_MAX_BYTES).expect("read tail");
+        assert_eq!(lines, vec!["four", "three"]);
+        let _ = std::fs::remove_file(path);
     }
 }

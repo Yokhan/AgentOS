@@ -21,6 +21,7 @@ pub struct AcpClient {
     rx: Receiver<AcpEnvelope>,
     next_id: u64,
     stderr_log: Vec<String>,
+    reader_threads: Vec<std::thread::JoinHandle<()>>,
 }
 
 #[derive(Clone, Debug)]
@@ -59,8 +60,8 @@ impl AcpClient {
             .ok_or_else(|| "ACP agent stderr unavailable".to_string())?;
 
         let (tx, rx) = mpsc::channel();
-        spawn_stdout_reader(stdout, tx.clone());
-        spawn_stderr_reader(stderr, tx);
+        let stdout_reader = spawn_stdout_reader(stdout, tx.clone());
+        let stderr_reader = spawn_stderr_reader(stderr, tx);
 
         Ok(Self {
             child,
@@ -68,6 +69,7 @@ impl AcpClient {
             rx,
             next_id: 1,
             stderr_log: Vec::new(),
+            reader_threads: vec![stdout_reader, stderr_reader],
         })
     }
 
@@ -306,10 +308,18 @@ impl Drop for AcpClient {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        for reader in self.reader_threads.drain(..) {
+            if reader.join().is_err() {
+                crate::log_warn!("[acp] reader thread panicked during shutdown");
+            }
+        }
     }
 }
 
-fn spawn_stdout_reader(stdout: ChildStdout, tx: Sender<AcpEnvelope>) {
+fn spawn_stdout_reader(
+    stdout: ChildStdout,
+    tx: Sender<AcpEnvelope>,
+) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
@@ -344,7 +354,7 @@ fn spawn_stdout_reader(stdout: ChildStdout, tx: Sender<AcpEnvelope>) {
             }
         }
         let _ = tx.send(AcpEnvelope::Closed);
-    });
+    })
 }
 
 fn stdout_json_candidate(line: &str) -> Option<&str> {
@@ -355,7 +365,10 @@ fn stdout_json_candidate(line: &str) -> Option<&str> {
     trimmed.find('{').map(|index| &trimmed[index..])
 }
 
-fn spawn_stderr_reader(stderr: ChildStderr, tx: Sender<AcpEnvelope>) {
+fn spawn_stderr_reader(
+    stderr: ChildStderr,
+    tx: Sender<AcpEnvelope>,
+) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
@@ -366,7 +379,7 @@ fn spawn_stderr_reader(stderr: ChildStderr, tx: Sender<AcpEnvelope>) {
                 Err(_) => break,
             }
         }
-    });
+    })
 }
 
 #[cfg(test)]

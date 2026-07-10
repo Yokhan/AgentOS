@@ -41,7 +41,7 @@ pub struct Plan {
 }
 
 fn plans_dir(state: &AppState) -> std::path::PathBuf {
-    let dir = state.root.join("tasks").join("plans");
+    let dir = state.tasks_dir.join("plans");
     let _ = std::fs::create_dir_all(&dir);
     dir
 }
@@ -218,10 +218,15 @@ pub fn load_all_plans_internal(state: &AppState) -> Vec<Plan> {
 
 pub fn save_plan_internal(state: &AppState, plan: &Plan) {
     let path = plans_dir(state).join(format!("{}.json", plan.id));
-    let _ = crate::commands::claude_runner::atomic_write(
-        &path,
-        &serde_json::to_string_pretty(plan).unwrap_or_default(),
-    );
+    let result = serde_json::to_string_pretty(plan)
+        .map_err(|error| error.to_string())
+        .and_then(|content| {
+            crate::commands::claude_runner::atomic_write(&path, &content)
+                .map_err(|error| error.to_string())
+        });
+    if let Err(error) = result {
+        crate::log_error!("[plans] save failed for {}: {}", plan.id, error);
+    }
 }
 
 #[tauri::command]

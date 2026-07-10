@@ -5,7 +5,7 @@ use tauri::State;
 
 #[tauri::command]
 pub fn get_feed(state: State<Arc<AppState>>) -> Value {
-    let history_file = state.root.join("tasks").join(".chat-history.jsonl");
+    let history_file = state.tasks_dir.join(".chat-history.jsonl");
     let mut feed = Vec::new();
 
     if let Ok(content) = std::fs::read_to_string(&history_file) {
@@ -57,11 +57,8 @@ pub fn get_activity(state: State<Arc<AppState>>) -> Value {
         let map: serde_json::Map<String, Value> =
             acts.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
         let value = Value::Object(map);
-        let path = state.root.join("tasks").join(".running-tasks.json");
-        let _ = super::claude_runner::atomic_write(
-            &path,
-            &serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string()),
-        );
+        drop(acts);
+        super::process_manager::persist_activities(&state);
         value
     } else {
         json!({})
@@ -101,6 +98,11 @@ pub fn health_snapshot(state: &AppState) -> Value {
             .unwrap_or(0),
         Err(_) => 0,
     };
+    let background_tasks = state
+        .background_tasks
+        .lock()
+        .map(|tasks| tasks.len())
+        .unwrap_or(0);
 
     json!({
         "status": "ok",
@@ -112,6 +114,8 @@ pub fn health_snapshot(state: &AppState) -> Value {
             None
         },
         "documents_dir": state.docs_dir.to_string_lossy(),
+        "data_dir": state.data_dir.to_string_lossy(),
+        "background_tasks": background_tasks,
     })
 }
 

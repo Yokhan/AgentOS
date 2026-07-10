@@ -43,7 +43,7 @@ pub fn stream_buffer_path(
         ),
         None => format!(".stream-{}.jsonl", safe_stream_segment(chat_key)),
     };
-    state.root.join("tasks").join(name)
+    state.tasks_dir.join(name)
 }
 
 /// Poll stream buffer — frontend calls this every 250ms during streaming

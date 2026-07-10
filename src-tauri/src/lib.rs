@@ -49,7 +49,7 @@ fn load_bootstrap_root() -> Option<PathBuf> {
     }
 }
 
-fn persist_bootstrap_root(root: &PathBuf) {
+fn persist_bootstrap_root(root: &std::path::Path) {
     let Some(path) = bootstrap_state_path() else {
         return;
     };
@@ -61,10 +61,12 @@ fn persist_bootstrap_root(root: &PathBuf) {
     let payload = serde_json::json!({
         "project_root": root.to_string_lossy(),
     });
-    let _ = std::fs::write(
+    if let Err(error) = std::fs::write(
         path,
         serde_json::to_string_pretty(&payload).unwrap_or_default(),
-    );
+    ) {
+        eprintln!("Cannot persist Agent OS bootstrap root: {}", error);
+    }
 }
 
 fn project_root() -> PathBuf {
@@ -112,7 +114,7 @@ fn project_root() -> PathBuf {
 pub fn run() {
     let root = project_root();
     persist_bootstrap_root(&root);
-    logger::init(&root);
+    logger::init(&state::runtime_data_dir(&root));
     let Some(_single_instance_guard) = acquire_single_instance_guard() else {
         return;
     };
@@ -126,13 +128,18 @@ pub fn run() {
     let shared = Arc::new(state::AppState::new(root.clone()));
     let api_state = Arc::clone(&shared);
     let auto_state = Arc::clone(&shared);
-    std::thread::spawn(move || {
+    let runtime_handle = std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
         rt.block_on(async {
             tokio::spawn(api_server::start(api_state, 3333));
             commands::auto_approve::auto_approve_loop(auto_state).await;
         });
     });
+    commands::process_manager::register_background_task(
+        &shared,
+        "runtime-services".to_string(),
+        runtime_handle,
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -331,7 +338,12 @@ pub fn run() {
             RunEvent::ExitRequested { .. } => {
                 // Kill all tracked child processes on exit (prevents zombies)
                 if let Some(state) = app_handle.try_state::<Arc<state::AppState>>() {
+                    state.request_shutdown();
                     commands::process_manager::kill_all_tracked(&state);
+                    commands::process_manager::shutdown_background_tasks(
+                        &state,
+                        std::time::Duration::from_secs(5),
+                    );
                 }
             }
             _ => {}

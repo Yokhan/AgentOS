@@ -42,11 +42,11 @@ struct NotificationRecord {
 }
 
 fn notifications_path(state: &AppState) -> PathBuf {
-    state.root.join("tasks").join(NOTIFICATIONS_FILE)
+    state.tasks_dir.join(NOTIFICATIONS_FILE)
 }
 
 fn notifications_archive_path(state: &AppState) -> PathBuf {
-    state.root.join("tasks").join(NOTIFICATIONS_ARCHIVE_FILE)
+    state.tasks_dir.join(NOTIFICATIONS_ARCHIVE_FILE)
 }
 
 fn trim_message(value: &str) -> String {
@@ -74,10 +74,15 @@ fn normalize_severity(value: &str) -> &'static str {
 }
 
 fn read_notification_records(path: &Path, limit: usize) -> Vec<NotificationRecord> {
-    let content = std::fs::read_to_string(path).unwrap_or_default();
     let mut rows = Vec::new();
-    for line in content.lines().rev() {
-        if let Ok(record) = serde_json::from_str::<NotificationRecord>(line) {
+    let lines = super::jsonl::read_recent_lines(
+        path,
+        limit.saturating_mul(4).max(64),
+        super::jsonl::RECENT_READ_MAX_BYTES,
+    )
+    .unwrap_or_default();
+    for line in lines {
+        if let Ok(record) = serde_json::from_str::<NotificationRecord>(&line) {
             rows.push(record);
             if rows.len() >= limit {
                 break;
@@ -111,7 +116,7 @@ pub fn append_notification(state: &AppState, input: NotificationInput) {
     if !should_persist(&input) {
         return;
     }
-    let _ = std::fs::create_dir_all(state.root.join("tasks"));
+    let _ = std::fs::create_dir_all(&state.tasks_dir);
     let ts = state.now_iso();
     let id = format!(
         "ntf-{}",

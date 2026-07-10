@@ -62,11 +62,7 @@ pub struct ProjectOnboardingPlanOptions {
 }
 
 fn segments_path(state: &AppState) -> PathBuf {
-    state
-        .root
-        .join("n8n")
-        .join("dashboard")
-        .join("segments.json")
+    state.segments_path.clone()
 }
 
 fn valid_permission(profile: &str) -> bool {
@@ -324,7 +320,7 @@ pub fn connect_project_inline(
 
     let seg_path = segments_path(state);
     let mut segments = read_segments(&seg_path);
-    let mut config = state.config();
+    let config = state.config();
     let mut planned = Vec::new();
     let old_segment = segments
         .iter()
@@ -355,14 +351,16 @@ pub fn connect_project_inline(
     write_segments(&seg_path, &segments)?;
     refresh_segment_state(state, &segments);
 
-    if config.get("project_permissions").is_none() {
-        config["project_permissions"] = json!({});
-    }
-    config["project_permissions"][&opts.project] = json!(permission);
-    let config_content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    super::claude_runner::atomic_write(&state.config_path, &config_content)
-        .map_err(|e| e.to_string())?;
-    state.invalidate_config();
+    state.update_config(|config| {
+        if !config.is_object() {
+            *config = json!({});
+        }
+        if config.get("project_permissions").is_none() {
+            config["project_permissions"] = json!({});
+        }
+        config["project_permissions"][&opts.project] = json!(permission);
+        Ok(())
+    })?;
 
     let template_result = if opts.deploy_template {
         Some(super::ops::execute_deploy_inline(
@@ -416,6 +414,7 @@ pub fn connect_missing_inline(
     let mut planned = Vec::new();
     let mut changed_segments = false;
     let mut changed_permissions = false;
+    let mut permission_projects = Vec::new();
     for project_dir in project_dirs(&state.docs_dir) {
         let Some(name) = project_dir
             .file_name()
@@ -439,7 +438,7 @@ pub fn connect_missing_inline(
         if old_permission == "none" {
             actions.push(format!("permission: none -> {}", permission));
             if !opts.dry_run {
-                config["project_permissions"][&name] = json!(permission);
+                permission_projects.push(name.clone());
                 changed_permissions = true;
             }
         }
@@ -465,10 +464,18 @@ pub fn connect_missing_inline(
         refresh_segment_state(state, &segments);
     }
     if changed_permissions {
-        let config_content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-        super::claude_runner::atomic_write(&state.config_path, &config_content)
-            .map_err(|e| e.to_string())?;
-        state.invalidate_config();
+        state.update_config(|config| {
+            if !config.is_object() {
+                *config = json!({});
+            }
+            if config.get("project_permissions").is_none() {
+                config["project_permissions"] = json!({});
+            }
+            for project in &permission_projects {
+                config["project_permissions"][project] = json!(permission);
+            }
+            Ok(())
+        })?;
     }
     invalidate_scan_cache(state);
 

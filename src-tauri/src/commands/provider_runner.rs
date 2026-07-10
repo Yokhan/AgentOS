@@ -2156,12 +2156,12 @@ user
         let state = crate::state::AppState::new(root.clone());
         assert_eq!(provider_timeout(&state).as_secs(), 30);
 
-        std::fs::write(
-            root.join("n8n").join("config.json"),
-            serde_json::to_string(&json!({ "provider_timeout_seconds": 120 })).unwrap(),
-        )
-        .unwrap();
-        state.invalidate_config();
+        state
+            .update_config(|config| {
+                config["provider_timeout_seconds"] = json!(120);
+                Ok(())
+            })
+            .unwrap();
         assert_eq!(provider_timeout(&state).as_secs(), 120);
 
         let _ = std::fs::remove_dir_all(&root);

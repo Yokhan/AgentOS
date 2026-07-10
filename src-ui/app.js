@@ -429,13 +429,6 @@ runStartupLoad().catch((e) => {
 });
 
 // Polling
-const _clockInterval = setInterval(() => {
-  const d = new Date();
-  document.querySelectorAll(".clock-display").forEach((el) => {
-    el.textContent = d.toLocaleTimeString();
-  });
-}, 1000);
-
 let _lastLiveProjectRefresh = 0;
 let _pollingStarted = false;
 let _baselinePollInFlight = false;
@@ -461,6 +454,7 @@ function startPolling() {
     try {
       const deferHeavy = shouldDeferHeavyPolling() || safeMode.value;
       await Promise.allSettled([
+        chkConn(),
         loadAgents(),
         loadActivity(),
         loadPlan(),

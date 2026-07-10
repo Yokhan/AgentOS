@@ -751,7 +751,7 @@ pub fn execute_pa_command(state: &AppState, cmd: &PaCommand) -> Option<String> {
             Some(format!("Strategy '{}' created with {} project plans. Approve steps in Strategy view to execute.", title, plan_count))
         }
         PaCommand::Queue { task } => {
-            let queue_path = state.root.join("tasks").join("queue.md");
+            let queue_path = state.tasks_dir.join("queue.md");
             let _ = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -774,7 +774,7 @@ pub fn execute_pa_command(state: &AppState, cmd: &PaCommand) -> Option<String> {
             None
         }
         PaCommand::Remember { note } => {
-            let mem_path = state.root.join("tasks").join("pa-memory.jsonl");
+            let mem_path = state.tasks_dir.join("pa-memory.jsonl");
             super::jsonl::append_jsonl_logged(
                 &mem_path,
                 &serde_json::json!({"ts": state.now_iso(), "note": note}),

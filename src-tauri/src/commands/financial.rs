@@ -12,7 +12,7 @@ pub struct IncomeEntry {
 }
 
 fn income_path(state: &AppState) -> std::path::PathBuf {
-    state.root.join("tasks").join("income.json")
+    state.tasks_dir.join("income.json")
 }
 
 fn load_income(state: &AppState) -> Vec<IncomeEntry> {

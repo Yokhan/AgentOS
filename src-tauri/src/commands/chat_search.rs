@@ -28,7 +28,7 @@ pub fn search_chat_history_core(
             }
         }
     }
-    files.push(state.root.join("tasks").join(".chat-history.jsonl"));
+    files.push(state.tasks_dir.join(".chat-history.jsonl"));
 
     for path in files {
         let file_project = path

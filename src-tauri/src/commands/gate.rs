@@ -254,7 +254,7 @@ fn get_diff_stats(project_dir: &Path) -> Option<DiffStats> {
 
 /// Lookup delegation cost from usage log.
 fn get_delegation_cost(state: &AppState, delegation_id: &str) -> Option<CostInfo> {
-    let usage_path = state.root.join("tasks").join(".usage-log.jsonl");
+    let usage_path = state.tasks_dir.join(".usage-log.jsonl");
     let content = std::fs::read_to_string(&usage_path).ok()?;
     for line in content.lines().rev() {
         if let Ok(entry) = serde_json::from_str::<Value>(line) {

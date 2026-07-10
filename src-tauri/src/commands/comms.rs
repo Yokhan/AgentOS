@@ -137,7 +137,7 @@ pub fn activity_digest(state: &AppState, period: &str) -> Option<String> {
         _ => period.trim_end_matches('h').parse().unwrap_or(24),
     };
 
-    let log_path = state.root.join("tasks").join(".delegation-log.jsonl");
+    let log_path = state.tasks_dir.join(".delegation-log.jsonl");
     let content = std::fs::read_to_string(&log_path).unwrap_or_default();
     let threshold = chrono::Utc::now() - chrono::Duration::hours(hours as i64);
     let mut by_project: std::collections::HashMap<String, (u32, u32)> =
@@ -214,7 +214,7 @@ pub struct Alert {
 }
 
 pub fn alert_create(state: &AppState, name: &str, body: &str) -> Option<String> {
-    let alerts_path = state.root.join("tasks").join("alerts.json");
+    let alerts_path = state.tasks_dir.join("alerts.json");
     let mut alerts: Vec<Alert> = std::fs::read_to_string(&alerts_path)
         .ok()
         .and_then(|c| serde_json::from_str(&c).ok())

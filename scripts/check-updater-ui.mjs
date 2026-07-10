@@ -19,6 +19,14 @@ const checks = [
       pages.includes("install_app_update"),
   },
   {
+    name: "settings exposes runtime data location",
+    ok:
+      pages.includes("runtime storage") &&
+      pages.includes("appInfo.value?.data_dir") &&
+      pages.includes("open data") &&
+      pages.includes("copy path"),
+  },
+  {
     name: "updater backend has manual check and install commands",
     ok:
       updater.includes("pub async fn check_app_update") &&

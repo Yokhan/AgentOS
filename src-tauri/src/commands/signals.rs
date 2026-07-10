@@ -78,7 +78,7 @@ pub fn emit_signal(
     };
 
     // Persist to JSONL
-    let path = state.root.join("tasks").join(".signals.jsonl");
+    let path = state.tasks_dir.join(".signals.jsonl");
     super::jsonl::append_jsonl_logged(
         &path,
         &serde_json::to_value(&signal).unwrap_or(json!({})),
@@ -156,7 +156,7 @@ pub fn check_incident(state: &AppState, project: &str) -> bool {
 
 /// Count critical signals in last N minutes, optionally filtered by project.
 pub fn count_recent_critical(state: &AppState, project: Option<&str>, minutes: u64) -> usize {
-    let path = state.root.join("tasks").join(".signals.jsonl");
+    let path = state.tasks_dir.join(".signals.jsonl");
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(_) => return 0,
@@ -193,7 +193,7 @@ pub fn count_recent_critical(state: &AppState, project: Option<&str>, minutes: u
 
 /// Build [SIGNALS] section for PA context — last 20 unacknowledged signals.
 pub fn build_signals_context(state: &AppState) -> String {
-    let path = state.root.join("tasks").join(".signals.jsonl");
+    let path = state.tasks_dir.join(".signals.jsonl");
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(_) => return String::new(),
@@ -244,7 +244,7 @@ pub fn build_signals_context(state: &AppState) -> String {
 
 /// Acknowledge a signal by ID — append-only (no file rewrite, no race condition).
 pub fn acknowledge_signal(state: &AppState, signal_id: &str) -> bool {
-    let path = state.root.join("tasks").join(".signals.jsonl");
+    let path = state.tasks_dir.join(".signals.jsonl");
     // Append an ack entry instead of rewriting the file
     let ack = json!({"type":"ack","signal_id":signal_id,"ts":state.now_iso()});
     super::jsonl::append_jsonl_logged(&path, &ack, "signal ack");
@@ -254,7 +254,7 @@ pub fn acknowledge_signal(state: &AppState, signal_id: &str) -> bool {
 
 /// Rotate signals file if > 5000 lines (keep last 1000).
 pub fn rotate_signals(state: &AppState) {
-    let path = state.root.join("tasks").join(".signals.jsonl");
+    let path = state.tasks_dir.join(".signals.jsonl");
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(_) => return,
@@ -269,7 +269,7 @@ pub fn rotate_signals(state: &AppState) {
 
 /// Get count of unacknowledged signals by severity.
 pub fn signal_counts(state: &AppState) -> (u32, u32, u32) {
-    let path = state.root.join("tasks").join(".signals.jsonl");
+    let path = state.tasks_dir.join(".signals.jsonl");
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(_) => return (0, 0, 0),
@@ -321,7 +321,7 @@ fn source_label(s: &SignalSource) -> &'static str {
 /// Tauri command: get recent signals for frontend display.
 #[tauri::command]
 pub fn get_signals(state: tauri::State<std::sync::Arc<AppState>>) -> serde_json::Value {
-    let path = state.root.join("tasks").join(".signals.jsonl");
+    let path = state.tasks_dir.join(".signals.jsonl");
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(_) => return json!({"signals":[]}),

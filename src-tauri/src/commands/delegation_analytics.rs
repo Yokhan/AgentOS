@@ -7,7 +7,7 @@ use tauri::State;
 
 #[tauri::command]
 pub fn get_analytics(state: State<Arc<AppState>>) -> Value {
-    let log_path = state.root.join("tasks").join(".delegation-log.jsonl");
+    let log_path = state.tasks_dir.join(".delegation-log.jsonl");
     if !log_path.exists() {
         return json!({"total": 0, "by_project": {}, "by_status": {}, "patterns": []});
     }
@@ -63,7 +63,7 @@ pub fn get_analytics(state: State<Arc<AppState>>) -> Value {
 
 /// Get delegation log filtered by project/status/time
 pub fn get_delegation_log(state: &AppState, filter: &str) -> Option<String> {
-    let log_path = state.root.join("tasks").join(".delegation-log.jsonl");
+    let log_path = state.tasks_dir.join(".delegation-log.jsonl");
     let content = std::fs::read_to_string(&log_path).ok()?;
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
@@ -109,7 +109,7 @@ pub fn get_delegation_log(state: &AppState, filter: &str) -> Option<String> {
 
 /// Archive old terminal delegations
 pub fn cleanup_delegations(state: &AppState, hours: u64) -> Option<String> {
-    let archive_path = state.root.join("tasks").join(".delegation-archive.jsonl");
+    let archive_path = state.tasks_dir.join(".delegation-archive.jsonl");
     let now = chrono::Utc::now();
     let mut archived = 0;
 

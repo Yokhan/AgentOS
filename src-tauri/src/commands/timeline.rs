@@ -12,10 +12,15 @@ use std::sync::Arc;
 use tauri::State;
 
 fn read_recent_jsonl(path: &Path, limit: usize) -> Vec<Value> {
-    let content = std::fs::read_to_string(path).unwrap_or_default();
     let mut rows = Vec::new();
-    for line in content.lines().rev() {
-        if let Ok(value) = serde_json::from_str::<Value>(line) {
+    let lines = super::jsonl::read_recent_lines(
+        path,
+        limit.saturating_mul(4).max(64),
+        super::jsonl::RECENT_READ_MAX_BYTES,
+    )
+    .unwrap_or_default();
+    for line in lines {
+        if let Ok(value) = serde_json::from_str::<Value>(&line) {
             rows.push(value);
             if rows.len() >= limit {
                 break;
@@ -32,10 +37,7 @@ fn chat_stream_rows(state: &AppState, project: &str, limit: usize) -> Vec<EventR
     } else {
         project
     };
-    let path = state
-        .root
-        .join("tasks")
-        .join(format!(".stream-{}.jsonl", chat_key));
+    let path = state.tasks_dir.join(format!(".stream-{}.jsonl", chat_key));
     read_recent_jsonl(&path, limit)
         .iter()
         .filter_map(|evt| normalize_chat_stream_event(evt, chat_key, ""))
@@ -56,8 +58,7 @@ fn delegation_stream_rows(
     limit: usize,
 ) -> Vec<EventRow> {
     let path = state
-        .root
-        .join("tasks")
+        .tasks_dir
         .join(format!(".stream-deleg-{}.jsonl", delegation.id));
     read_recent_jsonl(&path, limit)
         .iter()
@@ -87,7 +88,7 @@ fn delegation_rows(state: &AppState, project: &str, limit: usize) -> Vec<EventRo
 }
 
 fn archived_delegation_rows(state: &AppState, project: &str, limit: usize) -> Vec<EventRow> {
-    let path = state.root.join("tasks").join(".delegation-archive.jsonl");
+    let path = state.tasks_dir.join(".delegation-archive.jsonl");
     let mut rows = Vec::new();
     let mut seen = HashSet::new();
     for value in read_recent_jsonl(&path, limit.saturating_mul(4).max(16))

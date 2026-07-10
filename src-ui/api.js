@@ -477,7 +477,6 @@ async function chkConn() {
     isOn.value = false;
   }
 }
-setInterval(chkConn, 15000);
 let draftT = null;
 function saveDr() {
   const ta = document.querySelector(".ch-inp textarea");

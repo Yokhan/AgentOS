@@ -379,7 +379,8 @@ pub async fn stream_chat(
         let operation_id_bg = operation_id.clone();
         let run_mode_label_bg = run_mode_label.to_string();
         let access_label_bg = access_label.clone();
-        std::thread::spawn(move || {
+        let task_key = format!("chat-codex:{}", run_id);
+        let handle = std::thread::spawn(move || {
             append_stream_event(
                 &stream_buf_bg,
                 json!({
@@ -479,7 +480,7 @@ pub async fn stream_chat(
                 &asst_entry,
                 "stream codex response",
             );
-            super::claude_runner::log_chat_event(&state_arc.root, &chat_key_bg, &response);
+            super::claude_runner::log_chat_event(&state_arc.data_dir, &chat_key_bg, &response);
             crate::commands::jsonl::append_jsonl_logged(
                 &stream_buf_bg,
                 &json!({"type":"text","run_id":run_id_bg.as_str(),"text": response}),
@@ -574,6 +575,7 @@ pub async fn stream_chat(
             );
             clear_activity(&state_arc, &chat_key_bg);
         });
+        super::process_manager::register_background_task(&state, task_key, handle);
         return Ok(json!({"status": "streaming", "project": chat_key, "run_id": run_id}));
     }
 
@@ -636,7 +638,8 @@ pub async fn stream_chat(
     let read_only_pa_loop_bg = read_only_pa_loop;
 
     // Spawn background thread for blocking I/O — returns immediately
-    std::thread::spawn(move || {
+    let task_key = format!("chat-claude:{}", run_id);
+    let handle = std::thread::spawn(move || {
         stream_reader_loop(
             child,
             stdout,
@@ -655,6 +658,7 @@ pub async fn stream_chat(
             read_only_pa_loop_bg,
         );
     });
+    super::process_manager::register_background_task(&state, task_key, handle);
 
     Ok(json!({"status": "streaming", "project": chat_key, "run_id": run_id}))
 }
@@ -1063,7 +1067,7 @@ fn stream_reader_loop(
     crate::commands::jsonl::append_jsonl_logged(chat_file, &asst_entry, "stream asst response");
 
     // Log to activity feed
-    super::claude_runner::log_chat_event(&state.root, chat_key, &full_text);
+    super::claude_runner::log_chat_event(&state.data_dir, chat_key, &full_text);
 
     // Validate stream result
     if full_text.is_empty() && event_count > 30 {
@@ -1771,7 +1775,7 @@ fn run_pa_agent_loop(
             &asst_entry,
             &format!("{} auto response", label_prefix),
         );
-        super::claude_runner::log_chat_event(state.root.as_path(), chat_key, &response);
+        super::claude_runner::log_chat_event(state.data_dir.as_path(), chat_key, &response);
         append_stream_event(
             stream_buf,
             json!({"type":"text","run_id":run_id,"text": response}),

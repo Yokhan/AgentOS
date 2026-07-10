@@ -137,7 +137,10 @@ fn collect_unacked_critical_signals(content: &str, limit: usize) -> Vec<(String,
 pub async fn auto_approve_loop(state: Arc<AppState>) {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
     loop {
-        interval.tick().await;
+        tokio::select! {
+            _ = interval.tick() => {}
+            _ = wait_for_shutdown(&state) => break,
+        }
 
         // Housekeeping: rotate signals if too large
         super::signals::rotate_signals(&state);
@@ -289,6 +292,12 @@ pub async fn auto_approve_loop(state: Arc<AppState>) {
     }
 }
 
+async fn wait_for_shutdown(state: &AppState) {
+    while !state.is_shutdown_requested() {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+}
+
 fn unblock_ready_chain_steps(state: &Arc<AppState>) {
     let mut changed = false;
     if let Ok(mut delegations) = state.delegations.lock() {
@@ -387,17 +396,19 @@ pub fn set_auto_approve_rules(state: State<Arc<AppState>>, rules: Vec<Value>) ->
         .filter_map(|v| serde_json::from_value::<AutoApproveRule>(v.clone()).ok())
         .collect();
 
-    // Read config, update auto_approve_rules, save
-    let mut cfg = state.config();
-    if let Some(obj) = cfg.as_object_mut() {
-        obj.insert(
-            "auto_approve_rules".to_string(),
-            serde_json::to_value(&parsed).unwrap_or_default(),
-        );
-        if let Ok(content) = serde_json::to_string_pretty(&cfg) {
-            let _ = super::claude_runner::atomic_write(&state.config_path, &content);
-            state.invalidate_config();
+    let serialized = match serde_json::to_value(&parsed) {
+        Ok(value) => value,
+        Err(error) => return json!({"status": "error", "error": error.to_string()}),
+    };
+    if let Err(error) = state.update_config(|cfg| {
+        if !cfg.is_object() {
+            *cfg = json!({});
         }
+        cfg["auto_approve_rules"] = serialized;
+        Ok(())
+    }) {
+        crate::log_error!("[auto-approve] save failed: {}", error);
+        return json!({"status": "error", "error": error});
     }
     crate::log_info!("[auto-approve] saved {} rules", parsed.len());
     json!({"status": "ok", "count": parsed.len()})
@@ -431,7 +442,7 @@ fn auto_trigger_pa(state: &AppState) {
     }
 
     // Build message from recent critical signals
-    let path = state.root.join("tasks").join(".signals.jsonl");
+    let path = state.tasks_dir.join(".signals.jsonl");
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(_) => return,

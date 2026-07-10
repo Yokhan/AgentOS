@@ -1095,7 +1095,7 @@ fn linked_inbox_for_session(state: &AppState, session: &MultiAgentSession) -> Ve
 }
 
 fn linked_signals_for_session(state: &AppState, session: &MultiAgentSession) -> Vec<Value> {
-    let path = state.root.join("tasks").join(".signals.jsonl");
+    let path = state.tasks_dir.join(".signals.jsonl");
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(_) => return Vec::new(),

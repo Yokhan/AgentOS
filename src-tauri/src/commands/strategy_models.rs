@@ -152,11 +152,11 @@ pub enum VerifyCondition {
 }
 
 pub fn strategies_path(state: &AppState) -> std::path::PathBuf {
-    state.root.join("tasks").join(".strategies.json")
+    state.tasks_dir.join(".strategies.json")
 }
 
 pub fn goals_path(state: &AppState) -> std::path::PathBuf {
-    state.root.join("tasks").join("goals.md")
+    state.tasks_dir.join("goals.md")
 }
 
 pub fn load_strategies(state: &AppState) -> Vec<Strategy> {
@@ -367,7 +367,7 @@ pub fn strategy_milestone(
         "MILESTONE [{}]: {} — {}",
         strategy_filter, milestone, evidence
     );
-    let mem_path = state.root.join("tasks").join("pa-memory.jsonl");
+    let mem_path = state.tasks_dir.join("pa-memory.jsonl");
     super::jsonl::append_jsonl_logged(
         &mem_path,
         &serde_json::json!({"ts": state.now_iso(), "note": note}),
@@ -469,7 +469,7 @@ pub fn update_step_from_delegation(
             step_id,
             resp.chars().take(100).collect::<String>()
         );
-        let mem_path = state.root.join("tasks").join("pa-memory.jsonl");
+        let mem_path = state.tasks_dir.join("pa-memory.jsonl");
         super::jsonl::append_jsonl_logged(
             &mem_path,
             &json!({"ts": state.now_iso(), "note": note}),

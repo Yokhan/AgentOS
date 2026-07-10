@@ -1,6 +1,6 @@
 [package]
 name = "agent-os"
-version = "0.3.45"
+version = "0.3.46"
 description = "Agent OS - Desktop command center for AI agents"
 edition = "2021"
 
@@ -26,6 +26,7 @@ chrono = { version = "0.4", features = ["serde"] }
 tauri-plugin-updater = "2.10.1"
 axum = { version = "0.8.8", features = ["json"] }
 tower-http = { version = "0.6.8", features = ["cors"] }
+getrandom = "0.4"
 
 [features]
 default = ["custom-protocol"]

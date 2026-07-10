@@ -12,6 +12,11 @@ const MAX_LOG_SIZE: u64 = 5 * 1024 * 1024; // 5MB
 /// Initialize logger with the app root path. Call once at startup.
 pub fn init(root: &std::path::Path) {
     let path = root.join("tasks").join("agent-os.log");
+    if let Some(parent) = path.parent() {
+        if let Err(error) = std::fs::create_dir_all(parent) {
+            eprintln!("Cannot create Agent OS log directory: {}", error);
+        }
+    }
     let _ = LOG_PATH.set(path);
 }
 

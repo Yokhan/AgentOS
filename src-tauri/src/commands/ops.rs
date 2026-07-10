@@ -273,7 +273,7 @@ pub fn execute_health_inline(docs_dir: &std::path::Path, project: &str) -> Strin
 /// Get task queue from tasks/queue.md
 #[tauri::command]
 pub fn get_queue(state: State<Arc<AppState>>) -> Value {
-    let queue_path = state.root.join("tasks").join("queue.md");
+    let queue_path = state.tasks_dir.join("queue.md");
     let mut tasks = Vec::new();
 
     if let Ok(content) = std::fs::read_to_string(&queue_path) {
@@ -336,7 +336,7 @@ pub async fn send_telegram(state: State<'_, Arc<AppState>>, text: String) -> Res
 /// Save attached file for chat context (returns local path for claude)
 #[tauri::command]
 pub fn save_attachment(state: State<Arc<AppState>>, name: String, data: Vec<u8>) -> Value {
-    let att_dir = state.root.join("tasks").join("attachments");
+    let att_dir = state.tasks_dir.join("attachments");
     let _ = std::fs::create_dir_all(&att_dir);
 
     let nanos = std::time::SystemTime::now()
@@ -358,7 +358,7 @@ pub fn save_attachment(state: State<Arc<AppState>>, name: String, data: Vec<u8>)
 /// Add task to queue
 #[tauri::command]
 pub fn add_to_queue(state: State<Arc<AppState>>, task: String) -> Value {
-    let queue_path = state.root.join("tasks").join("queue.md");
+    let queue_path = state.tasks_dir.join("queue.md");
     let entry = format!("- [ ] {}\n", task);
 
     match std::fs::OpenOptions::new()

@@ -4,10 +4,12 @@ use std::sync::Arc;
 use tauri::State;
 
 #[tauri::command]
-pub fn get_app_info() -> Value {
+pub fn get_app_info(state: State<Arc<AppState>>) -> Value {
     json!({
         "name": env!("CARGO_PKG_NAME"),
         "version": env!("CARGO_PKG_VERSION"),
+        "data_dir": state.data_dir.to_string_lossy(),
+        "project_root": state.root.to_string_lossy(),
     })
 }
 
@@ -23,7 +25,7 @@ pub fn record_ui_diagnostic(state: State<Arc<AppState>>, event: Value) -> Value 
         .and_then(|v| v.as_str())
         .unwrap_or("warn")
         .to_string();
-    let tasks_dir = state.root.join("tasks");
+    let tasks_dir = state.tasks_dir.clone();
     let _ = std::fs::create_dir_all(&tasks_dir);
     let path = tasks_dir.join(".ui-diagnostics.jsonl");
     let entry = json!({
@@ -77,35 +79,29 @@ pub fn set_permission(state: State<Arc<AppState>>, project: String, profile: Str
         return json!({"status": "error", "error": "Invalid project or profile"});
     }
 
-    // Read current config
-    let mut cfg = state.config();
-
-    // Update project_permissions
-    if cfg.get("project_permissions").is_none() {
-        cfg["project_permissions"] = json!({});
-    }
-    let old = cfg
-        .pointer("/project_permissions")
-        .and_then(|pp| pp.get(&project))
-        .and_then(|v| v.as_str())
-        .unwrap_or("none")
-        .to_string();
-    cfg["project_permissions"][&project] = json!(profile);
-
-    let content = match serde_json::to_string_pretty(&cfg) {
-        Ok(content) => content,
-        Err(error) => {
-            return json!({"status": "error", "error": format!("Cannot serialize config: {}", error)});
+    let mut old = "none".to_string();
+    if let Err(error) = state.update_config(|cfg| {
+        if !cfg.is_object() {
+            *cfg = json!({});
         }
-    };
-    if let Err(error) = super::claude_runner::atomic_write(&state.config_path, &content) {
+        if cfg.get("project_permissions").is_none() {
+            cfg["project_permissions"] = json!({});
+        }
+        old = cfg
+            .pointer("/project_permissions")
+            .and_then(|permissions| permissions.get(&project))
+            .and_then(|value| value.as_str())
+            .unwrap_or("none")
+            .to_string();
+        cfg["project_permissions"][&project] = json!(profile);
+        Ok(())
+    }) {
         crate::log_error!("[config] permission save failed: {}", error);
-        return json!({"status": "error", "error": format!("Cannot save config: {}", error)});
+        return json!({"status": "error", "error": error});
     }
-    state.invalidate_config();
 
     // Audit trail
-    let audit_path = state.root.join("tasks").join(".audit-log.jsonl");
+    let audit_path = state.tasks_dir.join(".audit-log.jsonl");
     let entry = json!({"ts": state.now_iso(), "action": "permission_change", "project": project, "old": old, "new": profile});
     super::jsonl::append_jsonl_logged(&audit_path, &entry, "permission audit");
     crate::log_info!("[config] permission: {} {} -> {}", project, old, profile);
@@ -300,19 +296,15 @@ pub fn get_config(state: State<Arc<AppState>>) -> Value {
 
 #[tauri::command]
 pub fn set_config(state: State<Arc<AppState>>, key: String, value: String) -> Value {
-    let mut cfg = state.config();
-    cfg[&key] = json!(value);
-
-    match serde_json::to_string_pretty(&cfg) {
-        Ok(content) => {
-            if super::claude_runner::atomic_write(&state.config_path, &content).is_ok() {
-                state.invalidate_config();
-                json!({"status": "ok", "key": key, "value": value})
-            } else {
-                json!({"status": "error", "error": "Failed to write config"})
-            }
+    match state.update_config(|cfg| {
+        if !cfg.is_object() {
+            *cfg = json!({});
         }
-        Err(e) => json!({"status": "error", "error": e.to_string()}),
+        cfg[&key] = json!(value);
+        Ok(())
+    }) {
+        Ok(_) => json!({"status": "ok", "key": key, "value": value}),
+        Err(error) => json!({"status": "error", "error": error}),
     }
 }
 

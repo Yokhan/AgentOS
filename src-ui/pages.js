@@ -390,6 +390,56 @@ function SettingsPage() {
                 : null}
             </div>
           </div>
+          <div
+            style="border:1px solid var(--border);background:var(--bg-soft);padding:var(--sp-s);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--sp-s);align-items:center"
+          >
+            <div style="min-width:0">
+              <div
+                style="font-family:var(--font-mono);font-size:var(--fs-s);color:var(--t3);text-transform:uppercase;letter-spacing:1px"
+              >
+                runtime storage
+              </div>
+              <div style="font-size:var(--fs-s);color:var(--t2);margin-top:5px">
+                mutable data
+              </div>
+              <code
+                title=${appInfo.value?.data_dir || "runtime path unavailable"}
+                style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px"
+              >${appInfo.value?.data_dir || "runtime path unavailable"}</code>
+              <div style="font-size:var(--fs-s);color:var(--t2);margin-top:7px">
+                project root
+              </div>
+              <code
+                title=${appInfo.value?.project_root || "project root unavailable"}
+                style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px"
+              >${appInfo.value?.project_root || "project root unavailable"}</code>
+            </div>
+            <div style="display:flex;gap:var(--sp-xs);flex-wrap:wrap;justify-content:flex-end">
+              <button
+                class="action-btn"
+                disabled=${!appInfo.value?.data_dir}
+                onClick=${() => {
+                  if (!appInfo.value?.data_dir) return;
+                  __invoke("plugin:shell|open", { path: appInfo.value.data_dir }).catch(
+                    (error) => showToast("Cannot open runtime data: " + error, "error"),
+                  );
+                }}
+              >
+                open data
+              </button>
+              <button
+                class="action-btn"
+                disabled=${!appInfo.value?.data_dir}
+                onClick=${async () => {
+                  if (!appInfo.value?.data_dir) return;
+                  await navigator.clipboard.writeText(appInfo.value.data_dir);
+                  showToast("Runtime data path copied", "success", 1200);
+                }}
+              >
+                copy path
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="panel">

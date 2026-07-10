@@ -6,6 +6,7 @@ const app = read("src-ui/app.js");
 const chat = read("src-ui/chat.js");
 const stream = read("src-tauri/src/commands/chat_stream.rs");
 const poll = read("src-tauri/src/commands/chat_stream_poll.rs");
+const delegationStream = read("src-tauri/src/commands/delegation_stream.rs");
 const ops = read("src-tauri/src/commands/operation_state.rs");
 const views = read("src-ui/views.js");
 
@@ -24,6 +25,15 @@ const checks = [
     ok:
       poll.includes("SeekFrom::Start(safe_offset as u64)") &&
       poll.includes("byte_offset"),
+  },
+  {
+    name: "delegation stream polling reads from byte offset",
+    ok:
+      delegationStream.includes("SeekFrom::Start(safe_offset as u64)") &&
+      delegationStream.includes('"byte_offset"') &&
+      !/poll_delegation_stream[\s\S]{0,700}read_to_string\(&buf_path\)/.test(
+        delegationStream,
+      ),
   },
   {
     name: "text_delta stream does not persist full accumulated text",

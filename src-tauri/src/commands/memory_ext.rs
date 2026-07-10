@@ -5,7 +5,7 @@ use serde_json::Value;
 
 /// MEMORY_LIST: list saved memories
 pub fn memory_list(state: &AppState, filter: &str) -> Option<String> {
-    let path = state.root.join("tasks").join("pa-memory.jsonl");
+    let path = state.tasks_dir.join("pa-memory.jsonl");
     let content = std::fs::read_to_string(&path).ok()?;
     let mut entries: Vec<(String, String)> = Vec::new();
 
@@ -66,8 +66,8 @@ pub fn memory_search(state: &AppState, query: &str) -> Option<String> {
 
 /// MEMORY_DELETE: remove by timestamp or age
 pub fn memory_delete(state: &AppState, filter: &str) -> Option<String> {
-    let path = state.root.join("tasks").join("pa-memory.jsonl");
-    let archive = state.root.join("tasks").join("pa-memory-archive.jsonl");
+    let path = state.tasks_dir.join("pa-memory.jsonl");
+    let archive = state.tasks_dir.join("pa-memory-archive.jsonl");
     let content = std::fs::read_to_string(&path).ok()?;
     let mut kept = Vec::new();
     let mut archived = 0;

@@ -77,7 +77,7 @@ pub async fn send_chat(
     super::jsonl::append_jsonl_logged(&chat_file, &asst_entry, "chat asst response");
 
     // Log to activity feed
-    log_chat_event(&state.root, &chat_key, &response);
+    log_chat_event(&state.data_dir, &chat_key, &response);
 
     // Process PA commands from orchestrator response
     let mut final_response = response.clone();

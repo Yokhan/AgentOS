@@ -32,7 +32,7 @@ pub fn append_usage(root: &std::path::Path, project: &str, usage: &UsageInfo) {
 /// Get usage summary — totals by project and overall
 #[tauri::command]
 pub fn get_usage_summary(state: State<Arc<AppState>>) -> Value {
-    let path = state.root.join("tasks").join(".usage-log.jsonl");
+    let path = state.tasks_dir.join(".usage-log.jsonl");
     let content = std::fs::read_to_string(&path).unwrap_or_default();
 
     let mut total_input: u64 = 0;

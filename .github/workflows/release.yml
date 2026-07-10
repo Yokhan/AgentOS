@@ -39,6 +39,15 @@ jobs:
         shell: pwsh
         run: cargo test --manifest-path src-tauri\Cargo.toml --lib
 
+      - name: Audit npm dependencies
+        run: npm audit
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit Rust dependencies
+        run: cargo audit --file src-tauri/Cargo.lock
+
       - name: Build signed Tauri bundles
         shell: pwsh
         run: |

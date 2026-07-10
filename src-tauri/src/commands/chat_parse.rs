@@ -335,7 +335,7 @@ fn build_identity_context(state: &AppState) -> String {
 }
 
 fn build_queue_context(state: &AppState) -> String {
-    let path = state.root.join("tasks").join("queue.md");
+    let path = state.tasks_dir.join("queue.md");
     match std::fs::read_to_string(&path) {
         Ok(content) if !content.trim().is_empty() => {
             format!("[QUEUE]\n{}\n[END QUEUE]", content.trim())
@@ -345,7 +345,7 @@ fn build_queue_context(state: &AppState) -> String {
 }
 
 fn build_pa_memory(state: &AppState) -> String {
-    let path = state.root.join("tasks").join("pa-memory.jsonl");
+    let path = state.tasks_dir.join("pa-memory.jsonl");
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(_) => return String::new(),

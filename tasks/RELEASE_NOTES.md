@@ -1,3 +1,12 @@
+# Agent OS 0.3.46
+
+- Updated the Tauri dependency graph and removed all seven RustSec vulnerabilities reported for the previous release.
+- Moved mutable config, segments, chats, attachments, and runtime journals to `%LOCALAPPDATA%/AgentOS` with non-destructive first-run migration from the legacy checkout paths.
+- Added transactional config updates across Tauri, HTTP, onboarding, permissions, and auto-approve so concurrent writes preserve fields and failures cannot report success.
+- Added a managed background task registry, graceful API/auto-approve shutdown, deterministic ACP reader joins, and bounded shutdown diagnostics.
+- Reworked session, timeline, notification, and delegation stream reads to use bounded tails or byte offsets instead of repeatedly loading whole JSONL files.
+- Added visible runtime storage paths in Settings plus dependency audits, concurrency clippy checks, and an isolated desktop lifecycle smoke to CI.
+
 # Agent OS 0.3.45
 
 - Bounded repository scanning to four workers, removed git I/O from cache locks, and kept live delegation overlays fresh without rescanning every project.

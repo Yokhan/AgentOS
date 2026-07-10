@@ -192,7 +192,7 @@ fn sensor_stale_process(state: &AppState) -> Vec<SensorAction> {
 
 /// Sensor: check hourly cost across all delegations.
 fn sensor_cost_guard(state: &AppState) -> Vec<SensorAction> {
-    let usage_path = state.root.join("tasks").join(".usage-log.jsonl");
+    let usage_path = state.tasks_dir.join(".usage-log.jsonl");
     let content = match std::fs::read_to_string(&usage_path) {
         Ok(c) => c,
         Err(_) => return vec![],

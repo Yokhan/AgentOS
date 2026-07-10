@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -360,8 +361,11 @@ pub struct FileLease {
 /// Shared application state
 pub struct AppState {
     pub root: PathBuf,
+    pub data_dir: PathBuf,
+    pub tasks_dir: PathBuf,
     pub docs_dir: PathBuf,
     pub config_path: PathBuf,
+    pub segments_path: PathBuf,
     pub chats_dir: PathBuf,
     pub delegations_path: PathBuf,
     pub sessions_path: PathBuf,
@@ -390,6 +394,9 @@ pub struct AppState {
     pub file_leases: Mutex<HashMap<String, FileLease>>,
     /// Running child process PIDs by chat_key — used to kill zombies
     pub running_pids: Mutex<HashMap<String, u32>>,
+    /// Join handles for long-lived chat/runtime workers.
+    pub background_tasks: Mutex<HashMap<String, std::thread::JoinHandle<()>>>,
+    pub shutdown_requested: AtomicBool,
     /// Chat keys explicitly cancelled by the user. Checked by agent loops between actions.
     pub chat_cancellations: Mutex<HashSet<String>>,
     /// Running activities by project — in-memory, no file race conditions
@@ -399,37 +406,85 @@ pub struct AppState {
     pub inbox: Mutex<Vec<crate::commands::inbox::InboxItem>>,
     /// Cached config.json — refreshed every 5 seconds or after writes
     pub config_cache: Mutex<(serde_json::Value, Instant)>,
+    /// Serializes config read-modify-write transactions across command surfaces.
+    pub config_write_lock: Mutex<()>,
     /// Cached Codex ACP status to avoid repeated adapter startups during UI refreshes
     pub codex_acp_status_cache: Mutex<(Option<serde_json::Value>, Instant)>,
     /// Bearer token for HTTP API authentication (generated at startup)
     pub api_token: String,
 }
 
+#[cfg(not(test))]
+pub(crate) fn runtime_data_dir(_root: &std::path::Path) -> PathBuf {
+    if let Ok(path) = std::env::var("AGENT_OS_DATA_DIR") {
+        if !path.trim().is_empty() {
+            return PathBuf::from(path);
+        }
+    }
+    dirs::data_local_dir()
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .unwrap_or_default()
+                .join("AppData")
+                .join("Local")
+        })
+        .join("AgentOS")
+}
+
+#[cfg(test)]
+pub(crate) fn runtime_data_dir(root: &std::path::Path) -> PathBuf {
+    root.to_path_buf()
+}
+
 impl AppState {
     pub fn new(root: PathBuf) -> Self {
-        let config_path = root.join("n8n").join("config.json");
+        #[cfg(test)]
+        let (data_dir, config_path, segments_file, tasks_dir) = (
+            root.clone(),
+            root.join("n8n").join("config.json"),
+            root.join("n8n").join("dashboard").join("segments.json"),
+            root.join("tasks"),
+        );
+        #[cfg(not(test))]
+        let (data_dir, config_path, segments_file, tasks_dir) = {
+            let data_dir = runtime_data_dir(&root);
+            let config_path = data_dir.join("config.json");
+            let segments_file = data_dir.join("segments.json");
+            let tasks_dir = data_dir.join("tasks");
+            if let Err(error) = Self::migrate_runtime_data(
+                &root,
+                &data_dir,
+                &config_path,
+                &segments_file,
+                &tasks_dir,
+            ) {
+                crate::log_error!("[state] runtime data migration failed: {}", error);
+            }
+            (data_dir, config_path, segments_file, tasks_dir)
+        };
         let docs_dir = Self::load_docs_dir(&config_path);
-        let chats_dir = root.join("tasks").join("chats");
+        let chats_dir = tasks_dir.join("chats");
         let n8n_url = Self::load_n8n_url(&config_path);
 
         // Load segments
-        let segments_file = root.join("n8n").join("dashboard").join("segments.json");
         let (segments, project_segment) = Self::load_segments(&segments_file);
 
         // Ensure chats dir exists
         let _ = std::fs::create_dir_all(&chats_dir);
-        let _ = std::fs::create_dir_all(root.join("tasks"));
-        let _ = std::fs::write(root.join("tasks").join(".running-tasks.json"), "{}");
+        let _ = std::fs::create_dir_all(&tasks_dir);
+        if let Err(error) = std::fs::write(tasks_dir.join(".running-tasks.json"), "{}") {
+            crate::log_error!("[state] cannot initialize running task state: {}", error);
+        }
 
         // Update project_root in config to match detected root
         Self::update_project_root(&config_path, &root);
 
-        let delegations_path = root.join("tasks").join(".delegations.json");
-        let sessions_path = root.join("tasks").join(".sessions.json");
-        let session_events_path = root.join("tasks").join(".session-events.jsonl");
-        let project_sessions_path = root.join("tasks").join(".project-sessions.json");
-        let work_items_path = root.join("tasks").join(".work-items.json");
-        let file_leases_path = root.join("tasks").join(".file-leases.json");
+        let delegations_path = tasks_dir.join(".delegations.json");
+        let sessions_path = tasks_dir.join(".sessions.json");
+        let session_events_path = tasks_dir.join(".session-events.jsonl");
+        let project_sessions_path = tasks_dir.join(".project-sessions.json");
+        let work_items_path = tasks_dir.join(".work-items.json");
+        let file_leases_path = tasks_dir.join(".file-leases.json");
 
         // Load persisted delegations, reset "running" to "pending"
         let delegations = Self::load_delegations(&delegations_path);
@@ -440,8 +495,11 @@ impl AppState {
 
         Self {
             root,
+            data_dir,
+            tasks_dir,
             docs_dir,
             config_path,
+            segments_path: segments_file,
             chats_dir,
             delegations_path,
             sessions_path,
@@ -461,6 +519,8 @@ impl AppState {
             work_items: Mutex::new(work_items),
             file_leases: Mutex::new(file_leases),
             running_pids: Mutex::new(HashMap::new()),
+            background_tasks: Mutex::new(HashMap::new()),
+            shutdown_requested: AtomicBool::new(false),
             chat_cancellations: Mutex::new(HashSet::new()),
             dir_busy: Mutex::new(std::collections::HashSet::new()),
             activities: Mutex::new(HashMap::new()),
@@ -470,23 +530,74 @@ impl AppState {
                 serde_json::json!({}),
                 Instant::now() - std::time::Duration::from_secs(100),
             )),
+            config_write_lock: Mutex::new(()),
             codex_acp_status_cache: Mutex::new((None, Instant::now() - Duration::from_secs(300))),
             api_token: Self::generate_token(),
         }
     }
 
+    fn migrate_runtime_data(
+        root: &std::path::Path,
+        data_dir: &std::path::Path,
+        config_path: &std::path::Path,
+        segments_path: &std::path::Path,
+        tasks_dir: &std::path::Path,
+    ) -> Result<(), String> {
+        std::fs::create_dir_all(data_dir).map_err(|error| error.to_string())?;
+        Self::copy_file_if_missing(&root.join("n8n").join("config.json"), config_path)?;
+        Self::copy_file_if_missing(
+            &root.join("n8n").join("dashboard").join("segments.json"),
+            segments_path,
+        )?;
+        Self::copy_directory(&root.join("tasks"), tasks_dir)?;
+        std::fs::create_dir_all(tasks_dir).map_err(|error| error.to_string())?;
+        if !config_path.exists() {
+            std::fs::write(config_path, "{}").map_err(|error| error.to_string())?;
+        }
+        if !segments_path.exists() {
+            std::fs::write(segments_path, r#"{"segments":{}}"#)
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    }
+
+    fn copy_file_if_missing(
+        source: &std::path::Path,
+        target: &std::path::Path,
+    ) -> Result<(), String> {
+        if target.exists() || !source.exists() {
+            return Ok(());
+        }
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        std::fs::copy(source, target)
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
+    fn copy_directory(source: &std::path::Path, target: &std::path::Path) -> Result<(), String> {
+        if !source.exists() {
+            return Ok(());
+        }
+        std::fs::create_dir_all(target).map_err(|error| error.to_string())?;
+        for entry in std::fs::read_dir(source).map_err(|error| error.to_string())? {
+            let entry = entry.map_err(|error| error.to_string())?;
+            let source_path = entry.path();
+            let target_path = target.join(entry.file_name());
+            if source_path.is_dir() {
+                Self::copy_directory(&source_path, &target_path)?;
+            } else if !target_path.exists() {
+                std::fs::copy(&source_path, &target_path).map_err(|error| error.to_string())?;
+            }
+        }
+        Ok(())
+    }
+
     fn generate_token() -> String {
-        // More entropy than DefaultHasher: multiple sources + high-res time
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        let mut h = DefaultHasher::new();
-        std::time::SystemTime::now().hash(&mut h);
-        std::process::id().hash(&mut h);
-        let a = h.finish();
-        // Second hash with different seed
-        std::time::Instant::now().hash(&mut h);
-        let b = h.finish();
-        format!("{:016x}{:016x}", a, b)
+        let mut bytes = [0_u8; 32];
+        getrandom::fill(&mut bytes).expect("OS random source unavailable");
+        bytes.iter().map(|byte| format!("{byte:02x}")).collect()
     }
 
     fn load_docs_dir(config_path: &PathBuf) -> PathBuf {
@@ -734,11 +845,16 @@ impl AppState {
 
     pub fn get_session_events(&self, session_id: &str, limit: usize) -> Vec<SessionEvent> {
         let mut events = Vec::new();
-        if let Ok(content) = std::fs::read_to_string(&self.session_events_path) {
-            for line in content.lines().rev() {
-                if let Ok(evt) = serde_json::from_str::<SessionEvent>(line) {
-                    if evt.session_id == session_id {
-                        events.push(evt);
+        let scan_lines = limit.saturating_mul(20).max(200);
+        if let Ok(lines) = crate::commands::jsonl::read_recent_lines(
+            &self.session_events_path,
+            scan_lines,
+            crate::commands::jsonl::RECENT_READ_MAX_BYTES,
+        ) {
+            for line in lines {
+                if let Ok(event) = serde_json::from_str::<SessionEvent>(&line) {
+                    if event.session_id == session_id {
+                        events.push(event);
                         if events.len() >= limit {
                             break;
                         }
@@ -787,15 +903,41 @@ impl AppState {
         val
     }
 
-    /// Invalidate config cache (call after writing config)
-    pub fn invalidate_config(&self) {
-        if let Ok(mut cache) = self.config_cache.lock() {
-            cache.1 = Instant::now() - std::time::Duration::from_secs(100);
-        }
+    pub fn update_config<F>(&self, update: F) -> Result<serde_json::Value, String>
+    where
+        F: FnOnce(&mut serde_json::Value) -> Result<(), String>,
+    {
+        let _write_guard = self
+            .config_write_lock
+            .lock()
+            .map_err(|_| "config write lock poisoned".to_string())?;
+        let mut value = std::fs::read_to_string(&self.config_path)
+            .ok()
+            .and_then(|content| serde_json::from_str(&content).ok())
+            .unwrap_or_else(|| serde_json::json!({}));
+        update(&mut value)?;
+        let content = serde_json::to_string_pretty(&value)
+            .map_err(|error| format!("Cannot serialize config: {error}"))?;
+        crate::commands::claude_runner::atomic_write(&self.config_path, &content)
+            .map_err(|error| format!("Cannot save config: {error}"))?;
+        let mut cache = self
+            .config_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        *cache = (value.clone(), Instant::now());
+        Ok(value)
     }
 
     pub fn uptime_secs(&self) -> u64 {
         self.start_time.elapsed().as_secs()
+    }
+
+    pub fn request_shutdown(&self) {
+        self.shutdown_requested.store(true, Ordering::Release);
+    }
+
+    pub fn is_shutdown_requested(&self) -> bool {
+        self.shutdown_requested.load(Ordering::Acquire)
     }
 
     /// Wait until directory is not busy, then mark it busy.
@@ -816,5 +958,116 @@ impl AppState {
         if let Ok(mut busy) = self.dir_busy.lock() {
             busy.remove(dir_key);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    fn temp_root(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "agentos-state-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ))
+    }
+
+    #[test]
+    fn concurrent_config_updates_preserve_every_field() {
+        let root = temp_root("config");
+        std::fs::create_dir_all(root.join("n8n")).expect("create config directory");
+        std::fs::write(root.join("n8n").join("config.json"), "{}").expect("seed config");
+        let state = Arc::new(AppState::new(root.clone()));
+        let mut workers = Vec::new();
+        for index in 0..8 {
+            let state = state.clone();
+            workers.push(std::thread::spawn(move || {
+                state
+                    .update_config(|config| {
+                        config[format!("field_{index}")] = serde_json::json!(index);
+                        Ok(())
+                    })
+                    .expect("config update");
+            }));
+        }
+        for worker in workers {
+            worker.join().expect("config worker");
+        }
+        let saved: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(root.join("n8n").join("config.json")).expect("read config"),
+        )
+        .expect("parse config");
+        for index in 0..8 {
+            assert_eq!(saved[format!("field_{index}")], index);
+        }
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn api_tokens_are_random_256_bit_hex_values() {
+        let first = AppState::generate_token();
+        let second = AppState::generate_token();
+        assert_eq!(first.len(), 64);
+        assert!(first.chars().all(|character| character.is_ascii_hexdigit()));
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn runtime_migration_copies_legacy_data_without_removing_source() {
+        let root = temp_root("migration");
+        let data_dir = root.join("local-data");
+        std::fs::create_dir_all(root.join("n8n").join("dashboard")).expect("create legacy config");
+        std::fs::create_dir_all(root.join("tasks").join("chats")).expect("create legacy tasks");
+        std::fs::write(root.join("n8n").join("config.json"), r#"{"value":1}"#)
+            .expect("seed config");
+        std::fs::write(
+            root.join("n8n").join("dashboard").join("segments.json"),
+            r#"{"segments":{"Active":["ProjectA"]}}"#,
+        )
+        .expect("seed segments");
+        let legacy_chat = root.join("tasks").join("chats").join("ProjectA.jsonl");
+        std::fs::write(&legacy_chat, "{\"role\":\"user\",\"msg\":\"hello\"}\n").expect("seed chat");
+
+        AppState::migrate_runtime_data(
+            &root,
+            &data_dir,
+            &data_dir.join("config.json"),
+            &data_dir.join("segments.json"),
+            &data_dir.join("tasks"),
+        )
+        .expect("migrate data");
+
+        assert!(data_dir.join("config.json").exists());
+        assert!(data_dir.join("segments.json").exists());
+        assert!(data_dir
+            .join("tasks")
+            .join("chats")
+            .join("ProjectA.jsonl")
+            .exists());
+        assert!(legacy_chat.exists());
+        std::fs::write(data_dir.join("config.json"), r#"{"value":"local"}"#)
+            .expect("change migrated config");
+        std::fs::write(
+            root.join("n8n").join("config.json"),
+            r#"{"value":"legacy-new"}"#,
+        )
+        .expect("change legacy config");
+        AppState::migrate_runtime_data(
+            &root,
+            &data_dir,
+            &data_dir.join("config.json"),
+            &data_dir.join("segments.json"),
+            &data_dir.join("tasks"),
+        )
+        .expect("repeat migration");
+        assert!(std::fs::read_to_string(data_dir.join("config.json"))
+            .expect("read local config")
+            .contains("local"));
+        let _ = std::fs::remove_dir_all(root);
     }
 }

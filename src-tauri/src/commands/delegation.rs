@@ -125,7 +125,7 @@ fn read_recent_archived_delegations(
     seen: &mut HashSet<String>,
     limit: usize,
 ) -> Vec<Value> {
-    let path = state.root.join("tasks").join(".delegation-archive.jsonl");
+    let path = state.tasks_dir.join(".delegation-archive.jsonl");
     let content = std::fs::read_to_string(path).unwrap_or_default();
     let mut values = Vec::new();
     for line in content.lines().rev() {
@@ -332,10 +332,7 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
     crate::log_info!("[delegation:{}] acquired project lock", d.project);
 
     // Stream buffer for real-time progress
-    let stream_buf = state
-        .root
-        .join("tasks")
-        .join(format!(".stream-deleg-{}.jsonl", id));
+    let stream_buf = state.tasks_dir.join(format!(".stream-deleg-{}.jsonl", id));
     let _ = std::fs::write(&stream_buf, "");
 
     // --- LEVEL 1: Execute with balanced permissions (minimum for delegations) ---
@@ -650,7 +647,7 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
         deleg_model.as_deref().unwrap_or(""),
     );
     if let Some(usage) = usage.as_ref() {
-        super::usage::append_usage(&state.root, &d.project, usage);
+        super::usage::append_usage(&state.data_dir, &d.project, usage);
     }
     super::operation_state::emit(
         state,

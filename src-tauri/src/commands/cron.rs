@@ -23,7 +23,7 @@ pub struct CronJob {
 }
 
 fn cron_path(state: &AppState) -> std::path::PathBuf {
-    state.root.join("tasks").join("cron.json")
+    state.tasks_dir.join("cron.json")
 }
 
 pub fn load_cron_jobs(state: &AppState) -> Vec<CronJob> {
@@ -107,7 +107,7 @@ pub fn cron_edit(state: &AppState, name: &str, schedule: &str, task: &str) -> Op
 /// CRON_DELETE
 pub fn cron_delete(state: &AppState, name: &str) -> Option<String> {
     let mut jobs = load_cron_jobs(state);
-    let archive = state.root.join("tasks").join("cron-archive.json");
+    let archive = state.tasks_dir.join("cron-archive.json");
     let idx = jobs.iter().position(|j| j.name == name)?;
     let removed = jobs.remove(idx);
     // Archive

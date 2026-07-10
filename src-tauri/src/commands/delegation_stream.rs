@@ -3,7 +3,7 @@
 
 use crate::state::AppState;
 use serde_json::{json, Value};
-use std::io::BufRead;
+use std::io::{BufRead, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -425,22 +425,35 @@ pub fn parse_stream_usage(
 
 #[tauri::command]
 pub fn poll_delegation_stream(state: State<Arc<AppState>>, id: String, offset: usize) -> Value {
-    let buf_path = state
-        .root
-        .join("tasks")
-        .join(format!(".stream-deleg-{}.jsonl", id));
-    let content = std::fs::read_to_string(&buf_path).unwrap_or_default();
-    let lines: Vec<&str> = content.lines().collect();
-
-    if offset >= lines.len() {
-        return json!({"events": [], "offset": offset, "done": false});
+    let buf_path = state.tasks_dir.join(format!(".stream-deleg-{}.jsonl", id));
+    let file_len = std::fs::metadata(&buf_path)
+        .map(|metadata| metadata.len() as usize)
+        .unwrap_or(0);
+    let safe_offset = if offset <= file_len { offset } else { 0 };
+    if safe_offset >= file_len {
+        return json!({"events": [], "offset": safe_offset, "byte_offset": safe_offset, "done": false});
     }
-
-    let new_lines = &lines[offset..];
+    let mut file = match std::fs::File::open(&buf_path) {
+        Ok(file) => file,
+        Err(_) => {
+            return json!({"events": [], "offset": safe_offset, "byte_offset": safe_offset, "done": false})
+        }
+    };
+    if file.seek(SeekFrom::Start(safe_offset as u64)).is_err() {
+        return json!({"events": [], "offset": safe_offset, "byte_offset": safe_offset, "done": false});
+    }
+    let mut content = String::new();
+    if file.read_to_string(&mut content).is_err() {
+        return json!({"events": [], "offset": safe_offset, "byte_offset": safe_offset, "done": false});
+    }
+    let Some(last_newline) = content.rfind('\n') else {
+        return json!({"events": [], "offset": safe_offset, "byte_offset": safe_offset, "done": false});
+    };
+    let next_offset = safe_offset + last_newline + 1;
     let mut events: Vec<Value> = Vec::new();
     let mut done = false;
 
-    for line in new_lines {
+    for line in content[..last_newline].lines() {
         if let Ok(evt) = serde_json::from_str::<Value>(line) {
             if evt.get("type").and_then(|t| t.as_str()) == Some("done") {
                 done = true;
@@ -449,7 +462,7 @@ pub fn poll_delegation_stream(state: State<Arc<AppState>>, id: String, offset: u
         }
     }
 
-    json!({"events": events, "offset": lines.len(), "done": done})
+    json!({"events": events, "offset": next_offset, "byte_offset": next_offset, "done": done})
 }
 
 /// Context rotation: check if project has 3+ consecutive failed delegations.
