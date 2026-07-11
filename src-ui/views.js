@@ -228,6 +228,7 @@ function Header() {
       ${pending ? html`<span class="badge">${pending}</span>` : ""}
       ${safeMode.value
         ? html`<button
+            data-e2e="safe-mode"
             class="hdr-active"
             title="Safe mode disables heavy graph/live-map polling"
             onClick=${() => {
@@ -238,6 +239,7 @@ function Header() {
             safe on
           </button>`
         : html`<button
+            data-e2e="safe-mode"
             title="Enable safe mode if the UI starts freezing"
             onClick=${() => {
               safeMode.value = true;
@@ -252,6 +254,7 @@ function Header() {
             safe
           </button>`}
       <button
+        data-e2e="plans"
         class=${showPlans.value ? "hdr-active" : ""}
         onClick=${() => {
           showPlans.value = !showPlans.value;
@@ -263,6 +266,7 @@ function Header() {
         plans
       </button>
       <button
+        data-e2e="strategy"
         class=${isStrat ? "hdr-active" : ""}
         onClick=${() => {
           showStrategy.value = !showStrategy.value;
@@ -278,6 +282,7 @@ function Header() {
         strategy
       </button>
       <button
+        data-e2e="duo"
         class=${chatCollabMode.value === "duo" ? "hdr-active" : ""}
         onClick=${() => {
           const next = chatCollabMode.value !== "duo";
@@ -290,6 +295,7 @@ function Header() {
         ${chatCollabMode.value === "duo" ? "duo on" : "duo"}
       </button>
       <button
+        data-e2e="graph"
         class=${isGraph ? "hdr-active" : ""}
         onClick=${() => {
           if (safeMode.value) {
@@ -314,7 +320,12 @@ function Header() {
       >
         briefing
       </button>
-      <button onClick=${() => (showNewProject.value = true)}>+</button>
+      <button
+        data-e2e="new-project"
+        onClick=${() => (showNewProject.value = true)}
+      >
+        +
+      </button>
       <button
         onClick=${() => {
           loadAgents();
@@ -325,6 +336,7 @@ function Header() {
       </button>
       <span style="color:var(--border)">│</span>
       <button
+        data-e2e="settings"
         class=${isSet ? "hdr-active" : ""}
         onClick=${() => {
           showSettings.value = !showSettings.value;
@@ -335,6 +347,7 @@ function Header() {
         ⚙
       </button>
       <button
+        data-e2e="theme"
         onClick=${() =>
           (theme.value = theme.value === "dark" ? "light" : "dark")}
       >

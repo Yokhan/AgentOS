@@ -5,6 +5,7 @@ import {
   currentProject,
   sideTitle,
   showSettings,
+  showNewProject,
   showStrategy,
   showPlans,
   showDualAgents,
@@ -242,14 +243,12 @@ document.addEventListener("keydown", (e) => {
     );
     return;
   }
-  if (
-    e.target.tagName === "INPUT" ||
-    e.target.tagName === "TEXTAREA" ||
-    e.target.isContentEditable
-  )
-    return;
   if (e.key === "Escape") {
-    if (showGraph.value && graphSelected.value) {
+    if (showNewProject.value) {
+      showNewProject.value = false;
+    } else if (showKbHelp.value) {
+      showKbHelp.value = false;
+    } else if (showGraph.value && graphSelected.value) {
       graphSelected.value = null;
     } else if (showGraph.value) {
       showGraph.value = false;
@@ -271,6 +270,12 @@ document.addEventListener("keydown", (e) => {
     }
     return;
   }
+  if (
+    e.target.tagName === "INPUT" ||
+    e.target.tagName === "TEXTAREA" ||
+    e.target.isContentEditable
+  )
+    return;
   if (e.key === "/") {
     e.preventDefault();
     document.querySelector(".ch-inp textarea")?.focus();
@@ -355,12 +360,35 @@ function markSessionStarted() {
 }
 
 async function runStartupLoad() {
+  window.__AGENTOS_DEFERRED_STARTUP__ = {};
+  const deferStartupTask = (label, fn, timeoutMs) => {
+    window.__AGENTOS_DEFERRED_STARTUP__[label] = {
+      status: "running",
+      startedAt: performance.now(),
+    };
+    const task = startupTask(label, fn, timeoutMs).then((result) => {
+      window.__AGENTOS_DEFERRED_STARTUP__[label] = result;
+      if (result.status !== "fulfilled") {
+        window.__AGENTOS_INIT_WARNINGS__ = [
+          ...(window.__AGENTOS_INIT_WARNINGS__ || []),
+          result,
+        ];
+        console.warn(`AgentOS deferred ${label} skipped:`, result);
+      }
+      return result;
+    });
+    return task;
+  };
+  deferStartupTask("loadAgents", loadAgents, 15000).then((result) => {
+    if (result.status === "fulfilled") {
+      deferStartupTask("loadPlan", loadPlan, 8000);
+    }
+  });
+  deferStartupTask("loadPerms", loadPerms, 15000);
   const tasks = [
-    ["loadAgents", loadAgents],
     ["loadSegments", loadSegments],
     ["loadFeed", loadFeed],
     ["loadActivity", loadActivity],
-    ["loadPlan", loadPlan],
     ["loadQueue", loadQueue],
     ["checkOrch", checkOrch],
     ["chkConn", chkConn],
@@ -368,7 +396,6 @@ async function runStartupLoad() {
     ["loadPlansData", loadPlansData],
     ["loadSignals", loadSignals],
     ["loadNotifications", loadNotifications],
-    ["loadPerms", loadPerms],
     ["loadAppInfo", loadAppInfo],
     ["loadDelegations", loadDelegations],
   ];
@@ -376,6 +403,7 @@ async function runStartupLoad() {
     const results = await Promise.all(
       tasks.map(([label, fn, timeout]) => startupTask(label, fn, timeout)),
     );
+    window.__AGENTOS_STARTUP_RESULTS__ = results;
     const warnings = results.filter((r) => r.status !== "fulfilled");
     if (warnings.length) {
       window.__AGENTOS_INIT_WARNINGS__ = warnings;
@@ -410,6 +438,7 @@ async function runStartupLoad() {
     window.__AGENTOS_INIT_ERROR__ = e?.stack || e?.message || String(e);
   } finally {
     isLoading.value = false;
+    window.__AGENTOS_READY_AT__ = performance.now();
     startPolling();
   }
 }

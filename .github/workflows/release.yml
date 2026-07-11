@@ -57,6 +57,10 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      - name: Run embedded UI E2E on release binary
+        shell: pwsh
+        run: ./scripts/smoke-ui-e2e.ps1 -Profile release
+
       - name: Generate updater manifest
         shell: pwsh
         run: |

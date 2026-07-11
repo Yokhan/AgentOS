@@ -384,7 +384,7 @@ pub fn scan_projects(
     projects
 }
 
-const MAX_SCAN_WORKERS: usize = 4;
+const MAX_SCAN_WORKERS: usize = 2;
 
 fn scan_worker_count(project_count: usize) -> usize {
     project_count.clamp(1, MAX_SCAN_WORKERS)
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn repository_scan_concurrency_is_bounded() {
         assert_eq!(scan_worker_count(1), 1);
-        assert_eq!(scan_worker_count(4), 4);
-        assert_eq!(scan_worker_count(50), 4);
+        assert_eq!(scan_worker_count(4), 2);
+        assert_eq!(scan_worker_count(50), 2);
     }
 }

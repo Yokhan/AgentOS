@@ -2175,8 +2175,11 @@ user
 }
 
 #[tauri::command]
-pub fn get_provider_status(state: State<'_, Arc<AppState>>) -> Value {
-    provider_status_snapshot(&state)
+pub async fn get_provider_status(state: State<'_, Arc<AppState>>) -> Result<Value, String> {
+    let state = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || provider_status_snapshot(&state))
+        .await
+        .map_err(|error| format!("provider status worker failed: {error}"))
 }
 
 #[tauri::command]

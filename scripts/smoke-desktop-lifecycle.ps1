@@ -9,9 +9,11 @@ $exe = (Resolve-Path (Join-Path $workspaceRoot $Executable)).Path
 $fixtureRoot = Join-Path $env:TEMP ("agentos-desktop-smoke-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path (Join-Path $fixtureRoot "n8n/dashboard") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $fixtureRoot "tasks") | Out-Null
-Set-Content -Path (Join-Path $fixtureRoot "CLAUDE.md") -Value "# AgentOS smoke fixture" -Encoding UTF8
-Set-Content -Path (Join-Path $fixtureRoot "n8n/config.json") -Value '{"documents_dir":""}' -Encoding UTF8
-Set-Content -Path (Join-Path $fixtureRoot "n8n/dashboard/segments.json") -Value '{"segments":{}}' -Encoding UTF8
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText((Join-Path $fixtureRoot "CLAUDE.md"), "# AgentOS smoke fixture", $utf8NoBom)
+$fixtureConfig = @{ documents_dir = $fixtureRoot } | ConvertTo-Json -Compress
+[System.IO.File]::WriteAllText((Join-Path $fixtureRoot "n8n/config.json"), $fixtureConfig, $utf8NoBom)
+[System.IO.File]::WriteAllText((Join-Path $fixtureRoot "n8n/dashboard/segments.json"), '{"segments":{}}', $utf8NoBom)
 $env:AGENT_OS_ROOT = $fixtureRoot
 $env:AGENT_OS_DATA_DIR = (Join-Path $fixtureRoot "runtime")
 $process = Start-Process -FilePath $exe -WorkingDirectory $fixtureRoot -WindowStyle Hidden -PassThru

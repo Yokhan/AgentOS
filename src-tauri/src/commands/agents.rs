@@ -160,9 +160,16 @@ fn get_or_refresh_scan(state: &AppState) -> Result<Value, String> {
     Ok(result)
 }
 
-#[tauri::command]
 pub fn get_agents(state: State<Arc<AppState>>) -> Value {
     get_agents_cached(&state)
+}
+
+#[tauri::command]
+pub async fn get_agents_async(state: State<'_, Arc<AppState>>) -> Result<Value, String> {
+    let state = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || get_agents_cached(&state))
+        .await
+        .map_err(|error| format!("agent scan worker failed: {error}"))
 }
 
 #[tauri::command]

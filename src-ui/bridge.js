@@ -28,8 +28,8 @@ if (!__IS_TAURI) {
 const __API_ROUTES = __IS_TAURI
   ? {
       "GET /api/health": { cmd: "get_health" },
-      "GET /api/agents": { cmd: "get_agents" },
-      "POST /api/agents": { cmd: "get_agents" },
+      "GET /api/agents": { cmd: "get_agents_async" },
+      "POST /api/agents": { cmd: "get_agents_async" },
       "GET /api/feed": { cmd: "get_feed" },
       "POST /api/feed": { cmd: "get_feed" },
       "GET /api/activity": { cmd: "get_activity" },

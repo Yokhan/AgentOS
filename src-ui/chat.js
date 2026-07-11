@@ -5236,6 +5236,7 @@ function NewProjectModal() {
     }
   };
   return html`<div
+    data-e2e="new-project-modal"
     style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1001;display:flex;align-items:center;justify-content:center"
     onClick=${(e) => {
       if (e.target === e.currentTarget) showNewProject.value = false;

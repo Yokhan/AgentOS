@@ -15,7 +15,14 @@ mod state;
 
 const SINGLE_INSTANCE_PORT: u16 = 3329;
 
+fn e2e_enabled() -> bool {
+    std::env::var("AGENT_OS_E2E").as_deref() == Ok("1")
+}
+
 fn acquire_single_instance_guard() -> Option<TcpListener> {
+    if e2e_enabled() {
+        return TcpListener::bind(("127.0.0.1", 0)).ok();
+    }
     match TcpListener::bind(("127.0.0.1", SINGLE_INSTANCE_PORT)) {
         Ok(listener) => Some(listener),
         Err(err) => {
@@ -113,7 +120,9 @@ fn project_root() -> PathBuf {
 
 pub fn run() {
     let root = project_root();
-    persist_bootstrap_root(&root);
+    if !e2e_enabled() {
+        persist_bootstrap_root(&root);
+    }
     logger::init(&state::runtime_data_dir(&root));
     let Some(_single_instance_guard) = acquire_single_instance_guard() else {
         return;
@@ -147,9 +156,21 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(shared)
+        .on_page_load(|webview, payload| {
+            if e2e_enabled()
+                && payload.event() == tauri::webview::PageLoadEvent::Finished
+                && webview.label() == "main"
+            {
+                if let Err(error) = webview.eval(
+                    "import('/e2e.js').catch(error => console.error('E2E bootstrap failed', error))",
+                ) {
+                    log_error!("Cannot inject E2E runner: {}", error);
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             // Agents
-            commands::agents::get_agents,
+            commands::agents::get_agents_async,
             commands::agents::get_segments,
             // Feed & health
             commands::feed::get_feed,
