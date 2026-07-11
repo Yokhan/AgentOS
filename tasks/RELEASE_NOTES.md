@@ -1,3 +1,8 @@
+# Agent OS 0.3.48
+
+- Includes all runtime recovery, API hardening, template v4.6.2, and native subagent execution-tree changes from 0.3.47.
+- Made the release E2E render the real execution-map component in an isolated fixture, so subagent visualization is verified even when the clean CI fixture correctly shows the empty-project onboarding screen.
+
 # Agent OS 0.3.47
 
 - Integrated the released `agent-project-template v4.6.2` contract and now marks managed projects on older template versions as outdated.

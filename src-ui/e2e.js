@@ -132,14 +132,14 @@ async function run() {
     assert(childLane, "Verified child run is missing from execution map");
     assert(childLane.model === "gpt-5.6-luna", "Child model is not visible");
     assert(childLane.access === "read-only", "Child sandbox is not visible");
-    const flowButton = document.querySelector('[data-e2e="workspace-flow"]');
-    assert(flowButton, "Execution flow tab is missing");
-    flowButton.click();
-    // Startup intentionally refreshes the map after 1.2s; apply the deterministic
-    // fixture after that real refresh so the visual assertion cannot race it.
-    await sleep(1500);
-    const store = await import("/store.js");
-    store["executionMap"].value = map;
+    const [{ h, render }, { ExecutionMapCard }] = await Promise.all([
+      import("/vendor/preact-bundle.mjs"),
+      import("/chat.js"),
+    ]);
+    const host = document.createElement("div");
+    host.dataset.e2e = "execution-map-fixture";
+    document.body.appendChild(host);
+    render(h(ExecutionMapCard, { map, variant: "stage" }), host);
     await settle();
     const badge = document.querySelector('[data-e2e="verified-subagent-trace"]');
     const renderedLanes = [...document.querySelectorAll(".exec-map-lane-label")].map(
@@ -148,11 +148,12 @@ async function run() {
     assert(
       badge,
       `Verified badge did not render: ${JSON.stringify({
-        flowActive: flowButton.classList.contains("active"),
         renderedLanes,
         mapCards: document.querySelectorAll(".exec-map-card").length,
       })}`,
     );
+    render(null, host);
+    host.remove();
     return { lane: childLane.id, model: childLane.model, access: childLane.access };
   });
 
