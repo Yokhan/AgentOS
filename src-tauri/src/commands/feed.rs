@@ -119,9 +119,8 @@ pub fn health_snapshot(state: &AppState) -> Value {
     })
 }
 
-#[tauri::command]
-pub fn get_plan(state: State<Arc<AppState>>) -> Value {
-    let agents = crate::commands::agents::get_agents(state.clone());
+pub fn get_plan_core(state: &AppState) -> Value {
+    let agents = crate::commands::agents::get_agents_cached(state);
     let agents_arr = agents
         .get("agents")
         .and_then(|v| v.as_array())
@@ -227,6 +226,14 @@ pub fn get_plan(state: State<Arc<AppState>>) -> Value {
 }
 
 #[tauri::command]
+pub async fn get_plan(state: State<'_, Arc<AppState>>) -> Result<Value, String> {
+    let state = Arc::clone(&state);
+    tokio::task::spawn_blocking(move || get_plan_core(&state))
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn get_digest(state: State<Arc<AppState>>) -> Value {
     let agents = crate::commands::agents::get_agents(state.clone());
     let agents_arr = agents
@@ -234,7 +241,7 @@ pub fn get_digest(state: State<Arc<AppState>>) -> Value {
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
-    let plan = get_plan(state.clone());
+    let plan = get_plan_core(&state);
 
     let working: Vec<&str> = agents_arr
         .iter()
@@ -350,10 +357,10 @@ pub fn get_digest(state: State<Arc<AppState>>) -> Value {
 
 #[tauri::command]
 pub fn get_project_plan(state: State<Arc<AppState>>, project: String) -> Value {
-    let project_dir = state.docs_dir.join(&project);
-    if !project_dir.exists() {
-        return json!({"error": format!("Project not found: {}", project)});
-    }
+    let project_dir = match state.validate_project(&project) {
+        Ok(path) => path,
+        Err(error) => return json!({"error": error}),
+    };
 
     let mut plan = json!({
         "project": project,

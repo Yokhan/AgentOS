@@ -1284,6 +1284,19 @@
     text-transform: uppercase;
     letter-spacing: 0.6px;
 }
+.exec-map-evidence {
+    border-radius: var(--radius-sm);
+    padding: 1px 4px;
+    width: max-content;
+}
+.exec-map-evidence.verified {
+    color: var(--green) !important;
+    background: color-mix(in srgb, var(--green) 12%, transparent);
+}
+.exec-map-evidence.observed {
+    color: var(--yellow) !important;
+    background: color-mix(in srgb, var(--yellow) 10%, transparent);
+}
 .exec-map-lane-label.live em {
     color: var(--cyan);
 }
@@ -1467,6 +1480,11 @@
     font-family: var(--font-mono);
     color: var(--t3);
     margin: 0;
+}
+.exec-map-selected code {
+    grid-column: 1 / -1;
+    color: var(--cyan);
+    overflow-wrap: anywhere;
 }
 .exec-map-selected p {
     grid-column: 1 / -1;

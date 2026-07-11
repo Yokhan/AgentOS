@@ -138,6 +138,18 @@ pub fn register_background_task(
     }
 }
 
+pub fn spawn_managed<F>(state: &std::sync::Arc<AppState>, label: &str, task: F)
+where
+    F: FnOnce() + Send + 'static,
+{
+    let suffix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    let handle = std::thread::spawn(task);
+    register_background_task(state, format!("{label}:{suffix}"), handle);
+}
+
 pub fn reap_background_tasks(state: &AppState) {
     let completed = state
         .background_tasks

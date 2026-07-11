@@ -152,6 +152,12 @@ impl OperationEventInput {
         self
     }
 
+    pub fn parent(mut self, parent_id: impl Into<String>, root_id: impl Into<String>) -> Self {
+        self.parent_id = Some(parent_id.into());
+        self.root_id = Some(root_id.into());
+        self
+    }
+
     pub fn detail(mut self, detail: impl Into<String>) -> Self {
         self.detail = Some(detail.into());
         self

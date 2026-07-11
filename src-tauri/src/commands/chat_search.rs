@@ -1,5 +1,6 @@
 use crate::state::AppState;
 use serde_json::{json, Value};
+use std::io::{BufRead, BufReader};
 use std::sync::Arc;
 use tauri::State;
 
@@ -37,13 +38,16 @@ pub fn search_chat_history_core(
             .unwrap_or("chat")
             .trim_start_matches(".")
             .to_string();
-        let Ok(content) = std::fs::read_to_string(&path) else {
+        let Ok(file) = std::fs::File::open(&path) else {
             continue;
         };
-        let lines: Vec<&str> = content.lines().collect();
-        for (line_index, line) in lines.iter().enumerate().rev() {
+        let total = BufReader::new(file).lines().count();
+        let mut reverse_index = total;
+        let _ = super::jsonl::for_each_line_reverse(&path, |line| {
+            let line_index = reverse_index;
+            reverse_index = reverse_index.saturating_sub(1);
             let Ok(row) = serde_json::from_str::<Value>(line) else {
-                continue;
+                return true;
             };
             let row_project = row
                 .get("project")
@@ -53,7 +57,7 @@ pub fn search_chat_history_core(
                 if !row_project.eq_ignore_ascii_case(filter)
                     && !file_project.eq_ignore_ascii_case(filter)
                 {
-                    continue;
+                    return true;
                 }
             }
             let text = row
@@ -62,19 +66,23 @@ pub fn search_chat_history_core(
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             if !text.to_lowercase().contains(&q) {
-                continue;
+                return true;
             }
             let snippet: String = text.chars().take(260).collect();
             matches.push(json!({
                 "project": row_project,
                 "role": row.get("role").and_then(|v| v.as_str()).unwrap_or(""),
                 "ts": row.get("ts").and_then(|v| v.as_str()).unwrap_or(""),
-                "line": line_index + 1,
+                "line": line_index,
                 "snippet": snippet,
             }));
             if matches.len() >= max {
-                return json!({"query": query, "matches": matches, "count": matches.len()});
+                return false;
             }
+            true
+        });
+        if matches.len() >= max {
+            return json!({"query": query, "matches": matches, "count": matches.len()});
         }
     }
 

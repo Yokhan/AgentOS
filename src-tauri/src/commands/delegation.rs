@@ -190,6 +190,20 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
     crate::log_info!("[delegation] approving id={}", id);
     let started_at = state.now_iso();
     let deleg_provider = super::provider_runner::delegation_provider(state);
+    let project_dir = {
+        let delegations = match state.delegations.lock() {
+            Ok(value) => value,
+            Err(_) => return json!({"status": "error", "error": "lock error"}),
+        };
+        let project = match delegations.get(id) {
+            Some(value) => value.project.clone(),
+            None => return json!({"status": "error", "error": "Delegation not found"}),
+        };
+        match state.validate_project(&project) {
+            Ok(path) => path,
+            Err(error) => return json!({"status": "error", "error": error}),
+        }
+    };
     // Atomic check-and-update
     let d = {
         let mut delegations = match state.delegations.lock() {
@@ -280,11 +294,6 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
         }
     }
 
-    let project_dir = match state.validate_project(&d.project) {
-        Ok(p) => p,
-        Err(e) => return json!({"status": "error", "error": e}),
-    };
-
     let chat_file = state.chats_dir.join(format!("{}.jsonl", d.project));
     let ts = state.now_iso();
 
@@ -328,7 +337,20 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
     );
 
     // Acquire per-project lock: prevents two claude processes in same directory
-    state.acquire_dir_lock(&d.project);
+    let _project_guard = match state.acquire_dir_guard(&d.project) {
+        Ok(guard) => guard,
+        Err(error) => {
+            if let Ok(mut delegations) = state.delegations.lock() {
+                if let Some(delegation) = delegations.get_mut(id) {
+                    delegation.status = crate::commands::status::DelegationStatus::Pending;
+                    delegation.started_at = None;
+                    delegation.escalation_info = Some(error.clone());
+                }
+            }
+            state.save_delegations();
+            return json!({"status": "error", "error": error});
+        }
+    };
     crate::log_info!("[delegation:{}] acquired project lock", d.project);
 
     // Stream buffer for real-time progress
@@ -918,10 +940,6 @@ pub fn approve_delegation_core(state: &AppState, id: &str) -> Value {
             }
         }
     }
-
-    // Release project lock
-    state.release_dir_lock(&d.project);
-    crate::log_info!("[delegation:{}] released project lock", d.project);
 
     json!({
         "status": effective_status,

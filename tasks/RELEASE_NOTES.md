@@ -1,3 +1,15 @@
+# Agent OS 0.3.47
+
+- Integrated the released `agent-project-template v4.6.2` contract and now marks managed projects on older template versions as outdated.
+- Added native Codex subagent visibility for Luna/Terra/Sol profiles: each child run gets its own execution lane with role, model, sandbox, parent/root links, raw JSONL trace, and verified `spawn + child activity + wait` evidence.
+- Added an atomic cross-entity runtime snapshot and restart reconciliation for active delegations, work items, and file leases.
+- Replaced unbounded project locks and detached auto-approve jobs with cancellable timeout guards and supervised workers.
+- Made repository plan refresh asynchronous and serialized UI polling around the shared scan cache.
+- Changed chat list, pagination, and reverse search to bounded-memory JSONL readers without deleting or shortening user history.
+- Persisted the local API token, restricted CORS to local origins, minimized public health data, and documented bearer auth for n8n/MCP graph tools.
+- Added project path validation, attachment size limits, machine-trace archival, recovery tests, and native subagent trace tests.
+- Native child trace verification currently requires Codex CLI JSON transport; ACP remains available but does not claim verified child evidence without matching adapter events.
+
 # Agent OS 0.3.46
 
 - Updated the Tauri dependency graph and removed all seven RustSec vulnerabilities reported for the previous release.

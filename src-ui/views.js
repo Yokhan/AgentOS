@@ -933,6 +933,7 @@ function ExecutionFlowStage() {
         <span>${laneCount} веток</span>
         <span>${eventCount} событий</span>
         <button
+          data-e2e="execution-flow-refresh"
           onClick=${() =>
             Promise.allSettled([
               loadExecutionMap("", activeDualSession.value || null, 180),
@@ -979,6 +980,7 @@ function WorkbenchDock() {
     ${tabs.map(
       ([id, label, hint]) =>
         html`<button
+          data-e2e=${`workspace-${id}`}
           class=${activeWorkspaceTab.value === id ? "active" : ""}
           onClick=${() => (activeWorkspaceTab.value = id)}
         >

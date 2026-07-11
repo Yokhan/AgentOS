@@ -1,5 +1,9 @@
 {
-  "_comment": "MCP-compatible tool definitions for AgentOS Graph API. Projects can reference these via fetch to localhost:3333",
+  "_comment": "MCP-compatible tool definitions for AgentOS Graph API. Set AGENT_OS_API_TOKEN and send Authorization: Bearer ${AGENT_OS_API_TOKEN} on every request.",
+  "base_url": "http://127.0.0.1:3333",
+  "headers": {
+    "Authorization": "Bearer ${AGENT_OS_API_TOKEN}"
+  },
   "tools": [
     {
       "name": "graph_context",

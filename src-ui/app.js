@@ -482,9 +482,11 @@ function startPolling() {
     _baselinePollInFlight = true;
     try {
       const deferHeavy = shouldDeferHeavyPolling() || safeMode.value;
+      // Plan consumes the same repository snapshot; refresh it after agents so both calls
+      // never contend for the expensive scan lock on an IPC thread.
+      await loadAgents();
       await Promise.allSettled([
         chkConn(),
-        loadAgents(),
         loadActivity(),
         loadPlan(),
         loadFeed(),

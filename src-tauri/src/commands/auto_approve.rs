@@ -152,7 +152,7 @@ pub async fn auto_approve_loop(state: Arc<AppState>) {
         auto_trigger_pa(&state);
         {
             let state_c = Arc::clone(&state);
-            tokio::task::spawn_blocking(move || {
+            super::process_manager::spawn_managed(&state, "auto-inbox", move || {
                 super::inbox::auto_process_inbox(&state_c);
             });
         }
@@ -171,7 +171,7 @@ pub async fn auto_approve_loop(state: Arc<AppState>) {
                 super::sensors::SensorAction::Trigger { delegation_id } => {
                     let state_c = Arc::clone(&state);
                     let id = delegation_id.clone();
-                    tokio::task::spawn_blocking(move || {
+                    super::process_manager::spawn_managed(&state, "sensor-delegation", move || {
                         super::delegation::approve_delegation_core(&state_c, &id);
                     });
                 }
@@ -231,9 +231,13 @@ pub async fn auto_approve_loop(state: Arc<AppState>) {
                     state.save_delegations();
                     let state_c = Arc::clone(&state);
                     let id = d.id.clone();
-                    tokio::task::spawn_blocking(move || {
-                        super::delegation::approve_delegation_core(&state_c, &id);
-                    });
+                    super::process_manager::spawn_managed(
+                        &state,
+                        "scheduled-delegation",
+                        move || {
+                            super::delegation::approve_delegation_core(&state_c, &id);
+                        },
+                    );
                 }
             }
         }
@@ -283,7 +287,7 @@ pub async fn auto_approve_loop(state: Arc<AppState>) {
 
                     let state_c = Arc::clone(&state);
                     let id = d.id.clone();
-                    tokio::task::spawn_blocking(move || {
+                    super::process_manager::spawn_managed(&state, "auto-delegation", move || {
                         super::delegation::approve_delegation_core(&state_c, &id);
                     });
                 }
@@ -493,11 +497,16 @@ fn auto_trigger_pa(state: &AppState) {
             return;
         }
     }
-    state.acquire_dir_lock("_orchestrator");
+    let _orchestrator_guard = match state.acquire_dir_guard("_orchestrator") {
+        Ok(guard) => guard,
+        Err(error) => {
+            crate::log_warn!("[auto-trigger] cannot acquire orchestrator: {}", error);
+            return;
+        }
+    };
     let (_, pa_dir) = state.get_orch_dir();
     let response =
         super::provider_runner::run_orchestrator_once(state, &pa_dir, &prompt, Some(&perm_path));
-    state.release_dir_lock("_orchestrator");
 
     // Save response + process PA commands
     let ts2 = state.now_iso();

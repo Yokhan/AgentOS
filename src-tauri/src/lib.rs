@@ -19,6 +19,39 @@ fn e2e_enabled() -> bool {
     std::env::var("AGENT_OS_E2E").as_deref() == Ok("1")
 }
 
+fn seed_e2e_execution_trace(state: &state::AppState) {
+    use commands::operation_state::{emit, OperationEventInput};
+    emit(
+        state,
+        OperationEventInput::new(
+            "chat:e2e-root",
+            "orchestrator",
+            "_orchestrator",
+            "tool_started",
+            "orchestration",
+            "running",
+            "Spawned bounded repository scout",
+        )
+        .provider(Some("codex"), Some("gpt-5.6-sol"), Some("xhigh")),
+    );
+    emit(
+        state,
+        OperationEventInput::new(
+            "subagent:e2e-child",
+            "subagent:scout",
+            "_orchestrator",
+            "subagent_verified",
+            "subagent",
+            "done",
+            "scout completed with spawn-child-wait evidence",
+        )
+        .parent("chat:e2e-root", "chat:e2e-root")
+        .provider(Some("codex"), Some("gpt-5.6-luna"), Some("low"))
+        .mode(Some("subagent"), Some("read-only"))
+        .payload(serde_json::json!({"runtime_evidence": true})),
+    );
+}
+
 fn acquire_single_instance_guard() -> Option<TcpListener> {
     if e2e_enabled() {
         return TcpListener::bind(("127.0.0.1", 0)).ok();
@@ -135,6 +168,9 @@ pub fn run() {
 
     // Single shared AppState — both Tauri commands and HTTP API use the same instance
     let shared = Arc::new(state::AppState::new(root.clone()));
+    if e2e_enabled() {
+        seed_e2e_execution_trace(&shared);
+    }
     let api_state = Arc::clone(&shared);
     let auto_state = Arc::clone(&shared);
     let runtime_handle = std::thread::spawn(move || {

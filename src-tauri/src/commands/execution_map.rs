@@ -53,7 +53,10 @@ fn safe_id(value: &str) -> String {
 fn lane_id_for(row: &Value) -> String {
     let source = field(row, "source");
     let project = clean_project(&field(row, "project"));
-    if source == "delegation" && project != "_orchestrator" {
+    let operation_id = field(row, "operation_id");
+    if matches!(source.as_str(), "subagent" | "delegation") && !operation_id.is_empty() {
+        format!("run:{}", safe_id(&operation_id))
+    } else if source == "delegation" && project != "_orchestrator" {
         format!("project:{}", safe_id(&project))
     } else if source == "duo" {
         "duo".to_string()
@@ -69,9 +72,17 @@ fn lane_label_for(id: &str, row: Option<&Value>) -> String {
     if id == "duo" {
         return "Duo room".to_string();
     }
-    row.map(|v| clean_project(&field(v, "project")))
-        .filter(|v| !v.is_empty() && v != "_orchestrator")
-        .unwrap_or_else(|| id.replace("project:", ""))
+    row.map(|v| {
+        let role = field(v, "role");
+        let project = clean_project(&field(v, "project"));
+        if role.is_empty() || role == "project_agent" {
+            project
+        } else {
+            format!("{} · {}", role, project)
+        }
+    })
+    .filter(|v| !v.is_empty() && v != "_orchestrator")
+    .unwrap_or_else(|| id.replace("project:", ""))
 }
 
 fn lane_kind(id: &str) -> &'static str {
@@ -79,6 +90,8 @@ fn lane_kind(id: &str) -> &'static str {
         "orchestrator"
     } else if id == "duo" {
         "room"
+    } else if id.starts_with("run:") {
+        "agent_run"
     } else {
         "project"
     }
@@ -172,6 +185,8 @@ fn is_visual_map_row(row: &Value) -> bool {
         | "delegation_done"
         | "gate_started"
         | "review_verdict"
+        | "subagent_observed"
+        | "subagent_verified"
         | "run_cancelled" => true,
         "command" | "coordination" | "pa_command_started" | "pa_command_result"
         | "pa_command_warning" | "pa_command_missing" | "auto_continue" | "run_done" | "run"
@@ -263,6 +278,7 @@ fn operation_rows(state: &AppState, project_filter: &str, limit: usize) -> Vec<V
                 let source = match event.actor.as_str() {
                     "project_agent" | "gate" => "delegation",
                     "orchestrator" | "agentos" => "chat",
+                    actor if actor.starts_with("subagent:") => "subagent",
                     other => other,
                 };
                 Some(json!({
@@ -282,6 +298,9 @@ fn operation_rows(state: &AppState, project_filter: &str, limit: usize) -> Vec<V
                     "event_id": event.id,
                     "waiting_for": operation.waiting_for,
                     "blocked_by": operation.blocked_by
+                    ,"role": event.actor,
+                    "access": operation.access,
+                    "runtime_evidence": event.payload.get("runtime_evidence").cloned().unwrap_or(Value::Bool(false))
                 }))
             })
         })
@@ -584,6 +603,7 @@ pub fn build_execution_map(
     let mut edges = Vec::new();
     let mut seen_lanes: HashSet<String> = HashSet::new();
     let mut latest_project_event: HashMap<String, String> = HashMap::new();
+    let mut latest_operation_event: HashMap<String, String> = HashMap::new();
     let mut feedback_count = 0usize;
 
     lanes.insert(
@@ -617,6 +637,8 @@ pub fn build_execution_map(
                 .get(&project)
                 .cloned()
                 .unwrap_or_else(|| "project-agent".to_string())
+        } else if source == "subagent" {
+            field(row, "provider")
         } else if source == "duo" {
             "duo".to_string()
         } else {
@@ -634,7 +656,10 @@ pub fn build_execution_map(
                     "project": project,
                     "status": status,
                     "provider": provider,
-                    "model": "",
+                    "model": field(row, "model"),
+                    "role": field(row, "role"),
+                    "access": field(row, "access"),
+                    "runtime_evidence": row.get("runtime_evidence").cloned().unwrap_or(Value::Bool(false)),
                     "order": order
                 }),
             );
@@ -644,12 +669,17 @@ pub fn build_execution_map(
         lane_status.insert(lane_id.clone(), merge_status(&current_status, &status));
 
         if lane_id != "orchestrator" && seen_lanes.insert(lane_id.clone()) {
+            let parent_operation_id = field(row, "parent_id");
+            let parent_event_id = latest_operation_event
+                .get(&parent_operation_id)
+                .cloned()
+                .unwrap_or_else(|| "evt-root".to_string());
             edges.push(json!({
                 "id": format!("edge-spawn-{}", safe_id(&lane_id)),
-                "from": "evt-root",
+                "from": parent_event_id,
                 "to": event_id,
                 "type": "spawn",
-                "label": "delegated",
+                "label": if source == "subagent" { "spawn child" } else { "delegated" },
                 "status": status
             }));
         }
@@ -665,11 +695,21 @@ pub fn build_execution_map(
             "detail": field(row, "detail"),
             "project": project,
             "provider": provider,
-            "model": "",
+            "model": field(row, "model"),
+            "role": field(row, "role"),
+            "access": field(row, "access"),
+            "runtime_evidence": row.get("runtime_evidence").cloned().unwrap_or(Value::Bool(false)),
+            "operation_id": field(row, "operation_id"),
+            "parent_id": field(row, "parent_id"),
+            "root_id": field(row, "root_id"),
             "ts": field(row, "ts"),
             "sequence": idx + 1
         });
         events.push(event);
+        let operation_id = field(row, "operation_id");
+        if !operation_id.is_empty() {
+            latest_operation_event.insert(operation_id, event_id.clone());
+        }
 
         if lane_id != "orchestrator" {
             latest_project_event.insert(lane_id.clone(), event_id.clone());

@@ -5,6 +5,31 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+const RUNTIME_SNAPSHOT_SCHEMA: u32 = 1;
+
+#[derive(Clone, Serialize, Deserialize)]
+struct RuntimeSnapshot {
+    schema_version: u32,
+    revision: u64,
+    saved_at: String,
+    delegations: HashMap<String, Delegation>,
+    sessions: HashMap<String, MultiAgentSession>,
+    project_sessions: HashMap<String, ProjectSession>,
+    work_items: HashMap<String, WorkItem>,
+    file_leases: HashMap<String, FileLease>,
+}
+
+pub struct DirLockGuard<'a> {
+    state: &'a AppState,
+    key: String,
+}
+
+impl Drop for DirLockGuard<'_> {
+    fn drop(&mut self) {
+        self.state.release_dir_lock(&self.key);
+    }
+}
+
 /// Cached scan result
 pub struct ScanCache {
     pub data: Option<serde_json::Value>,
@@ -373,6 +398,7 @@ pub struct AppState {
     pub project_sessions_path: PathBuf,
     pub work_items_path: PathBuf,
     pub file_leases_path: PathBuf,
+    pub runtime_snapshot_path: PathBuf,
     pub n8n_url: String,
     pub start_time: Instant,
 
@@ -392,6 +418,8 @@ pub struct AppState {
     pub project_sessions: Mutex<HashMap<String, ProjectSession>>,
     pub work_items: Mutex<HashMap<String, WorkItem>>,
     pub file_leases: Mutex<HashMap<String, FileLease>>,
+    /// Serializes cross-entity snapshots and provides monotonic revisions.
+    runtime_persistence: Mutex<u64>,
     /// Running child process PIDs by chat_key — used to kill zombies
     pub running_pids: Mutex<HashMap<String, u32>>,
     /// Join handles for long-lived chat/runtime workers.
@@ -485,15 +513,20 @@ impl AppState {
         let project_sessions_path = tasks_dir.join(".project-sessions.json");
         let work_items_path = tasks_dir.join(".work-items.json");
         let file_leases_path = tasks_dir.join(".file-leases.json");
+        let runtime_snapshot_path = tasks_dir.join(".runtime-state.json");
 
-        // Load persisted delegations, reset "running" to "pending"
-        let delegations = Self::load_delegations(&delegations_path);
-        let sessions = Self::load_sessions(&sessions_path);
-        let project_sessions = Self::load_project_sessions(&project_sessions_path);
-        let work_items = Self::load_work_items(&work_items_path);
-        let file_leases = Self::load_file_leases(&file_leases_path);
+        let (delegations, sessions, project_sessions, work_items, file_leases, revision) =
+            Self::load_runtime_state(
+                &runtime_snapshot_path,
+                &delegations_path,
+                &sessions_path,
+                &project_sessions_path,
+                &work_items_path,
+                &file_leases_path,
+            );
+        let api_token = Self::load_or_create_api_token(&data_dir);
 
-        Self {
+        let state = Self {
             root,
             data_dir,
             tasks_dir,
@@ -507,6 +540,7 @@ impl AppState {
             project_sessions_path,
             work_items_path,
             file_leases_path,
+            runtime_snapshot_path,
             n8n_url,
             start_time: Instant::now(),
             scan_cache: Mutex::new(ScanCache::default()),
@@ -518,6 +552,7 @@ impl AppState {
             project_sessions: Mutex::new(project_sessions),
             work_items: Mutex::new(work_items),
             file_leases: Mutex::new(file_leases),
+            runtime_persistence: Mutex::new(revision),
             running_pids: Mutex::new(HashMap::new()),
             background_tasks: Mutex::new(HashMap::new()),
             shutdown_requested: AtomicBool::new(false),
@@ -532,8 +567,10 @@ impl AppState {
             )),
             config_write_lock: Mutex::new(()),
             codex_acp_status_cache: Mutex::new((None, Instant::now() - Duration::from_secs(300))),
-            api_token: Self::generate_token(),
-        }
+            api_token,
+        };
+        state.save_runtime_snapshot();
+        state
     }
 
     fn migrate_runtime_data(
@@ -598,6 +635,21 @@ impl AppState {
         let mut bytes = [0_u8; 32];
         getrandom::fill(&mut bytes).expect("OS random source unavailable");
         bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
+    fn load_or_create_api_token(data_dir: &std::path::Path) -> String {
+        let path = data_dir.join("api-token");
+        if let Ok(token) = std::fs::read_to_string(&path) {
+            let token = token.trim();
+            if token.len() >= 32 && token.chars().all(|ch| ch.is_ascii_hexdigit()) {
+                return token.to_string();
+            }
+        }
+        let token = Self::generate_token();
+        if let Err(error) = crate::commands::claude_runner::atomic_write(&path, &token) {
+            crate::log_error!("[state] cannot persist API token: {}", error);
+        }
+        token
     }
 
     fn load_docs_dir(config_path: &PathBuf) -> PathBuf {
@@ -675,13 +727,7 @@ impl AppState {
 
     fn load_delegations(path: &PathBuf) -> HashMap<String, Delegation> {
         if let Ok(content) = std::fs::read_to_string(path) {
-            if let Ok(mut map) = serde_json::from_str::<HashMap<String, Delegation>>(&content) {
-                // Reset "running" to "pending" on restart
-                for d in map.values_mut() {
-                    if d.status == crate::commands::status::DelegationStatus::Running {
-                        d.status = crate::commands::status::DelegationStatus::Pending;
-                    }
-                }
+            if let Ok(map) = serde_json::from_str::<HashMap<String, Delegation>>(&content) {
                 return map;
             }
         }
@@ -722,6 +768,100 @@ impl AppState {
             }
         }
         HashMap::new()
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn load_runtime_state(
+        snapshot_path: &PathBuf,
+        delegations_path: &PathBuf,
+        sessions_path: &PathBuf,
+        project_sessions_path: &PathBuf,
+        work_items_path: &PathBuf,
+        file_leases_path: &PathBuf,
+    ) -> (
+        HashMap<String, Delegation>,
+        HashMap<String, MultiAgentSession>,
+        HashMap<String, ProjectSession>,
+        HashMap<String, WorkItem>,
+        HashMap<String, FileLease>,
+        u64,
+    ) {
+        let loaded = std::fs::read_to_string(snapshot_path)
+            .ok()
+            .and_then(|content| serde_json::from_str::<RuntimeSnapshot>(&content).ok())
+            .filter(|snapshot| snapshot.schema_version == RUNTIME_SNAPSHOT_SCHEMA);
+        let (
+            mut delegations,
+            sessions,
+            project_sessions,
+            mut work_items,
+            mut file_leases,
+            revision,
+        ) = match loaded {
+            Some(snapshot) => (
+                snapshot.delegations,
+                snapshot.sessions,
+                snapshot.project_sessions,
+                snapshot.work_items,
+                snapshot.file_leases,
+                snapshot.revision,
+            ),
+            None => (
+                Self::load_delegations(delegations_path),
+                Self::load_sessions(sessions_path),
+                Self::load_project_sessions(project_sessions_path),
+                Self::load_work_items(work_items_path),
+                Self::load_file_leases(file_leases_path),
+                0,
+            ),
+        };
+
+        // No provider process survives an application restart. Requeue the unit of work and
+        // release every stale write lease so the next run can make forward progress.
+        for delegation in delegations.values_mut() {
+            if matches!(
+                delegation.status,
+                crate::commands::status::DelegationStatus::Running
+                    | crate::commands::status::DelegationStatus::Escalated
+                    | crate::commands::status::DelegationStatus::Deciding
+                    | crate::commands::status::DelegationStatus::Verifying
+            ) {
+                delegation.status = crate::commands::status::DelegationStatus::Pending;
+                delegation.started_at = None;
+                delegation.escalation_info = Some(
+                    "Recovered after AgentOS restart; execution was safely requeued".to_string(),
+                );
+            }
+        }
+        for item in work_items.values_mut() {
+            if matches!(
+                item.status,
+                WorkItemStatus::Running | WorkItemStatus::Reviewing
+            ) {
+                item.status = if item.delegation_id.is_some() {
+                    WorkItemStatus::Queued
+                } else {
+                    WorkItemStatus::Ready
+                };
+                item.updated_at = chrono::Utc::now().to_rfc3339();
+            }
+        }
+        let recovered_at = chrono::Utc::now().to_rfc3339();
+        for lease in file_leases.values_mut() {
+            if matches!(lease.status, FileLeaseStatus::Active) {
+                lease.status = FileLeaseStatus::Released;
+                lease.updated_at = recovered_at.clone();
+                lease.released_at = Some(recovered_at.clone());
+            }
+        }
+        (
+            delegations,
+            sessions,
+            project_sessions,
+            work_items,
+            file_leases,
+            revision,
+        )
     }
 
     /// Validate project name — no path traversal, must exist under docs_dir
@@ -782,18 +922,21 @@ impl AppState {
     }
 
     pub fn save_delegations(&self) {
+        self.save_runtime_snapshot();
         if let Ok(delegations) = self.delegations.lock() {
             self.save_json(&self.delegations_path, &*delegations, "delegations");
         }
     }
 
     pub fn save_sessions(&self) {
+        self.save_runtime_snapshot();
         if let Ok(sessions) = self.sessions.lock() {
             self.save_json(&self.sessions_path, &*sessions, "sessions");
         }
     }
 
     pub fn save_project_sessions(&self) {
+        self.save_runtime_snapshot();
         if let Ok(project_sessions) = self.project_sessions.lock() {
             self.save_json(
                 &self.project_sessions_path,
@@ -804,14 +947,68 @@ impl AppState {
     }
 
     pub fn save_work_items(&self) {
+        self.save_runtime_snapshot();
         if let Ok(work_items) = self.work_items.lock() {
             self.save_json(&self.work_items_path, &*work_items, "work items");
         }
     }
 
     pub fn save_file_leases(&self) {
+        self.save_runtime_snapshot();
         if let Ok(file_leases) = self.file_leases.lock() {
             self.save_json(&self.file_leases_path, &*file_leases, "file leases");
+        }
+    }
+
+    pub fn save_runtime_snapshot(&self) {
+        let mut revision = match self.runtime_persistence.lock() {
+            Ok(value) => value,
+            Err(error) => error.into_inner(),
+        };
+        let snapshot = RuntimeSnapshot {
+            schema_version: RUNTIME_SNAPSHOT_SCHEMA,
+            revision: revision.saturating_add(1),
+            saved_at: self.now_iso(),
+            delegations: self
+                .delegations
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .clone(),
+            sessions: self
+                .sessions
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .clone(),
+            project_sessions: self
+                .project_sessions
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .clone(),
+            work_items: self
+                .work_items
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .clone(),
+            file_leases: self
+                .file_leases
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .clone(),
+        };
+        let content = match serde_json::to_string_pretty(&snapshot) {
+            Ok(content) => content,
+            Err(error) => {
+                crate::log_error!("[state] runtime snapshot serialization failed: {}", error);
+                return;
+            }
+        };
+        match crate::commands::claude_runner::atomic_write(&self.runtime_snapshot_path, &content) {
+            Ok(()) => *revision = snapshot.revision,
+            Err(error) => crate::log_error!(
+                "[state] runtime snapshot save failed at {}: {}",
+                self.runtime_snapshot_path.display(),
+                error
+            ),
         }
     }
 
@@ -942,16 +1139,31 @@ impl AppState {
 
     /// Wait until directory is not busy, then mark it busy.
     /// Call `release_dir` when done. Prevents concurrent claude in same project.
-    pub fn acquire_dir_lock(&self, dir_key: &str) {
+    pub fn acquire_dir_lock(&self, dir_key: &str) -> Result<(), String> {
+        let deadline = Instant::now() + Duration::from_secs(120);
         loop {
+            if self.is_shutdown_requested() {
+                return Err("AgentOS is shutting down".to_string());
+            }
             if let Ok(mut busy) = self.dir_busy.lock() {
                 if !busy.contains(dir_key) {
                     busy.insert(dir_key.to_string());
-                    return;
+                    return Ok(());
                 }
             }
-            std::thread::sleep(std::time::Duration::from_millis(500));
+            if Instant::now() >= deadline {
+                return Err(format!("Timed out waiting for project lock: {dir_key}"));
+            }
+            std::thread::sleep(Duration::from_millis(200));
         }
+    }
+
+    pub fn acquire_dir_guard(&self, dir_key: &str) -> Result<DirLockGuard<'_>, String> {
+        self.acquire_dir_lock(dir_key)?;
+        Ok(DirLockGuard {
+            state: self,
+            key: dir_key.to_string(),
+        })
     }
 
     pub fn release_dir_lock(&self, dir_key: &str) {
@@ -1015,6 +1227,67 @@ mod tests {
         assert_eq!(first.len(), 64);
         assert!(first.chars().all(|character| character.is_ascii_hexdigit()));
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn api_token_is_stable_for_the_same_data_directory() {
+        let root = temp_root("api-token");
+        std::fs::create_dir_all(root.join("n8n")).expect("create config directory");
+        std::fs::write(root.join("n8n").join("config.json"), "{}").expect("seed config");
+        let first = AppState::new(root.clone()).api_token;
+        let second = AppState::new(root.clone()).api_token;
+        assert_eq!(first, second);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn restart_requeues_active_work_and_releases_leases() {
+        let root = temp_root("runtime-recovery");
+        std::fs::create_dir_all(root.join("n8n")).expect("create config directory");
+        std::fs::create_dir_all(root.join("tasks")).expect("create tasks directory");
+        std::fs::write(root.join("n8n").join("config.json"), "{}").expect("seed config");
+        let snapshot = serde_json::json!({
+            "schema_version": RUNTIME_SNAPSHOT_SCHEMA,
+            "revision": 7,
+            "saved_at": "2026-07-11T00:00:00Z",
+            "delegations": {"d1": {
+                "id":"d1", "project":"ProjectA", "task":"work", "ts":"2026-07-11T00:00:00Z",
+                "status":"verifying", "retries":0
+            }},
+            "sessions": {},
+            "project_sessions": {},
+            "work_items": {"w1": {
+                "id":"w1", "parent_room_session_id":"s1", "project":"ProjectA",
+                "title":"work", "task":"work", "executor_provider":"codex", "status":"running",
+                "delegation_id":"d1", "created_at":"2026-07-11T00:00:00Z", "updated_at":"2026-07-11T00:00:00Z"
+            }},
+            "file_leases": {"l1": {
+                "id":"l1", "session_id":"s1", "work_item_id":"w1", "project":"ProjectA",
+                "participant_id":"p1", "provider":"codex", "write_intent":"exclusive_write",
+                "paths":["src"], "status":"active", "created_at":"2026-07-11T00:00:00Z",
+                "updated_at":"2026-07-11T00:00:00Z"
+            }}
+        });
+        std::fs::write(
+            root.join("tasks").join(".runtime-state.json"),
+            serde_json::to_string_pretty(&snapshot).unwrap(),
+        )
+        .expect("seed runtime snapshot");
+
+        let state = AppState::new(root.clone());
+        assert_eq!(
+            state.delegations.lock().unwrap()["d1"].status,
+            crate::commands::status::DelegationStatus::Pending
+        );
+        assert!(matches!(
+            state.work_items.lock().unwrap()["w1"].status,
+            WorkItemStatus::Queued
+        ));
+        assert!(matches!(
+            state.file_leases.lock().unwrap()["l1"].status,
+            FileLeaseStatus::Released
+        ));
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

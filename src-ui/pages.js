@@ -215,6 +215,9 @@ function SettingsPage() {
     (Array.isArray(codexStatus?.models) ? codexStatus.models.length : 0) ||
     codexModelOptions.length;
   const codexModelsSource = codexStatus?.models_source || "fallback";
+  const nativeSubagents = Array.isArray(codexStatus?.native_subagents)
+    ? codexStatus.native_subagents
+    : [];
   const providerPolicyText = claudeEnabled
     ? "Claude can be selected, but Codex remains available for every role."
     : "Claude is disabled globally. Any Claude route resolves to Codex before execution.";
@@ -537,6 +540,22 @@ function SettingsPage() {
         <code>${codexEffectiveTransport}</code>
         · models:
         <code>${codexModelsCount} from ${codexModelsSource}</code>
+      </div>
+      <div class="settings-subagent-matrix">
+        <div class="settings-subagent-head">
+          <strong>Native subagent matrix</strong>
+          <span>${nativeSubagents.length} profiles from template</span>
+        </div>
+        <div class="settings-subagent-grid">
+          ${nativeSubagents.map(
+            (agent) => html`<div class="settings-subagent-card">
+              <b>${agent.name}</b>
+              <code>${agent.model || "parent"} / ${agent.effort || "auto"}</code>
+              <span>${agent.sandbox || "inherited"}</span>
+              <p>${agent.description || "Project-scoped Codex worker"}</p>
+            </div>`,
+          )}
+        </div>
       </div>
     </div>
 

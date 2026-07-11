@@ -2070,9 +2070,17 @@ fn run_session_agent_core(
         participant.label.clone()
     };
     super::process_manager::set_activity(state, &chat_key, "multi-agent", &activity_label);
-    if write_access {
-        state.acquire_dir_lock(&lock_key);
-    }
+    let write_guard = if write_access {
+        match state.acquire_dir_guard(&lock_key) {
+            Ok(guard) => Some(guard),
+            Err(error) => {
+                super::process_manager::clear_activity(state, &chat_key);
+                return Err(format!("Cannot acquire project writer lease: {error}"));
+            }
+        }
+    } else {
+        None
+    };
     let response = super::provider_runner::run_provider_with_opts(
         state,
         participant.provider,
@@ -2082,9 +2090,7 @@ fn run_session_agent_core(
         resolved_model.as_deref(),
         resolved_effort.as_deref(),
     );
-    if write_access {
-        state.release_dir_lock(&lock_key);
-    }
+    drop(write_guard);
     super::process_manager::clear_activity(state, &chat_key);
 
     let mut final_response = response.clone();
@@ -2145,9 +2151,19 @@ fn run_session_agent_core(
                 "multi-agent",
                 &format!("{} auto-continue {}", participant.label, turn),
             );
-            if write_access {
-                state.acquire_dir_lock(&lock_key);
-            }
+            let write_guard = if write_access {
+                match state.acquire_dir_guard(&lock_key) {
+                    Ok(guard) => Some(guard),
+                    Err(error) => {
+                        loop_response = format!("Cannot continue: {error}");
+                        final_response += "\n\n---\n";
+                        final_response += &loop_response;
+                        break;
+                    }
+                }
+            } else {
+                None
+            };
             loop_response = super::provider_runner::run_provider_with_opts(
                 state,
                 participant.provider,
@@ -2157,9 +2173,7 @@ fn run_session_agent_core(
                 resolved_model.as_deref(),
                 resolved_effort.as_deref(),
             );
-            if write_access {
-                state.release_dir_lock(&lock_key);
-            }
+            drop(write_guard);
             super::process_manager::clear_activity(state, &chat_key);
             final_response += "\n\n---\n";
             final_response += &loop_response;

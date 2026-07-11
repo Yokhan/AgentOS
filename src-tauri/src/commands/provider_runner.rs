@@ -1,7 +1,7 @@
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -1372,7 +1372,7 @@ fn run_codex_official_cli(
     };
 
     let mut cmd = super::claude_runner::silent_cmd(&binary);
-    cmd.args(["exec", "--skip-git-repo-check", "-o"])
+    cmd.args(["exec", "--skip-git-repo-check", "--json", "-o"])
         .arg(&output_file)
         .args(["--sandbox", codex_sandbox_for_permission_path(perm_path)])
         .arg("-");
@@ -1399,6 +1399,7 @@ fn run_codex_official_cli(
                 .filter(|text| !text.is_empty());
             let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            ingest_codex_subagent_trace(state, chat_key, &stdout);
             if output.status.success() {
                 last_message
                     .or_else(|| (!stdout.is_empty()).then_some(stdout.clone()))
@@ -1428,6 +1429,193 @@ fn run_codex_official_cli(
     let _ = std::fs::remove_file(&prompt_file);
     let _ = std::fs::remove_file(&output_file);
     response
+}
+
+fn trace_receiver_ids(item: &Value) -> Vec<String> {
+    let mut ids = Vec::new();
+    if let Some(values) = item.get("receiver_thread_ids").and_then(Value::as_array) {
+        ids.extend(values.iter().filter_map(Value::as_str).map(str::to_string));
+    }
+    if let Some(value) = item.get("receiver_thread_id").and_then(Value::as_str) {
+        ids.push(value.to_string());
+    }
+    if let Some(states) = item.get("agents_states").and_then(Value::as_object) {
+        ids.extend(states.keys().cloned());
+    }
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+fn trace_profile(item: &Value) -> (String, Option<String>, Option<String>) {
+    let serialized = item.to_string().to_ascii_lowercase();
+    let roles = [
+        "scout",
+        "log_analyst",
+        "summarizer",
+        "pr_explorer",
+        "docs_researcher",
+        "tester",
+        "implementer",
+        "reviewer",
+        "security_reviewer",
+        "design_reviewer",
+        "product_reviewer",
+        "systems_reviewer",
+    ];
+    let role = item
+        .get("agent_type")
+        .or_else(|| item.get("role"))
+        .or_else(|| item.get("name"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            roles
+                .iter()
+                .find(|role| serialized.contains(**role))
+                .map(|v| v.to_string())
+        })
+        .unwrap_or_else(|| "subagent".to_string());
+    let model = item
+        .get("model")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
+                .iter()
+                .find(|model| serialized.contains(**model))
+                .map(|value| value.to_string())
+        });
+    let access = item
+        .get("sandbox_mode")
+        .or_else(|| item.get("sandbox"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    (role, model, access)
+}
+
+fn ingest_codex_subagent_trace(state: &AppState, chat_key: Option<&str>, stdout: &str) {
+    let events: Vec<Value> = stdout
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line.trim()).ok())
+        .collect();
+    if events.is_empty() {
+        return;
+    }
+    let trace_path = state.tasks_dir.join(".codex-subagent-traces.jsonl");
+    if let Err(error) = super::jsonl::archive_if_larger(&trace_path, 50 * 1024 * 1024) {
+        crate::log_warn!("[codex-trace] archive failed: {}", error);
+    }
+    for event in &events {
+        super::jsonl::append_jsonl_logged(&trace_path, event, "codex subagent trace");
+    }
+
+    let key = chat_key.unwrap_or_default();
+    let parent = state.operations.lock().ok().and_then(|operations| {
+        operations
+            .values()
+            .filter(|operation| {
+                !matches!(operation.status.as_str(), "done" | "failed" | "cancelled")
+                    && (operation.project == key
+                        || operation.events.iter().any(|event| {
+                            event.payload.get("chat_key").and_then(Value::as_str) == Some(key)
+                        }))
+            })
+            .max_by(|left, right| left.updated_at.cmp(&right.updated_at))
+            .cloned()
+    });
+    let Some(parent) = parent else {
+        return;
+    };
+
+    let parent_thread_id = events
+        .iter()
+        .find(|event| event.get("type").and_then(Value::as_str) == Some("thread.started"))
+        .and_then(|event| event.get("thread_id"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let mut children: HashMap<String, (String, Option<String>, Option<String>)> = HashMap::new();
+    let mut waited = HashSet::new();
+    let mut active = HashSet::new();
+    for event in &events {
+        let item = event.get("item").and_then(Value::as_object);
+        let item_value = event.get("item").unwrap_or(&Value::Null);
+        let item_type = item
+            .and_then(|value| value.get("type"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let tool = item
+            .and_then(|value| value.get("tool"))
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if item_type == "collab_tool_call" && tool.contains("spawn") {
+            let profile = trace_profile(item_value);
+            for child_id in trace_receiver_ids(item_value) {
+                if child_id != parent_thread_id {
+                    children.insert(child_id, profile.clone());
+                }
+            }
+        }
+        if item_type == "collab_tool_call" && tool.contains("wait") {
+            waited.extend(trace_receiver_ids(item_value));
+        }
+        if let Some(thread_id) = event.get("thread_id").and_then(Value::as_str) {
+            if thread_id != parent_thread_id {
+                active.insert(thread_id.to_string());
+            }
+        }
+        if let Some(sender) = item
+            .and_then(|value| value.get("sender_thread_id"))
+            .and_then(Value::as_str)
+        {
+            if sender != parent_thread_id {
+                active.insert(sender.to_string());
+            }
+        }
+    }
+
+    for (child_id, (role, model, access)) in children {
+        let evidence = waited.contains(&child_id) && active.contains(&child_id);
+        let status = if waited.contains(&child_id) {
+            "done"
+        } else {
+            "running"
+        };
+        let operation_id = format!("subagent:{child_id}");
+        super::operation_state::emit(
+            state,
+            super::operation_state::OperationEventInput::new(
+                operation_id,
+                format!("subagent:{role}"),
+                parent.project.clone(),
+                if evidence {
+                    "subagent_verified"
+                } else {
+                    "subagent_observed"
+                },
+                "subagent",
+                status,
+                if evidence {
+                    format!("{role} completed with spawn-child-wait evidence")
+                } else {
+                    format!("{role} trace is incomplete")
+                },
+            )
+            .parent(parent.operation_id.clone(), parent.root_id.clone())
+            .provider(Some("codex"), model.as_deref(), None)
+            .mode(Some("subagent"), access.as_deref())
+            .payload(json!({
+                "thread_id": child_id,
+                "parent_thread_id": parent_thread_id,
+                "role": role,
+                "runtime_evidence": evidence,
+                "spawn_observed": true,
+                "child_activity_observed": active.contains(&child_id),
+                "wait_observed": waited.contains(&child_id)
+            })),
+        );
+    }
 }
 
 fn run_codex_via_acp(
@@ -1629,6 +1817,7 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
         })
     };
     let codex_models = codex_available_models(&codex_acp);
+    let native_subagents = template_codex_agent_profiles(state);
     let codex_models_count = codex_models.len();
     let mut codex_model_sources: Vec<String> = Vec::new();
     for model in &codex_models {
@@ -1743,6 +1932,7 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
                 "models_count": codex_models_count,
                 "models_source": codex_models_source,
                 "models": codex_models,
+                "native_subagents": native_subagents,
             }
         },
         "notes": [
@@ -1755,6 +1945,47 @@ pub fn provider_status_snapshot(state: &AppState) -> Value {
     })
 }
 
+fn template_codex_agent_profiles(state: &AppState) -> Vec<Value> {
+    let agents_dir = state
+        .docs_dir
+        .join("agent-project-template")
+        .join(".codex")
+        .join("agents");
+    let mut profiles = Vec::new();
+    let Ok(entries) = std::fs::read_dir(agents_dir) else {
+        return profiles;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("toml") {
+            continue;
+        }
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let value = |key: &str| {
+            content.lines().find_map(|line| {
+                let (left, right) = line.split_once('=')?;
+                (left.trim() == key).then(|| right.trim().trim_matches('"').to_string())
+            })
+        };
+        profiles.push(json!({
+            "name": value("name").unwrap_or_else(|| path.file_stem().unwrap_or_default().to_string_lossy().to_string()),
+            "model": value("model").unwrap_or_default(),
+            "effort": value("model_reasoning_effort").unwrap_or_default(),
+            "sandbox": value("sandbox_mode").unwrap_or_default(),
+            "description": value("description").unwrap_or_default(),
+            "source": path.to_string_lossy(),
+        }));
+    }
+    profiles.sort_by(|left, right| {
+        left.get("name")
+            .and_then(Value::as_str)
+            .cmp(&right.get("name").and_then(Value::as_str))
+    });
+    profiles
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1765,6 +1996,47 @@ mod tests {
             name,
             std::process::id()
         ))
+    }
+
+    #[test]
+    fn codex_trace_creates_verified_child_operation() {
+        let root = temp_path("subagent-trace");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("n8n")).unwrap();
+        std::fs::write(root.join("n8n").join("config.json"), "{}").unwrap();
+        let state = AppState::new(root.clone());
+        super::super::operation_state::emit(
+            &state,
+            super::super::operation_state::OperationEventInput::new(
+                "chat:root-run",
+                "orchestrator",
+                "_orchestrator",
+                "provider_started",
+                "provider",
+                "running",
+                "Codex started",
+            )
+            .provider(Some("codex"), Some("gpt-5.6-sol"), Some("xhigh")),
+        );
+        let trace = [
+            json!({"type":"thread.started","thread_id":"parent-1"}),
+            json!({"type":"item.completed","item":{"type":"collab_tool_call","tool":"spawn_agent","receiver_thread_ids":["child-1"],"agent_type":"scout","model":"gpt-5.6-luna","sandbox_mode":"read-only"}}),
+            json!({"type":"item.completed","thread_id":"child-1","item":{"type":"agent_message","text":"found files"}}),
+            json!({"type":"item.completed","item":{"type":"collab_tool_call","tool":"wait","receiver_thread_ids":["child-1"]}}),
+        ]
+        .into_iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+        ingest_codex_subagent_trace(&state, Some("_orchestrator"), &trace);
+        let operations = state.operations.lock().unwrap();
+        let child = operations.get("subagent:child-1").expect("child operation");
+        assert_eq!(child.parent_id.as_deref(), Some("chat:root-run"));
+        assert_eq!(child.model.as_deref(), Some("gpt-5.6-luna"));
+        assert_eq!(child.status, "done");
+        assert_eq!(child.events[0].payload["runtime_evidence"], true);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

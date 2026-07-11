@@ -15,6 +15,8 @@ pub struct ProjectOnboardingItem {
     pub path: String,
     pub managed: bool,
     pub template_version: String,
+    pub latest_template_version: String,
+    pub template_outdated: bool,
     pub segment: String,
     pub permission: String,
     pub has_claude_md: bool,
@@ -183,6 +185,7 @@ fn build_item(
     project_dir: &Path,
     segments: &BTreeMap<String, Vec<String>>,
     config: &Value,
+    latest_template_version: &str,
 ) -> Option<ProjectOnboardingItem> {
     let name = project_dir.file_name()?.to_string_lossy().to_string();
     let segment = segments
@@ -203,7 +206,11 @@ fn build_item(
     let has_check_drift = project_dir.join("scripts").join("check-drift.sh").exists();
     let needs_segment = segment == "Unassigned";
     let needs_permission = permission == "none";
-    let needs_template = !managed || !has_current_task || !has_check_drift;
+    let template_outdated = managed
+        && version != "?"
+        && !latest_template_version.is_empty()
+        && version != latest_template_version;
+    let needs_template = !managed || !has_current_task || !has_check_drift || template_outdated;
     let ready = !needs_segment && !needs_permission && !needs_template;
     let mut next_actions = Vec::new();
     if needs_segment {
@@ -221,6 +228,8 @@ fn build_item(
         path: project_dir.display().to_string(),
         managed,
         template_version: version,
+        latest_template_version: latest_template_version.to_string(),
+        template_outdated,
         segment,
         permission,
         has_claude_md,
@@ -238,9 +247,16 @@ fn build_item(
 pub fn audit_projects(state: &AppState) -> Vec<ProjectOnboardingItem> {
     let segments = read_segments(&segments_path(state));
     let config = state.config();
+    let latest_template_version = template_version(&state.docs_dir.join("agent-project-template"));
+    let latest_template_version =
+        if latest_template_version == "none" || latest_template_version == "?" {
+            String::new()
+        } else {
+            latest_template_version
+        };
     let mut items = project_dirs(&state.docs_dir)
         .iter()
-        .filter_map(|dir| build_item(dir, &segments, &config))
+        .filter_map(|dir| build_item(dir, &segments, &config, &latest_template_version))
         .collect::<Vec<_>>();
     items.sort_by(|a, b| {
         a.ready
@@ -373,7 +389,13 @@ pub fn connect_project_inline(
     };
 
     invalidate_scan_cache(state);
-    let item = build_item(&project_dir, &segments, &state.config());
+    let latest = template_version(&state.docs_dir.join("agent-project-template"));
+    let latest = if matches!(latest.as_str(), "none" | "?") {
+        String::new()
+    } else {
+        latest
+    };
+    let item = build_item(&project_dir, &segments, &state.config(), &latest);
     Ok(json!({
         "status": "ok",
         "project": opts.project,

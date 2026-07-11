@@ -7,7 +7,11 @@ const __invoke = __IS_TAURI ? window.__TAURI_INTERNALS__.invoke : null;
 const __listen = __IS_TAURI ? window.__TAURI_INTERNALS__.event?.listen : null;
 // In browser mode, find HTTP API server (Tauri app runs it on 3333-3335)
 let __API_BASE = "";
+let __API_TOKEN = "";
 if (!__IS_TAURI) {
+  const params = new URLSearchParams(window.location?.search || "");
+  __API_TOKEN = params.get("token") || localStorage.getItem("agentos.apiToken") || "";
+  if (__API_TOKEN) localStorage.setItem("agentos.apiToken", __API_TOKEN);
   (async () => {
     for (const p of [3333, 3334, 3335]) {
       try {
@@ -78,7 +82,9 @@ window.fetch = function (url, opts = {}) {
   if (!__IS_TAURI) {
     // Browser mode: redirect /api/* to HTTP API server
     if (typeof url === "string" && url.startsWith("/api") && __API_BASE) {
-      return _origFetch.call(this, __API_BASE + url, opts);
+      const headers = new Headers(opts.headers || {});
+      if (__API_TOKEN) headers.set("Authorization", `Bearer ${__API_TOKEN}`);
+      return _origFetch.call(this, __API_BASE + url, { ...opts, headers });
     }
     return _origFetch.call(this, url, opts);
   }

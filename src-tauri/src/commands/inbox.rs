@@ -177,7 +177,10 @@ fn process_items_sync(state: &AppState, items: &[InboxItem], label: &str) -> Str
         }
     }
 
-    state.acquire_dir_lock(&orch_name);
+    let _orchestrator_guard = match state.acquire_dir_guard(&orch_name) {
+        Ok(guard) => guard,
+        Err(error) => return format!("Orchestrator unavailable: {error}"),
+    };
     let perm_path = super::claude_runner::get_permission_path(state, "_orchestrator");
     let response = super::provider_runner::run_orchestrator_once(
         state,
@@ -185,7 +188,6 @@ fn process_items_sync(state: &AppState, items: &[InboxItem], label: &str) -> Str
         &batch_prompt,
         Some(&perm_path),
     );
-    state.release_dir_lock(&orch_name);
 
     let orch_file = state.chats_dir.join("_orchestrator.jsonl");
     let ts = state.now_iso();

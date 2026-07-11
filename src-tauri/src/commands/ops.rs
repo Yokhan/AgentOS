@@ -336,6 +336,13 @@ pub async fn send_telegram(state: State<'_, Arc<AppState>>, text: String) -> Res
 /// Save attached file for chat context (returns local path for claude)
 #[tauri::command]
 pub fn save_attachment(state: State<Arc<AppState>>, name: String, data: Vec<u8>) -> Value {
+    const MAX_ATTACHMENT_BYTES: usize = 20 * 1024 * 1024;
+    if data.len() > MAX_ATTACHMENT_BYTES {
+        return json!({"status": "error", "error": "Attachment exceeds the 20 MB limit"});
+    }
+    if name.trim().is_empty() {
+        return json!({"status": "error", "error": "Attachment name is empty"});
+    }
     let att_dir = state.tasks_dir.join("attachments");
     let _ = std::fs::create_dir_all(&att_dir);
 

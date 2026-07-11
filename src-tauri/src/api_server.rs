@@ -6,7 +6,7 @@ use crate::state::AppState;
 use axum::{
     extract::State as AxState,
     extract::{Json, Path, Query, Request},
-    http::{header, Method, StatusCode},
+    http::{header, HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -15,7 +15,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 /// Auth middleware — checks Bearer token on all non-health endpoints
 async fn auth_check(AxState(state): AxState<Arc<AppState>>, req: Request, next: Next) -> Response {
@@ -82,7 +82,15 @@ pub async fn start(state: Arc<AppState>, port: u16) {
         .layer(axum::extract::DefaultBodyLimit::max(1_048_576)) // 1MB max request body
         .layer(
             CorsLayer::new()
-                .allow_origin(Any)
+                .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _| {
+                    origin.to_str().ok().is_some_and(|value| {
+                        value == "tauri://localhost"
+                            || value == "http://localhost"
+                            || value.starts_with("http://localhost:")
+                            || value == "http://127.0.0.1"
+                            || value.starts_with("http://127.0.0.1:")
+                    })
+                }))
                 .allow_methods([Method::GET, Method::POST])
                 .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]),
         )
@@ -121,7 +129,13 @@ pub async fn start(state: Arc<AppState>, port: u16) {
 }
 
 async fn health(AxState(state): AxState<Arc<AppState>>) -> impl IntoResponse {
-    Json(crate::commands::feed::health_snapshot(&state))
+    let (orchestrator_name, orchestrator_dir) = state.get_orch_dir();
+    Json(json!({
+        "status": "ok",
+        "version": env!("CARGO_PKG_VERSION"),
+        "uptime_secs": state.uptime_secs(),
+        "orchestrator": !orchestrator_name.is_empty() && orchestrator_dir.exists(),
+    }))
 }
 
 async fn get_agents(AxState(state): AxState<Arc<AppState>>) -> impl IntoResponse {
@@ -295,23 +309,10 @@ async fn get_activity(AxState(state): AxState<Arc<AppState>>) -> impl IntoRespon
 }
 
 async fn get_plan(AxState(state): AxState<Arc<AppState>>) -> impl IntoResponse {
-    // Reuse cached agents data to get project info
-    let agents_data = crate::commands::agents::get_agents_cached(&state);
-    let empty = vec![];
-    let projects = agents_data
-        .get("agents")
-        .and_then(|a| a.as_array())
-        .unwrap_or(&empty);
-    let issues: Vec<Value> = projects.iter()
-        .filter(|p| p.get("uncommitted").and_then(|v| v.as_u64()).unwrap_or(0) > 20 || p.get("blockers").and_then(|v| v.as_bool()).unwrap_or(false))
-        .map(|p| {
-            let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            let blockers = p.get("blockers").and_then(|v| v.as_bool()).unwrap_or(false);
-            let uncommitted = p.get("uncommitted").and_then(|v| v.as_u64()).unwrap_or(0);
-            json!({"project": name, "issue": if blockers {"has blockers"} else {"needs commit"}, "uncommitted": uncommitted})
-        })
-        .collect();
-    Json(json!({"issues": issues, "total": issues.len()}))
+    let result = tokio::task::spawn_blocking(move || crate::commands::feed::get_plan_core(&state))
+        .await
+        .unwrap_or_else(|error| json!({"status": "error", "error": error.to_string()}));
+    Json(result)
 }
 
 async fn get_config(AxState(state): AxState<Arc<AppState>>) -> impl IntoResponse {

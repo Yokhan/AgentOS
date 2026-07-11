@@ -1936,3 +1936,30 @@ body.chat-resizing {
 .dep-arrow {
     color: var(--yellow);
 }
+.settings-subagent-matrix {
+    margin-top: var(--sp-l);
+    border-top: 1px solid var(--border);
+    padding-top: var(--sp-m);
+}
+.settings-subagent-head {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--sp-m);
+    color: var(--t2);
+}
+.settings-subagent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: var(--sp-s);
+    margin-top: var(--sp-s);
+}
+.settings-subagent-card {
+    display: grid;
+    gap: 3px;
+    padding: var(--sp-s);
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--sf) 82%, transparent);
+}
+.settings-subagent-card code { color: var(--cyan); }
+.settings-subagent-card span { color: var(--green); font-family: var(--font-mono); }
+.settings-subagent-card p { margin: 0; color: var(--t3); font-size: var(--fs-s); }

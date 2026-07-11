@@ -120,6 +120,42 @@ async function run() {
     return report.apiLatencyMs.steady;
   });
 
+  await step("verified subagent execution tree", async () => {
+    const map = await window.__TAURI_INTERNALS__.invoke("get_execution_map", {
+      project: null,
+      roomSessionId: null,
+      limit: 180,
+    });
+    const childLane = (map.lanes || []).find(
+      (lane) => lane.kind === "agent_run" && lane.runtime_evidence === true,
+    );
+    assert(childLane, "Verified child run is missing from execution map");
+    assert(childLane.model === "gpt-5.6-luna", "Child model is not visible");
+    assert(childLane.access === "read-only", "Child sandbox is not visible");
+    const flowButton = document.querySelector('[data-e2e="workspace-flow"]');
+    assert(flowButton, "Execution flow tab is missing");
+    flowButton.click();
+    // Startup intentionally refreshes the map after 1.2s; apply the deterministic
+    // fixture after that real refresh so the visual assertion cannot race it.
+    await sleep(1500);
+    const store = await import("/store.js");
+    store["executionMap"].value = map;
+    await settle();
+    const badge = document.querySelector('[data-e2e="verified-subagent-trace"]');
+    const renderedLanes = [...document.querySelectorAll(".exec-map-lane-label")].map(
+      (node) => node.innerText,
+    );
+    assert(
+      badge,
+      `Verified badge did not render: ${JSON.stringify({
+        flowActive: flowButton.classList.contains("active"),
+        renderedLanes,
+        mapCards: document.querySelectorAll(".exec-map-card").length,
+      })}`,
+    );
+    return { lane: childLane.id, model: childLane.model, access: childLane.access };
+  });
+
   await step("plans navigation", () => clickView("plans", "Plans"));
   await step("strategy navigation", () => clickView("strategy", "Strategy"));
   await step("graph navigation", () => clickView("graph", "Graph"));

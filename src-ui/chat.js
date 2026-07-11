@@ -2623,8 +2623,15 @@ ${[
             <b>${lane.label}</b>
             <span>${executionLaneOwnerLabel(lane)}</span>
             <small class="exec-map-lane-owner">
-              ${lane.provider || lane.kind || "agent"}
+              ${[lane.provider || lane.kind || "agent", lane.model, lane.access]
+                .filter(Boolean)
+                .join(" / ")}
             </small>
+            ${lane.runtime_evidence
+              ? html`<small class="exec-map-evidence verified" data-e2e="verified-subagent-trace">verified trace</small>`
+              : lane.kind === "agent_run"
+                ? html`<small class="exec-map-evidence observed">trace observed</small>`
+                : null}
             <em>${executionStatusLabel(lane.status)}</em>
             ${stateLine ? html`<small>${stateLine}</small>` : null}
           </div>`;
@@ -2714,6 +2721,18 @@ ${[
             ${selected.provider || "agent"}
           </span>
           ${selected.detail ? html`<p>${selected.detail}</p>` : null}
+          ${selected.operation_id
+            ? html`<code>${[
+                `run: ${selected.operation_id}`,
+                selected.parent_id ? `parent: ${selected.parent_id}` : "",
+                selected.role ? `role: ${selected.role}` : "",
+                selected.model ? `model: ${selected.model}` : "",
+                selected.access ? `sandbox: ${selected.access}` : "",
+                `evidence: ${selected.runtime_evidence ? "spawn + child + wait" : "incomplete"}`,
+              ]
+                .filter(Boolean)
+                .join(" | ")}</code>`
+            : null}
           <em>${selected.project || ""} ${selected.ts || ""}</em>
         </div>`
       : null}

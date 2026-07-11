@@ -451,6 +451,15 @@ function togVoice() {
 async function hdlFiles(fl) {
   const nf = [...attFiles.value];
   for (const f of fl) {
+    if (f.size > 20 * 1024 * 1024) {
+      showToast(`${f.name}: file exceeds 20 MB`, "error", 4000);
+      continue;
+    }
+    const total = nf.reduce((sum, item) => sum + Number(item.size || 0), 0);
+    if (total + f.size > 50 * 1024 * 1024) {
+      showToast("Attachments exceed the 50 MB message limit", "error", 4000);
+      break;
+    }
     if (__IS_TAURI) {
       try {
         const buf = await f.arrayBuffer();
@@ -1545,7 +1554,6 @@ async function loadExecutionMap(
     throw new Error(res?.error || "Cannot load execution map");
   });
 }
-
 async function loadEventContract() {
   if (!__IS_TAURI) {
     eventContract.value = {

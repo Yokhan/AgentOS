@@ -118,6 +118,10 @@ pub fn get_health_history(_state: State<Arc<AppState>>, _project: Option<String>
 
 #[tauri::command]
 pub fn get_impact(state: State<Arc<AppState>>, project: String) -> Value {
+    let project_dir = match state.validate_project(&project) {
+        Ok(path) => path,
+        Err(error) => return json!({"status": "error", "error": error}),
+    };
     let mut impacts = json!({
         "project": project,
         "downstream": [],
@@ -127,7 +131,7 @@ pub fn get_impact(state: State<Arc<AppState>>, project: String) -> Value {
     });
 
     // Check ecosystem.md
-    let ecosystem_path = state.docs_dir.join(&project).join("ecosystem.md");
+    let ecosystem_path = project_dir.join("ecosystem.md");
     let fallback = state.root.join("ecosystem.md");
     let eco_path = if ecosystem_path.exists() {
         ecosystem_path
@@ -262,10 +266,10 @@ pub async fn get_modules(
     state: State<'_, Arc<AppState>>,
     project: String,
 ) -> Result<Value, String> {
-    let project_path = state.docs_dir.join(&project);
-    if !project_path.exists() {
-        return Ok(json!({"status": "error", "error": "Project not found"}));
-    }
+    let project_path = match state.validate_project(&project) {
+        Ok(path) => path,
+        Err(error) => return Ok(json!({"status": "error", "error": error})),
+    };
     let script = state.root.join("scripts").join("module-status.sh");
     if !script.exists() {
         return Ok(json!({"status": "error", "error": "module-status.sh not found"}));
