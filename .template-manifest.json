@@ -934,7 +934,7 @@
     },
     ".github/workflows/validate-template.yml": {
       "category": "template",
-      "hash": "e096cb0498960f6e14cefafcc3fb238bf18e04c28dab02b673beb8572243705e"
+      "hash": "0715587c7a2ac311d7a2495082dcb17f7be6ddd838b77ca23a376ebd57e5bba1"
     },
     ".codex/config.toml": {
       "category": "hybrid",

@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   validation:
+    if: github.repository == 'Yokhan/agent-project-template'
     name: Validation (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -54,6 +55,7 @@ jobs:
           npm --prefix mcp-servers/context-router run build
 
   bootstrap-smoke-linux:
+    if: github.repository == 'Yokhan/agent-project-template'
     name: Bootstrap Smoke (Linux)
     runs-on: ubuntu-latest
     defaults:
@@ -87,6 +89,7 @@ jobs:
           bash scripts/sync-template.sh "$GITHUB_WORKSPACE" --dry-run
 
   bootstrap-smoke-windows:
+    if: github.repository == 'Yokhan/agent-project-template'
     name: Bootstrap Smoke (Windows)
     runs-on: windows-latest
     steps:
@@ -132,6 +135,7 @@ jobs:
           npm.cmd --prefix mcp-servers/context-router run build
 
   code-intelligence-full-smoke:
+    if: github.repository == 'Yokhan/agent-project-template'
     name: Full Toolchain And Codex MCP (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
