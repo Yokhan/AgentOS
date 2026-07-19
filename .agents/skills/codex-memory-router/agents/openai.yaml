@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Memory Router"
+  short_description: "Save and find project memory"
+  default_prompt: "Use $codex-memory-router to save this decision in the right memory surface."
+policy:
+  allow_implicit_invocation: true

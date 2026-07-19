@@ -1,0 +1,38 @@
+# Codex CLI configuration for agent-project-template
+# Docs: https://developers.openai.com/codex/config-basic
+# Model, effort, approval, and sandbox defaults come from Zed UI / ~/.codex/config.toml.
+
+[features]
+codex_hooks = true
+
+[agents]
+max_threads = 6
+max_depth = 1
+
+# BEGIN agent-project-template managed MCP
+[mcp_servers.context-router]
+command = "node"
+args = ["mcp-servers/context-router/dist/index.js"]
+cwd = ".."
+enabled = true
+required = false
+startup_timeout_sec = 30
+
+[mcp_servers.engram]
+command = "engram"
+args = ["mcp"]
+cwd = ".."
+enabled = true
+required = false
+startup_timeout_sec = 30
+
+[mcp_servers.codebase-memory-mcp]
+command = "codebase-memory-mcp"
+cwd = ".."
+enabled = true
+required = false
+startup_timeout_sec = 30
+
+[mcp_servers.codebase-memory-mcp.env]
+CBM_ALLOWED_ROOT = "."
+# END agent-project-template managed MCP

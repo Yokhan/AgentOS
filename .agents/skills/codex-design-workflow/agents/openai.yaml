@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Design Workflow"
+  short_description: "Token-first UI design workflow"
+  default_prompt: "Use $codex-design-workflow to design or implement this UI with tokens, components, and validation."
+policy:
+  allow_implicit_invocation: true

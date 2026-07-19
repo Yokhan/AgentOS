@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Setup Project"
+  short_description: "Set up a generated project"
+  default_prompt: "Use $codex-setup-project to configure this generated project for its stack."
+policy:
+  allow_implicit_invocation: true

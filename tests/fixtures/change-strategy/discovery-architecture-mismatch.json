@@ -1,0 +1,12 @@
+{
+  "phase": "reading",
+  "kind": "architecture-mismatch",
+  "architecture_fit": "mismatch",
+  "summary": "Reading found duplicate state ownership outside the accepted final path.",
+  "evidence_ref": "src/game/legacy-state.ts and plan final-path section",
+  "owner": "Gameplay state subsystem",
+  "sot": "Accepted product architecture plan",
+  "protected_boundaries": [
+    "player-state contract"
+  ]
+}

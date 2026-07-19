@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Software Review"
+  short_description: "Evidence-based software review"
+  default_prompt: "Use $codex-domain-software-review to evaluate this software decision."
+policy:
+  allow_implicit_invocation: true

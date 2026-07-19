@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Debug"
+  short_description: "Reproduce and fix bugs"
+  default_prompt: "Use $codex-debug to reproduce and fix this failure safely."
+policy:
+  allow_implicit_invocation: true

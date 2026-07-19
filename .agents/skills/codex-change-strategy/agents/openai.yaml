@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Change Strategy"
+  short_description: "Choose destination and transition with evidence"
+  default_prompt: "Use $codex-change-strategy when initial reading reveals a system mismatch or the repeated-repair breaker fires; protect real contracts, choose destination separately from transition, and identify whether user approval is required."

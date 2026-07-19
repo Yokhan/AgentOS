@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Audit"
+  short_description: "Strict evidence-led review"
+  default_prompt: "Use $codex-audit to review this code or plan for defects and risks."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Decompose"
+  short_description: "Split large work safely"
+  default_prompt: "Use $codex-decompose to break this task into verified client-acceptable slices with evidence points."
+policy:
+  allow_implicit_invocation: true

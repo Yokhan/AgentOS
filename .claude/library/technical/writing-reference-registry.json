@@ -1,0 +1,2011 @@
+{
+  "schemaVersion": 2,
+  "reviewedOn": "2026-07-17",
+  "editorRoles": [
+    {
+      "id": "literary-structure",
+      "purpose": "Check scene and story change, causality, pacing, and consequences.",
+      "codexRoles": [
+        "reviewer"
+      ],
+      "skills": [
+        "codex-domain-communication-review"
+      ]
+    },
+    {
+      "id": "literary-continuity",
+      "purpose": "Check canon, chronology, point of view, character knowledge, and voice continuity.",
+      "codexRoles": [
+        "reviewer"
+      ],
+      "skills": [
+        "codex-domain-communication-review"
+      ]
+    },
+    {
+      "id": "literary-prose",
+      "purpose": "Check image, rhythm, sensory precision, dialogue function, and line-level language.",
+      "codexRoles": [
+        "reviewer"
+      ],
+      "skills": [
+        "codex-domain-communication-review"
+      ],
+      "allowedEffects": [
+        "voice",
+        "line-editing"
+      ]
+    },
+    {
+      "id": "marketing-language",
+      "purpose": "Check target-language syntax, voice, line editing, and channel fit without changing commercial claims.",
+      "allowedEffects": [
+        "syntax",
+        "voice",
+        "line-editing"
+      ],
+      "codexRoles": [
+        "reviewer"
+      ],
+      "skills": [
+        "codex-domain-communication-review"
+      ]
+    },
+    {
+      "id": "marketing-claims",
+      "purpose": "Check express and implied claims, proof, material limits, and the whole impression.",
+      "codexRoles": [
+        "product_reviewer"
+      ],
+      "skills": [
+        "codex-domain-communication-review",
+        "codex-domain-business-review"
+      ]
+    },
+    {
+      "id": "marketing-business",
+      "purpose": "Check audience, offer, journey, fulfillment, KPI, and measurement.",
+      "codexRoles": [
+        "product_reviewer"
+      ],
+      "skills": [
+        "codex-domain-business-review",
+        "codex-product-goal"
+      ]
+    },
+    {
+      "id": "marketing-ethics",
+      "purpose": "Check manipulation, targeting harm, fake urgency, disclosures, and jurisdictional review needs.",
+      "codexRoles": [
+        "reviewer"
+      ],
+      "skills": [
+        "codex-domain-communication-review",
+        "codex-strategic-review"
+      ]
+    },
+    {
+      "id": "informational-subject",
+      "purpose": "Check factual accuracy, source hierarchy, definitions, versions, and uncertainty.",
+      "codexRoles": [
+        "docs_researcher"
+      ],
+      "skills": [
+        "codex-domain-communication-review"
+      ]
+    },
+    {
+      "id": "informational-task",
+      "purpose": "Check whether the reader can find the answer or complete and verify the task.",
+      "codexRoles": [
+        "tester"
+      ],
+      "skills": [
+        "codex-domain-communication-review"
+      ]
+    },
+    {
+      "id": "informational-language",
+      "purpose": "Check dependency order, actors, terminology, scannability, and unnecessary abstraction.",
+      "codexRoles": [
+        "reviewer"
+      ],
+      "skills": [
+        "codex-domain-communication-review"
+      ],
+      "allowedEffects": [
+        "syntax",
+        "voice",
+        "line-editing"
+      ]
+    },
+    {
+      "id": "communication-recipient",
+      "purpose": "Check recipient state, requested action, owner, timing, and reply path.",
+      "codexRoles": [
+        "reviewer"
+      ],
+      "skills": [
+        "codex-domain-communication-review"
+      ]
+    },
+    {
+      "id": "communication-risk",
+      "purpose": "Check authority, uncertainty, blame, privacy, safety, escalation, and emotional weight.",
+      "codexRoles": [
+        "reviewer"
+      ],
+      "skills": [
+        "codex-domain-communication-review"
+      ]
+    },
+    {
+      "id": "communication-language",
+      "purpose": "Check directness, natural syntax, emphasis, and channel fit without flattening voice.",
+      "codexRoles": [
+        "reviewer"
+      ],
+      "skills": [
+        "codex-domain-communication-review"
+      ],
+      "allowedEffects": [
+        "syntax",
+        "voice",
+        "line-editing"
+      ]
+    },
+    {
+      "id": "technical-accuracy",
+      "purpose": "Check documentation against code, schemas, interfaces, versions, and actual behavior.",
+      "allowedEffects": [
+        "domain-correctness",
+        "technical-identifiers"
+      ],
+      "codexRoles": [
+        "docs_researcher",
+        "reviewer"
+      ],
+      "skills": [
+        "codex-technical-writing-review",
+        "codex-api-contract"
+      ]
+    },
+    {
+      "id": "technical-procedure",
+      "purpose": "Execute procedures in the stated environment and check expected, failure, and recovery paths.",
+      "allowedEffects": [
+        "domain-correctness",
+        "reader-action"
+      ],
+      "codexRoles": [
+        "tester"
+      ],
+      "skills": [
+        "codex-technical-writing-review"
+      ]
+    },
+    {
+      "id": "technical-architecture",
+      "purpose": "Check tutorial, how-to, reference, and explanation boundaries plus navigation and lifecycle.",
+      "allowedEffects": [
+        "information-architecture",
+        "reader-purpose"
+      ],
+      "codexRoles": [
+        "reviewer"
+      ],
+      "skills": [
+        "codex-technical-writing-review"
+      ]
+    },
+    {
+      "id": "technical-language",
+      "purpose": "Check terminology, code formatting, accessibility, and localization without imposing source-language prose.",
+      "allowedEffects": [
+        "technical-identifiers",
+        "accessibility",
+        "localization"
+      ],
+      "codexRoles": [
+        "reviewer"
+      ],
+      "skills": [
+        "codex-technical-writing-review"
+      ]
+    },
+    {
+      "id": "russian-language",
+      "purpose": "Check natural Russian syntax, actors and actions, concrete evidence, dependency order, rhythm, and line editing against the active Russian profile.",
+      "allowedEffects": [
+        "syntax",
+        "voice",
+        "line-editing",
+        "example-method"
+      ],
+      "codexRoles": [
+        "reviewer"
+      ],
+      "skills": [
+        "codex-domain-communication-review"
+      ]
+    },
+    {
+      "id": "planning-client-service",
+      "purpose": "Check reader purpose, client task formulation, checkpoints, replanning, and accountable service behavior.",
+      "allowedEffects": [
+        "reader-purpose",
+        "planning",
+        "client-communication"
+      ],
+      "codexRoles": [
+        "reviewer"
+      ],
+      "skills": [
+        "codex-domain-communication-review",
+        "codex-strategic-review"
+      ]
+    }
+  ],
+  "externalTools": [
+    {
+      "id": "glavred-api",
+      "title": "Главред API",
+      "provider": "Главред",
+      "kind": "paid-api",
+      "access": "not-configured",
+      "paid": true,
+      "modes": [
+        "marketing",
+        "informational",
+        "communication"
+      ],
+      "outputLanguages": [
+        "ru"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://glvrd.ru/api/"
+      },
+      "capabilities": [
+        "provider-generated word and syntax diagnostics",
+        "provider-generated score"
+      ],
+      "evidenceRequired": [
+        "project-owned configured integration",
+        "successful provider response tied to the reviewed artifact"
+      ],
+      "claimEvidence": {
+        "requiresArtifactBinding": true,
+        "requiresProviderResponse": true,
+        "requiresSuccessfulStatus": true
+      },
+      "forbiddenClaims": [
+        "Do not claim the text was checked by Glavred while access is not configured.",
+        "Do not invent a Glavred score, warning list, or provider response."
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "project-approved-writing-samples",
+      "title": "Project-owned approved writing samples and voice guide",
+      "creator": "Project owner",
+      "kind": "project-slot",
+      "trust": "project-authority",
+      "language": "multilingual",
+      "usageClass": "project-reference",
+      "allowedEffects": [
+        "voice",
+        "syntax",
+        "structure",
+        "lexical-choice",
+        "claims",
+        "narrative"
+      ],
+      "locator": {
+        "type": "project-slot",
+        "value": "project-owned writing references"
+      },
+      "provenance": {
+        "status": "project-required",
+        "checkedOn": "2026-07-17",
+        "rights": "Project must record ownership or permission.",
+        "contentPolicy": "project-owned-only"
+      },
+      "freshness": {
+        "required": false,
+        "maxAgeDays": null
+      }
+    },
+    {
+      "id": "litai-reference-audit",
+      "title": "LitAI literary references and editorial-board audit",
+      "creator": "User-provided local LitAI project, audited by the template",
+      "kind": "derived-lens",
+      "trust": "diagnostic",
+      "language": "multilingual",
+      "usageClass": "derived-lens",
+      "allowedEffects": [
+        "narrative",
+        "structure",
+        "character",
+        "worldbuilding"
+      ],
+      "locator": {
+        "type": "repo",
+        "value": "docs/WRITING_REFERENCE_PROVENANCE.md"
+      },
+      "integrity": {
+        "algorithm": "sha256",
+        "value": "e86d9821213c485d82e98422bc6dfe2bfb8a7b219fbe0d22cadb26c7359ccf96"
+      },
+      "provenance": {
+        "status": "unverified-derived",
+        "checkedOn": "2026-07-17",
+        "rights": "External example provenance is unverified; properties only.",
+        "contentPolicy": "properties-only"
+      },
+      "freshness": {
+        "required": false,
+        "maxAgeDays": null
+      }
+    },
+    {
+      "id": "ilyakhov-user-planning-note",
+      "title": "Ilyakhov planning and client communication principles",
+      "creator": "Maxim Ilyakhov; summarized from user-provided pages",
+      "kind": "local-user-source",
+      "trust": "project-authority",
+      "language": "ru",
+      "usageClass": "editorial-method",
+      "allowedEffects": [
+        "reader-purpose",
+        "structure",
+        "planning",
+        "client-communication"
+      ],
+      "locator": {
+        "type": "repo",
+        "value": "brain/03-knowledge/communication/ilyakhov-planning-principles.md"
+      },
+      "integrity": {
+        "algorithm": "sha256",
+        "value": "0987dc97c0bd6d2851c5ab062117f010110a15dd3578ecb75fa987d923449c19"
+      },
+      "provenance": {
+        "status": "user-declared",
+        "checkedOn": "2026-07-17",
+        "rights": "User-provided source; store summary and properties, not page reproductions.",
+        "contentPolicy": "properties-only"
+      },
+      "freshness": {
+        "required": false,
+        "maxAgeDays": null
+      }
+    },
+    {
+      "id": "ilyakhov-infostyle",
+      "title": "Information style and text in a working system",
+      "creator": "Maxim Ilyakhov",
+      "kind": "author-guidance",
+      "trust": "primary",
+      "language": "ru",
+      "usageClass": "language-method",
+      "allowedEffects": [
+        "reader-purpose",
+        "structure",
+        "syntax",
+        "line-editing",
+        "working-system"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://maximilyahov.ru/blog/all/trehdnevnyy-kurs/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Copyrighted author guidance; link and extract properties only.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": false,
+        "maxAgeDays": null
+      }
+    },
+    {
+      "id": "ilyakhov-sarycheva-write-short-2025",
+      "title": "Пиши, сокращай - 2025",
+      "creator": "Максим Ильяхов и Людмила Сарычева",
+      "kind": "author-guidance",
+      "trust": "primary",
+      "language": "ru",
+      "usageClass": "language-method",
+      "allowedEffects": [
+        "reader-purpose",
+        "syntax",
+        "line-editing",
+        "structure",
+        "example-method"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://bureau.ru/books/pishi/94"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Copyrighted interactive book; link and extract principles only. Do not ship the source text as a corpus.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    },
+    {
+      "id": "glavred-infostyle-method",
+      "title": "Публичное описание Главреда и границы автоматической проверки",
+      "creator": "Максим Ильяхов и команда Главреда",
+      "kind": "author-guidance",
+      "trust": "primary",
+      "language": "ru",
+      "usageClass": "tool-documentation",
+      "allowedEffects": [
+        "tool-capability-boundary"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://glvrd.ru/about/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Copyrighted guidance; link and extract principles only.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    },
+    {
+      "id": "ilyakhov-sarycheva-business-correspondence",
+      "title": "Новые правила деловой переписки",
+      "creator": "Максим Ильяхов и Людмила Сарычева",
+      "kind": "author-guidance",
+      "trust": "primary",
+      "language": "ru",
+      "usageClass": "language-method",
+      "allowedEffects": [
+        "correspondence",
+        "recipient-care",
+        "reader-action",
+        "client-communication",
+        "structure",
+        "syntax",
+        "voice",
+        "example-method"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://letters.glvrd.ru/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Copyrighted book and author site; use public principles and derived properties only.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    },
+    {
+      "id": "ilyakhov-clear-understandable",
+      "title": "Ясно, понятно",
+      "creator": "Максим Ильяхов",
+      "kind": "author-guidance",
+      "trust": "primary",
+      "language": "ru",
+      "usageClass": "editorial-method",
+      "allowedEffects": [
+        "context-framing",
+        "explanation",
+        "persuasion",
+        "example-method",
+        "information-architecture",
+        "visual-structure",
+        "reader-purpose"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://alpinabook.ru/catalog/book-yasno-ponyatno/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Copyrighted book; use verified publisher description and derived properties only unless licensed text is provided.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    },
+    {
+      "id": "ilyakhov-text-on-shelves",
+      "title": "Текст по полочкам",
+      "creator": "Максим Ильяхов",
+      "kind": "author-guidance",
+      "trust": "primary",
+      "language": "ru",
+      "usageClass": "editorial-method",
+      "allowedEffects": [
+        "correspondence",
+        "recipient-care",
+        "reader-action",
+        "structure",
+        "visual-structure",
+        "client-communication"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://alpinabook.ru/catalog/book-tekst-po-polochkam/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Copyrighted book; use verified publisher description and derived properties only unless licensed text is provided.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    },
+    {
+      "id": "ilyakhov-how-to-write",
+      "title": "Как написать",
+      "creator": "Максим Ильяхов",
+      "kind": "author-guidance",
+      "trust": "primary",
+      "language": "ru",
+      "usageClass": "editorial-method",
+      "allowedEffects": [
+        "correspondence",
+        "recipient-care",
+        "reader-action",
+        "structure",
+        "example-method",
+        "genre-structure",
+        "client-communication"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://bureau.ru/books/howtowritethat/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Copyrighted open electronic guide; link and extract properties, do not mirror the source text.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    },
+    {
+      "id": "ilyakhov-information-style-textbook",
+      "title": "Информационный стиль",
+      "creator": "Максим Ильяхов",
+      "kind": "author-guidance",
+      "trust": "primary",
+      "language": "ru",
+      "usageClass": "language-method",
+      "allowedEffects": [
+        "syntax",
+        "line-editing",
+        "explanation",
+        "reader-purpose",
+        "structure",
+        "information-architecture"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://bureau.ru/books/text/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Copyrighted open electronic textbook; link and extract properties, do not mirror the source text.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    },
+    {
+      "id": "ilyakhov-structure-and-examples",
+      "title": "Как раскрыть мысль",
+      "creator": "Максим Ильяхов",
+      "kind": "author-guidance",
+      "trust": "primary",
+      "language": "ru",
+      "usageClass": "editorial-method",
+      "allowedEffects": [
+        "structure",
+        "example-method",
+        "evidence"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://maximilyahov.ru/blog/all/kak-raskryt-mysl/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Copyrighted author guidance; link and extract principles only.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": false,
+        "maxAgeDays": null
+      }
+    },
+    {
+      "id": "ilyakhov-style-as-decisions",
+      "title": "Авторский стиль и выразительность текста",
+      "creator": "Максим Ильяхов",
+      "kind": "author-guidance",
+      "trust": "primary",
+      "language": "ru",
+      "usageClass": "editorial-method",
+      "allowedEffects": [
+        "voice",
+        "reader-purpose",
+        "example-method"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://maximilyahov.ru/blog/all/style/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Copyrighted author guidance; link and extract principles only.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": false,
+        "maxAgeDays": null
+      }
+    },
+    {
+      "id": "ilyakhov-text-as-service",
+      "title": "Два подхода к продаже текста",
+      "creator": "Максим Ильяхов",
+      "kind": "author-guidance",
+      "trust": "primary",
+      "language": "ru",
+      "usageClass": "editorial-method",
+      "allowedEffects": [
+        "reader-purpose",
+        "client-communication",
+        "planning"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://maximilyahov.ru/blog/all/3-kop-2/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Copyrighted author guidance; link and extract principles only.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": false,
+        "maxAgeDays": null
+      }
+    },
+    {
+      "id": "ftc-advertising-guidance",
+      "title": "Advertising and Marketing Basics",
+      "creator": "US Federal Trade Commission",
+      "kind": "regulator-guidance",
+      "trust": "primary",
+      "language": "en",
+      "usageClass": "regulatory-standard",
+      "allowedEffects": [
+        "claims",
+        "domain-correctness",
+        "evidence"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://www.ftc.gov/business-guidance/advertising-marketing"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "US government source; attribute and check embedded third-party material.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 180
+      }
+    },
+    {
+      "id": "hopkins-scientific-advertising",
+      "title": "Scientific Advertising",
+      "creator": "Claude C. Hopkins",
+      "kind": "public-domain-work",
+      "trust": "secondary",
+      "language": "en",
+      "usageClass": "historical-method",
+      "allowedEffects": [
+        "offer-structure",
+        "measurement",
+        "evidence"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://www.loc.gov/item/23009362/"
+      },
+      "provenance": {
+        "status": "verified-public-domain",
+        "checkedOn": "2026-07-17",
+        "rights": "Library of Congress marks this 1923 item public domain and free to use; historical lens only.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": false,
+        "maxAgeDays": null
+      }
+    },
+    {
+      "id": "digitalgov-plain-language",
+      "title": "Plain Language Guide Series",
+      "creator": "US General Services Administration",
+      "kind": "official-guide",
+      "trust": "primary",
+      "language": "en",
+      "usageClass": "domain-standard",
+      "allowedEffects": [
+        "reader-purpose",
+        "information-architecture",
+        "accessibility"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://digital.gov/guides/plain-language/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Government guidance; link and extract properties, check page-specific notices.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    },
+    {
+      "id": "govuk-content-design",
+      "title": "GOV.UK content and publishing guidance",
+      "creator": "Government Digital Service",
+      "kind": "official-guide",
+      "trust": "primary",
+      "language": "en",
+      "usageClass": "domain-standard",
+      "allowedEffects": [
+        "reader-purpose",
+        "information-architecture",
+        "accessibility"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://guidance.publishing.service.gov.uk/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Open Government Licence v3.0 except stated exceptions.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    },
+    {
+      "id": "cdc-cerc",
+      "title": "Crisis and Emergency Risk Communication Manual",
+      "creator": "US Centers for Disease Control and Prevention",
+      "kind": "official-guide",
+      "trust": "primary",
+      "language": "en",
+      "usageClass": "domain-standard",
+      "allowedEffects": [
+        "risk-communication",
+        "domain-correctness",
+        "reader-action"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://www.cdc.gov/cerc/php/cerc-manual/index.html"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "US government source; verify chapter age and embedded third-party content.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    },
+    {
+      "id": "govuk-service-messages",
+      "title": "Sending emails and text messages",
+      "creator": "Government Digital Service",
+      "kind": "official-guide",
+      "trust": "primary",
+      "language": "en",
+      "usageClass": "domain-standard",
+      "allowedEffects": [
+        "reader-action",
+        "information-architecture",
+        "security"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://www.gov.uk/service-manual/design/sending-emails-and-text-messages"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Open Government Licence v3.0 except stated exceptions.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    },
+    {
+      "id": "diataxis",
+      "title": "Diataxis documentation framework",
+      "creator": "Daniele Procida",
+      "kind": "official-guide",
+      "trust": "primary",
+      "language": "en",
+      "usageClass": "domain-standard",
+      "allowedEffects": [
+        "information-architecture",
+        "reader-purpose"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://diataxis.fr/start-here/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Link and extract framework properties; follow site licence for reuse.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    },
+    {
+      "id": "google-developer-style",
+      "title": "Google developer documentation style guide",
+      "creator": "Google",
+      "kind": "official-guide",
+      "trust": "primary",
+      "language": "en",
+      "usageClass": "domain-standard",
+      "allowedEffects": [
+        "domain-correctness",
+        "technical-identifiers",
+        "accessibility",
+        "localization"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://developers.google.com/style"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "CC BY 4.0 content and Apache 2.0 code where noted.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 120
+      }
+    },
+    {
+      "id": "microsoft-learn-style",
+      "title": "Microsoft Learn style and voice quick start",
+      "creator": "Microsoft",
+      "kind": "official-guide",
+      "trust": "primary",
+      "language": "en",
+      "usageClass": "domain-standard",
+      "allowedEffects": [
+        "domain-correctness",
+        "technical-identifiers",
+        "accessibility",
+        "localization"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://learn.microsoft.com/en-us/contribute/content/style-quick-start"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Copyrighted vendor guidance; link and extract properties only.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 180
+      }
+    },
+    {
+      "id": "redhat-modular-docs",
+      "title": "Modular Documentation Reference Guide",
+      "creator": "Red Hat documentation community",
+      "kind": "official-guide",
+      "trust": "primary",
+      "language": "en",
+      "usageClass": "domain-standard",
+      "allowedEffects": [
+        "information-architecture",
+        "reuse"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://redhat-documentation.github.io/modular-docs/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "Link and extract modular documentation properties; check repository licence before reuse.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    },
+    {
+      "id": "ietf-bcp14",
+      "title": "RFC 8174 / BCP 14 requirement keywords",
+      "creator": "IETF",
+      "kind": "standard",
+      "trust": "primary",
+      "language": "en",
+      "usageClass": "domain-standard",
+      "allowedEffects": [
+        "domain-correctness",
+        "normative-semantics",
+        "technical-identifiers"
+      ],
+      "locator": {
+        "type": "url",
+        "value": "https://datatracker.ietf.org/doc/rfc8174/"
+      },
+      "provenance": {
+        "status": "verified",
+        "checkedOn": "2026-07-17",
+        "rights": "IETF Trust terms apply; cite and link instead of copying.",
+        "contentPolicy": "link-and-properties"
+      },
+      "freshness": {
+        "required": true,
+        "maxAgeDays": 365
+      }
+    }
+  ],
+  "profiles": [
+    {
+      "id": "project-voice",
+      "authorityGroup": "language",
+      "sourceIds": [
+        "project-approved-writing-samples"
+      ],
+      "modes": [
+        "literary",
+        "marketing",
+        "informational",
+        "communication"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "ru",
+        "en"
+      ],
+      "effects": [
+        "voice",
+        "syntax",
+        "lexical-choice"
+      ],
+      "defaultUse": "required-when-present",
+      "editors": [
+        "literary-continuity",
+        "marketing-claims",
+        "informational-subject",
+        "communication-recipient",
+        "technical-accuracy"
+      ],
+      "constraints": [
+        "Project must record ownership, permission, and active-version status."
+      ],
+      "propertiesByEffect": {
+        "voice": [
+          "project terminology and voice"
+        ],
+        "syntax": [
+          "project-approved sentence patterns"
+        ],
+        "lexical-choice": [
+          "project-approved vocabulary"
+        ]
+      }
+    },
+    {
+      "id": "project-claims-and-structure",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "project-approved-writing-samples"
+      ],
+      "modes": [
+        "literary",
+        "marketing",
+        "informational",
+        "communication"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "structure",
+        "claims"
+      ],
+      "defaultUse": "required-when-present",
+      "editors": [
+        "literary-continuity",
+        "marketing-claims",
+        "informational-subject",
+        "communication-recipient",
+        "technical-accuracy"
+      ],
+      "constraints": [
+        "Project must record ownership, permission, and active-version status."
+      ],
+      "propertiesByEffect": {
+        "claims": [
+          "approved factual and claim patterns"
+        ],
+        "structure": [
+          "reader-tested structures"
+        ]
+      }
+    },
+    {
+      "id": "litai-bunin-lens",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "litai-reference-audit"
+      ],
+      "modes": [
+        "literary"
+      ],
+      "overlays": [],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "narrative",
+        "character"
+      ],
+      "defaultUse": "opt-in",
+      "editors": [
+        "literary-prose"
+      ],
+      "constraints": [
+        "No external excerpts may be loaded until edition and rights provenance are recorded."
+      ],
+      "propertiesByEffect": {
+        "narrative": [
+          "sensory precision",
+          "atmosphere through concrete detail"
+        ],
+        "character": [
+          "emotion shown through observable behavior"
+        ]
+      }
+    },
+    {
+      "id": "litai-rowling-lens",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "litai-reference-audit"
+      ],
+      "modes": [
+        "literary"
+      ],
+      "overlays": [],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "narrative",
+        "character",
+        "worldbuilding"
+      ],
+      "defaultUse": "opt-in",
+      "editors": [
+        "literary-continuity",
+        "literary-prose"
+      ],
+      "constraints": [
+        "Properties only; do not imitate author voice."
+      ],
+      "propertiesByEffect": {
+        "narrative": [
+          "clarity and discovery"
+        ],
+        "character": [
+          "distinct character traits and voices"
+        ],
+        "worldbuilding": [
+          "artifacts and systems with understandable rules"
+        ]
+      }
+    },
+    {
+      "id": "litai-sapkowski-witcher-lens",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "litai-reference-audit"
+      ],
+      "modes": [
+        "literary"
+      ],
+      "overlays": [],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "narrative",
+        "character",
+        "worldbuilding"
+      ],
+      "defaultUse": "opt-in",
+      "editors": [
+        "literary-structure",
+        "literary-prose"
+      ],
+      "constraints": [
+        "Composite LitAI lens; underlying external examples have unverified provenance."
+      ],
+      "propertiesByEffect": {
+        "character": [
+          "dialogue with subtext and irony"
+        ],
+        "narrative": [
+          "moral ambiguity"
+        ],
+        "worldbuilding": [
+          "material consequences and grounded world detail"
+        ]
+      }
+    },
+    {
+      "id": "litai-perumov-lens",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "litai-reference-audit"
+      ],
+      "modes": [
+        "literary"
+      ],
+      "overlays": [],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "narrative",
+        "worldbuilding"
+      ],
+      "defaultUse": "opt-in",
+      "editors": [
+        "literary-continuity",
+        "literary-structure"
+      ],
+      "constraints": [
+        "Lens file only; no verified source-text corpus was found."
+      ],
+      "propertiesByEffect": {
+        "worldbuilding": [
+          "rule-bound magic"
+        ],
+        "narrative": [
+          "combat anatomy and cost",
+          "physical consequences"
+        ]
+      }
+    },
+    {
+      "id": "litai-complex-conflict-lens",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "litai-reference-audit"
+      ],
+      "modes": [
+        "literary"
+      ],
+      "overlays": [],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "narrative",
+        "structure",
+        "character"
+      ],
+      "defaultUse": "opt-in",
+      "editors": [
+        "literary-structure",
+        "literary-continuity"
+      ],
+      "constraints": [
+        "Derived from Path of Exile, Deus Ex, Skyrim, and Suits profiles; properties only."
+      ],
+      "propertiesByEffect": {
+        "narrative": [
+          "tragic arcs and justified antagonists"
+        ],
+        "structure": [
+          "layered conflict and dilemmas"
+        ],
+        "character": [
+          "relationship power and prepared consequences"
+        ]
+      }
+    },
+    {
+      "id": "russian-infostyle-core",
+      "authorityGroup": "language",
+      "sourceIds": [
+        "ilyakhov-sarycheva-write-short-2025",
+        "ilyakhov-information-style-textbook"
+      ],
+      "modes": [
+        "marketing",
+        "informational",
+        "communication"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "ru"
+      ],
+      "effects": [
+        "syntax",
+        "line-editing",
+        "example-method"
+      ],
+      "defaultUse": "default",
+      "editors": [
+        "russian-language"
+      ],
+      "constraints": [
+        "Do not imitate the authors' voice. Glavred API is not part of this profile and no score may be claimed without a configured external tool and recorded response."
+      ],
+      "propertiesByEffect": {
+        "syntax": [
+          "natural Russian syntax rather than translation calques",
+          "actors, actions, events, and useful specifics"
+        ],
+        "line-editing": [
+          "large-to-small editing without stop-word theater",
+          "necessary meaning and tone survive shortening"
+        ],
+        "example-method": [
+          "use Russian examples to expose language and editing decisions"
+        ]
+      }
+    },
+    {
+      "id": "russian-business-correspondence",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "ilyakhov-sarycheva-business-correspondence",
+        "ilyakhov-text-on-shelves",
+        "ilyakhov-how-to-write"
+      ],
+      "modes": [
+        "communication"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "ru"
+      ],
+      "effects": [
+        "correspondence",
+        "recipient-care",
+        "reader-action",
+        "structure",
+        "example-method",
+        "genre-structure"
+      ],
+      "defaultUse": "default",
+      "editors": [
+        "russian-language",
+        "communication-recipient"
+      ],
+      "constraints": [
+        "Use for Russian business correspondence, not as a universal advertising or literary style.",
+        "Respect and care must be expressed through recipient agency and executable action, not ritual politeness."
+      ],
+      "propertiesByEffect": {
+        "correspondence": [
+          "lead with the recipient-relevant state, decision, request, or result",
+          "make owners, timing, evidence, reply path, and escalation visible"
+        ],
+        "recipient-care": [
+          "do preparatory work for the recipient and preserve an honest response path",
+          "avoid fake urgency, manipulative gratitude, public shaming, and copied-recipient pressure"
+        ],
+        "reader-action": [
+          "make the next action executable and verifiable"
+        ],
+        "structure": [
+          "put the recipient-relevant state and executable action before supporting detail"
+        ],
+        "genre-structure": [
+          "use explicit contracts for requests, tasks, status, meeting summaries, feedback, refusals, claims, incidents, and proposals"
+        ],
+        "example-method": [
+          "compare weak and actionable correspondence to expose the governing decision"
+        ]
+      }
+    },
+    {
+      "id": "russian-business-correspondence-language",
+      "authorityGroup": "language",
+      "sourceIds": [
+        "ilyakhov-sarycheva-business-correspondence"
+      ],
+      "modes": [
+        "communication"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "ru"
+      ],
+      "effects": [
+        "syntax",
+        "voice"
+      ],
+      "defaultUse": "default",
+      "editors": [
+        "russian-language"
+      ],
+      "constraints": [
+        "Use natural Russian business language without ritual politeness or bureaucratic camouflage."
+      ],
+      "propertiesByEffect": {
+        "syntax": [
+          "name actors and actions in natural Russian business syntax"
+        ],
+        "voice": [
+          "express respect through clarity, preparation, and recipient agency"
+        ]
+      }
+    },
+    {
+      "id": "russian-business-correspondence-process",
+      "authorityGroup": "process",
+      "sourceIds": [
+        "ilyakhov-sarycheva-business-correspondence",
+        "ilyakhov-text-on-shelves",
+        "ilyakhov-how-to-write"
+      ],
+      "modes": [
+        "communication"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "client-communication"
+      ],
+      "defaultUse": "default",
+      "editors": [
+        "planning-client-service"
+      ],
+      "constraints": [
+        "Use for accountable sender-recipient coordination; it cannot define target-language syntax."
+      ],
+      "propertiesByEffect": {
+        "client-communication": [
+          "report bad news, drift, limits, and next checkpoints early"
+        ]
+      }
+    },
+    {
+      "id": "russian-explanation-and-persuasion",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "ilyakhov-clear-understandable",
+        "ilyakhov-information-style-textbook",
+        "ilyakhov-how-to-write"
+      ],
+      "modes": [
+        "marketing",
+        "informational",
+        "communication"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "ru"
+      ],
+      "effects": [
+        "context-framing",
+        "explanation",
+        "persuasion",
+        "example-method",
+        "information-architecture",
+        "visual-structure",
+        "reader-purpose"
+      ],
+      "defaultUse": "default",
+      "editors": [
+        "russian-language",
+        "informational-task"
+      ],
+      "constraints": [
+        "Explain before persuading; never manipulate context, hide material alternatives, or use an example as universal proof."
+      ],
+      "propertiesByEffect": {
+        "context-framing": [
+          "start from the reader's current model, relevant stakes, and definitions"
+        ],
+        "explanation": [
+          "move from known to new and expose causal links"
+        ],
+        "persuasion": [
+          "answer the strongest reasonable objection and calibrate certainty to evidence"
+        ],
+        "example-method": [
+          "use examples, anti-examples, and bounded analogies to reveal the rule"
+        ],
+        "information-architecture": [
+          "make the core model scannable without requiring linear reading"
+        ],
+        "visual-structure": [
+          "use diagrams, tables, captions, or images only when they explain a relationship"
+        ],
+        "reader-purpose": [
+          "end with the changed model, decision, or action the explanation enables"
+        ]
+      }
+    },
+    {
+      "id": "ilyakhov-purpose-and-structure",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "ilyakhov-infostyle",
+        "ilyakhov-structure-and-examples",
+        "ilyakhov-style-as-decisions"
+      ],
+      "modes": [
+        "informational",
+        "communication",
+        "marketing"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "ru"
+      ],
+      "effects": [
+        "reader-purpose",
+        "structure",
+        "working-system",
+        "example-method"
+      ],
+      "defaultUse": "default",
+      "editors": [
+        "russian-language"
+      ],
+      "constraints": [
+        "Russian editorial method only; do not copy source examples, imitate author voice, or apply it to another output language."
+      ],
+      "propertiesByEffect": {
+        "reader-purpose": [
+          "start from the reader change and the working product system"
+        ],
+        "structure": [
+          "gather substance before polishing and build the meaning skeleton"
+        ],
+        "working-system": [
+          "change the product system when wording alone cannot solve the reader problem"
+        ],
+        "example-method": [
+          "use examples and counterexamples to reveal difficult claims"
+        ]
+      }
+    },
+    {
+      "id": "ilyakhov-russian-voice-decisions",
+      "authorityGroup": "language",
+      "sourceIds": [
+        "ilyakhov-style-as-decisions"
+      ],
+      "modes": [
+        "marketing",
+        "informational",
+        "communication"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "ru"
+      ],
+      "effects": [
+        "voice"
+      ],
+      "defaultUse": "default",
+      "editors": [
+        "russian-language"
+      ],
+      "constraints": [
+        "Treat style as observable decisions; never imitate a named author."
+      ],
+      "propertiesByEffect": {
+        "voice": [
+          "treat style as decisions about attention, omission, comparison, and proof"
+        ]
+      }
+    },
+    {
+      "id": "ilyakhov-plan-and-client-method",
+      "authorityGroup": "process",
+      "sourceIds": [
+        "ilyakhov-user-planning-note",
+        "ilyakhov-text-as-service"
+      ],
+      "modes": [
+        "marketing",
+        "informational",
+        "communication"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "reader-purpose",
+        "planning",
+        "client-communication"
+      ],
+      "defaultUse": "default",
+      "editors": [
+        "planning-client-service"
+      ],
+      "constraints": [
+        "Use as a language-neutral service and planning method; it cannot define syntax, idiom, rhythm, or voice."
+      ],
+      "propertiesByEffect": {
+        "reader-purpose": [
+          "formulate the client task as the useful product result, not an order for words"
+        ],
+        "planning": [
+          "report the next verifiable checkpoint, surface drift, and replan without false certainty"
+        ],
+        "client-communication": [
+          "treat client and executor as accountable allies while preserving honest disagreement"
+        ]
+      }
+    },
+    {
+      "id": "marketing-claim-substantiation",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "ftc-advertising-guidance"
+      ],
+      "modes": [
+        "marketing"
+      ],
+      "overlays": [],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "claims",
+        "domain-correctness",
+        "evidence"
+      ],
+      "defaultUse": "default",
+      "editors": [
+        "marketing-claims",
+        "marketing-ethics"
+      ],
+      "constraints": [
+        "US baseline only; obtain jurisdiction-specific legal review when needed. This profile cannot define voice or syntax."
+      ],
+      "propertiesByEffect": {
+        "claims": [
+          "identify express and implied claims",
+          "substantiate claims before publication",
+          "judge the whole impression",
+          "make material limits visible"
+        ],
+        "domain-correctness": [
+          "apply current jurisdiction-specific advertising requirements"
+        ],
+        "evidence": [
+          "link every material claim to evidence available before publication"
+        ]
+      }
+    },
+    {
+      "id": "marketing-measurement-lens",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "hopkins-scientific-advertising"
+      ],
+      "modes": [
+        "marketing"
+      ],
+      "overlays": [],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "offer-structure",
+        "measurement",
+        "evidence"
+      ],
+      "defaultUse": "opt-in",
+      "editors": [
+        "marketing-business",
+        "marketing-claims"
+      ],
+      "constraints": [
+        "Historical analytical lens; current ethics, channels, accessibility, and law override it. It cannot define Russian voice."
+      ],
+      "propertiesByEffect": {
+        "offer-structure": [
+          "specific propositions",
+          "salesmanship tied to a real offer"
+        ],
+        "measurement": [
+          "testable variants",
+          "response and cost measurement"
+        ],
+        "evidence": [
+          "separate observed response from causal interpretation"
+        ]
+      }
+    },
+    {
+      "id": "reader-task-architecture",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "digitalgov-plain-language",
+        "govuk-content-design"
+      ],
+      "modes": [
+        "informational"
+      ],
+      "overlays": [],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "reader-purpose",
+        "information-architecture",
+        "accessibility"
+      ],
+      "defaultUse": "default",
+      "editors": [
+        "informational-subject",
+        "informational-task"
+      ],
+      "constraints": [
+        "Use for task structure and comprehension only; do not translate English voice or sentence patterns."
+      ],
+      "propertiesByEffect": {
+        "reader-purpose": [
+          "organize around audience need"
+        ],
+        "information-architecture": [
+          "lead with the answer",
+          "use scannable dependency order"
+        ],
+        "accessibility": [
+          "test comprehension and task completion"
+        ]
+      }
+    },
+    {
+      "id": "crisis-communication",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "cdc-cerc"
+      ],
+      "modes": [
+        "communication"
+      ],
+      "overlays": [],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "risk-communication",
+        "domain-correctness",
+        "reader-action"
+      ],
+      "defaultUse": "conditional",
+      "editors": [
+        "communication-recipient",
+        "communication-risk"
+      ],
+      "constraints": [
+        "Use only for crisis, safety, incident, or emergency communication; verify current incident facts. It cannot define Russian voice."
+      ],
+      "propertiesByEffect": {
+        "risk-communication": [
+          "be timely, accurate, and credible",
+          "express grounded empathy",
+          "adapt to crisis phase and audience"
+        ],
+        "domain-correctness": [
+          "state uncertainty"
+        ],
+        "reader-action": [
+          "promote concrete protective action"
+        ]
+      }
+    },
+    {
+      "id": "service-message",
+      "authorityGroup": "domain",
+      "sourceIds": [
+        "govuk-service-messages"
+      ],
+      "modes": [
+        "communication"
+      ],
+      "overlays": [],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "reader-action",
+        "information-architecture",
+        "security"
+      ],
+      "defaultUse": "conditional",
+      "editors": [
+        "communication-recipient",
+        "communication-risk"
+      ],
+      "constraints": [
+        "Apply channel and jurisdiction-specific security policy; render the requirement through the active language profile."
+      ],
+      "propertiesByEffect": {
+        "reader-action": [
+          "identify sender and purpose",
+          "lead with recipient action"
+        ],
+        "information-architecture": [
+          "set timing and expectations"
+        ],
+        "security": [
+          "avoid sensitive data and phishing ambiguity"
+        ]
+      }
+    },
+    {
+      "id": "technical-document-architecture",
+      "authorityGroup": "technical",
+      "sourceIds": [
+        "diataxis"
+      ],
+      "modes": [
+        "informational",
+        "communication"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "information-architecture",
+        "reader-purpose"
+      ],
+      "defaultUse": "default",
+      "editors": [
+        "technical-architecture",
+        "technical-procedure"
+      ],
+      "constraints": [
+        "Choose one primary document kind before drafting. This profile cannot define voice or syntax."
+      ],
+      "propertiesByEffect": {
+        "information-architecture": [
+          "separate tutorial, how-to, reference, and explanation",
+          "link across types instead of mixing obligations"
+        ],
+        "reader-purpose": [
+          "organize each artifact around its user need"
+        ]
+      }
+    },
+    {
+      "id": "technical-developer-conventions",
+      "authorityGroup": "technical",
+      "sourceIds": [
+        "google-developer-style",
+        "microsoft-learn-style"
+      ],
+      "modes": [
+        "informational",
+        "communication"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "domain-correctness",
+        "technical-identifiers",
+        "accessibility",
+        "localization"
+      ],
+      "defaultUse": "default",
+      "editors": [
+        "technical-language",
+        "technical-accuracy"
+      ],
+      "constraints": [
+        "Do not inherit vendor voice, English syntax, or product terminology outside its domain."
+      ],
+      "propertiesByEffect": {
+        "domain-correctness": [
+          "literal code separated from prose"
+        ],
+        "accessibility": [
+          "accessible and localization-aware instructions"
+        ],
+        "technical-identifiers": [
+          "project terminology before vendor terminology",
+          "consistent technical names"
+        ],
+        "localization": [
+          "keep identifiers literal while adapting surrounding instructions to the target locale"
+        ]
+      }
+    },
+    {
+      "id": "technical-modular-docs",
+      "authorityGroup": "technical",
+      "sourceIds": [
+        "redhat-modular-docs"
+      ],
+      "modes": [
+        "informational"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "information-architecture",
+        "reuse"
+      ],
+      "defaultUse": "conditional",
+      "editors": [
+        "technical-architecture"
+      ],
+      "constraints": [
+        "Use when a documentation set has repeated or independently maintained modules; it cannot define output voice."
+      ],
+      "propertiesByEffect": {
+        "information-architecture": [
+          "separate concept, procedure, and reference modules",
+          "assemble modules from user stories"
+        ],
+        "reuse": [
+          "reuse only self-contained units"
+        ]
+      }
+    },
+    {
+      "id": "technical-normative-spec",
+      "authorityGroup": "technical",
+      "sourceIds": [
+        "ietf-bcp14"
+      ],
+      "modes": [
+        "informational"
+      ],
+      "overlays": [
+        "technical"
+      ],
+      "outputLanguages": [
+        "all"
+      ],
+      "effects": [
+        "domain-correctness",
+        "normative-semantics",
+        "technical-identifiers"
+      ],
+      "defaultUse": "opt-in",
+      "editors": [
+        "technical-accuracy",
+        "technical-language"
+      ],
+      "constraints": [
+        "Only for formal specifications and contracts; normal guides should not mimic RFC language or English syntax."
+      ],
+      "propertiesByEffect": {
+        "normative-semantics": [
+          "use requirement levels deliberately",
+          "include the BCP 14 interpretation statement when applicable"
+        ],
+        "domain-correctness": [
+          "separate normative requirements from explanation"
+        ],
+        "technical-identifiers": [
+          "preserve exact requirement keywords and defined protocol terms"
+        ]
+      }
+    }
+  ]
+}

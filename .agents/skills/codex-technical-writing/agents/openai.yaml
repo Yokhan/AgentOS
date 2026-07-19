@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Technical Writing"
+  short_description: "Write executable product-grounded technical documentation"
+  default_prompt: "Use $codex-technical-writing to produce technical documentation grounded in the product, stated environment, and executable verification."
+policy:
+  allow_implicit_invocation: true

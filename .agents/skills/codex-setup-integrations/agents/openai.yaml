@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Setup Integrations"
+  short_description: "Set up optional integrations"
+  default_prompt: "Use $codex-setup-integrations to configure this integration safely."
+policy:
+  allow_implicit_invocation: true

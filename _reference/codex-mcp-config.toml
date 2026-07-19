@@ -1,0 +1,27 @@
+# BEGIN agent-project-template managed MCP
+[mcp_servers.context-router]
+command = "node"
+args = ["mcp-servers/context-router/dist/index.js"]
+cwd = ".."
+enabled = true
+required = false
+startup_timeout_sec = 30
+
+[mcp_servers.engram]
+command = "engram"
+args = ["mcp"]
+cwd = ".."
+enabled = true
+required = false
+startup_timeout_sec = 30
+
+[mcp_servers.codebase-memory-mcp]
+command = "codebase-memory-mcp"
+cwd = ".."
+enabled = true
+required = false
+startup_timeout_sec = 30
+
+[mcp_servers.codebase-memory-mcp.env]
+CBM_ALLOWED_ROOT = "."
+# END agent-project-template managed MCP

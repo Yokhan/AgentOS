@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Cross-Project Lessons"
+  short_description: "Promote repeated lessons into reusable template behavior"
+  default_prompt: "Use $codex-cross-project-lessons to turn downstream project mistakes into template rules, skills, validators, or routing behavior."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,5 @@
+.headline {
+  background: linear-gradient(90deg, #7c3aed, #06b6d4);
+  background-clip: text;
+  color: transparent;
+}

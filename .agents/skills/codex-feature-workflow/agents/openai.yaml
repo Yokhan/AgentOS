@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Feature Workflow"
+  short_description: "Add features with gates"
+  default_prompt: "Use $codex-feature-workflow to implement this feature with tests and verification."
+policy:
+  allow_implicit_invocation: true

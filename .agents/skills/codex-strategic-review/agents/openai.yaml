@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Strategic Review"
+  short_description: "Review plans strategically"
+  default_prompt: "Use $codex-strategic-review to evaluate this plan before implementation, including anti-sycophancy and evidence-before-done risks."
+policy:
+  allow_implicit_invocation: true

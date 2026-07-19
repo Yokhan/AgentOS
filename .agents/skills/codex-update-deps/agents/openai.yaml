@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Update Deps"
+  short_description: "Update dependencies safely"
+  default_prompt: "Use $codex-update-deps to update these dependencies with tests and risk notes."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Communication Review"
+  short_description: "Review copy and messaging"
+  default_prompt: "Use $codex-domain-communication-review to improve this message."
+policy:
+  allow_implicit_invocation: true

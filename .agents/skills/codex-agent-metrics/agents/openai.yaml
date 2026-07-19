@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Agent Metrics"
+  short_description: "Record task metrics"
+  default_prompt: "Use $codex-agent-metrics to record metrics for this completed task."
+policy:
+  allow_implicit_invocation: true

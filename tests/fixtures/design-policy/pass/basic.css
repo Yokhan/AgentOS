@@ -1,0 +1,4 @@
+.button {
+  color: var(--color-text);
+  background: var(--color-surface);
+}

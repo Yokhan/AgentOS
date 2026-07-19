@@ -1,0 +1,52 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && bash scripts/codex-hook-adapter.sh session-start'",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|shell|apply_patch|Edit|Write|file_write|file_edit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && bash scripts/codex-hook-adapter.sh pre-tool-use'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(Bash|shell|apply_patch|Edit|Write|file_write|file_edit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && bash scripts/codex-hook-adapter.sh post-tool-use'",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && bash scripts/codex-hook-adapter.sh session-stop'",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

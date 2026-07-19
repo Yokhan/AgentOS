@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Task Queue"
+  short_description: "Manage queued agent tasks"
+  default_prompt: "Use $codex-task-queue to pick up or add this queued task."
+policy:
+  allow_implicit_invocation: true

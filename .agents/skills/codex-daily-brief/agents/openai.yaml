@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Daily Brief"
+  short_description: "Summarize project status"
+  default_prompt: "Use $codex-daily-brief to prepare a concise project status brief."
+policy:
+  allow_implicit_invocation: true

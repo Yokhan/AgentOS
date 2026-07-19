@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Design System Workflow"
+  short_description: "Enforce token/component/story contracts"
+  default_prompt: "Use $codex-design-system-workflow to build or audit design systems from foundations through rendered geometry verification."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Business Review"
+  short_description: "Review business decisions"
+  default_prompt: "Use $codex-domain-business-review to evaluate this business plan."
+policy:
+  allow_implicit_invocation: true

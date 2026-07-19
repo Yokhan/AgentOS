@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Domain Design Review"
+  short_description: "Review UI and design quality"
+  default_prompt: "Use $codex-domain-design-review to audit UI, UX, visual systems, accessibility, and responsive behavior."
+policy:
+  allow_implicit_invocation: true

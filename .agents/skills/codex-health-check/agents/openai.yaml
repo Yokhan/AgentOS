@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Health Check"
+  short_description: "Run project health checks"
+  default_prompt: "Use $codex-health-check to assess this project and list blockers first."
+policy:
+  allow_implicit_invocation: true

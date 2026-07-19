@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Self Update"
+  short_description: "Improve rules and skills"
+  default_prompt: "Use $codex-self-update to turn this correction into a durable project improvement."
+policy:
+  allow_implicit_invocation: true

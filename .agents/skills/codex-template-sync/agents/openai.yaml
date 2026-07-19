@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Template Sync"
+  short_description: "Maintain template sync safely"
+  default_prompt: "Use $codex-template-sync to update template sync without overwriting project files."
+policy:
+  allow_implicit_invocation: true

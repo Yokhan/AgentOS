@@ -1,0 +1,25 @@
+# Architectural Decision Records
+
+<!-- TODO: First ADR created during /setup-project -->
+
+## ADR Index
+
+| # | Title | Date | Status |
+|---|-------|------|--------|
+| 1 | Stack Choice | | accepted |
+
+---
+
+## ADR-1: Stack Choice
+
+**Date:** [filled by setup-project]
+**Status:** accepted
+
+### Context
+Starting a new project, need to choose technology stack.
+
+### Decision
+[Filled by setup-project with chosen stack and reasoning]
+
+### Consequences
+[Filled by setup-project]

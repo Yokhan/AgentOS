@@ -1,0 +1,38 @@
+# API Contracts
+
+<!-- TODO: Fill in during /setup-project (if API project) -->
+
+## Base URL
+`http://localhost:[port]/api`
+
+## Authentication
+[How auth works]
+
+## Endpoints
+
+### [Feature]: [Endpoint Name]
+- **Method:** GET / POST / PUT / DELETE
+- **Path:** `/api/[path]`
+- **Request:**
+  ```json
+  {}
+  ```
+- **Response (200):**
+  ```json
+  {}
+  ```
+- **Errors:**
+  | Code | Description |
+  |------|-------------|
+  | 400 | Bad request |
+  | 404 | Not found |
+
+## Error Format
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable message"
+  }
+}
+```

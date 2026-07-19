@@ -1,0 +1,1828 @@
+{
+  "template_version": "4.9.0",
+  "created": "2026-07-19",
+  "updated": "2026-07-19",
+  "template_remote": "",
+  "files": {
+    "scripts/check-todo-verify.sh": {
+      "category": "template",
+      "hash": "5403e3dccaa95794eff37e4217075bd0967d91385ac3228ba6485cb40511527d"
+    },
+    "scripts/module-status.sh": {
+      "category": "template",
+      "hash": "a0996ad0e91e48d31332f04c78741876bcb1035ff30a1282ab479038c864143d"
+    },
+    "scripts/sync-template.sh": {
+      "category": "template",
+      "hash": "6f5d0879a94521c69c05101a5b7cfdd3f2c063ad982fc2bf0df074e135977b4c"
+    },
+    "scripts/verify-project.sh": {
+      "category": "template",
+      "hash": "d743e1d217250fa68cc7f89a91846c550c1c3163c50b7056368afd76b1274dda"
+    },
+    "CLAUDE.md": {
+      "category": "project",
+      "hash": "1ac5902e43c7dcd084c670650b3c7db6ca7b247ac7149e227ba756a966c950f3"
+    },
+    "ecosystem.md": {
+      "category": "project",
+      "hash": "b31833eb9ab7bfc681c28d5b77103d1f41c2cf65ce4e107cd25390c3cb2ca7a9"
+    },
+    ".gitignore": {
+      "category": "hybrid",
+      "hash": "59a4fd25c4610115264d48c6215fad8b421cddd7083dcef7cad0f91f6f1c5a8f"
+    },
+    ".claude/settings.json": {
+      "category": "template",
+      "hash": "b30b8b110cede811afed719f2f284d572fb4d91f113dde4415714ebec1347a57"
+    },
+    ".claude/settings.local.json.example": {
+      "category": "template",
+      "hash": "9ba48430a4cc99397c97a4af680d469553541cc5190d4819c4fda81712e32d50"
+    },
+    ".claude/docs/strategic-thinking-full.md": {
+      "category": "template",
+      "hash": "e916950fdd668b0ce6a0e9db5792597afca420aeaeb11c48003e818c45e70a00"
+    },
+    ".claude/docs/domain-full/domain-business.md": {
+      "category": "template",
+      "hash": "8dc9b146edd68f57bf7aa190b6901d7d3d2ba271fca12bc3e483122fe404300b"
+    },
+    ".claude/docs/domain-full/domain-design.md": {
+      "category": "template",
+      "hash": "8df42e2219f456c7c8b3da34b92ce2268e099277dbfb4fa54e83fd01207c8c79"
+    },
+    ".claude/docs/domain-full/domain-health.md": {
+      "category": "template",
+      "hash": "00aed274e0ef8a009570814d05bb7773d50aa5c2e06fb7694fabeb592c638fca"
+    },
+    ".claude/docs/domain-full/domain-marketing-sales.md": {
+      "category": "template",
+      "hash": "f1d82dcf581dc3f1f64d91515ba1ff90c5ac3144576f17fbc2c49dc073468236"
+    },
+    ".claude/docs/domain-full/domain-productivity.md": {
+      "category": "template",
+      "hash": "e80906f6cd6dc0aa66fd5e9b49e855ff861266e852cca725f27d86d6d1de8072"
+    },
+    ".claude/docs/domain-full/domain-psychology.md": {
+      "category": "template",
+      "hash": "5bef7cf753da5e29eb10d0b91fc1c5d7fc4381cc1fa1a3e8dbc06daf7457ce71"
+    },
+    ".claude/docs/domain-full/domain-science.md": {
+      "category": "template",
+      "hash": "b55d14a1a388eb57a5755d3b90832690f392972a933b3b9c5d0a8b6ae27c301e"
+    },
+    ".claude/docs/domain-full/domain-software.md": {
+      "category": "template",
+      "hash": "20ede627e78fcda6007c4f289c88f0e1b0159dc5e38a36723b4eede72c126503"
+    },
+    ".claude/rules/router.md": {
+      "category": "template",
+      "hash": "52f0d0789d82a7eb082969076d787d5cd2e39e08f5df8b5b51db645b9f020676"
+    },
+    ".claude/library/process/brainstorm.md": {
+      "category": "template",
+      "hash": "5b9e3b54e25edf16df5b4dfbff7984167861dc76a8a1801de0debdcdce966530"
+    },
+    ".claude/library/process/change-strategy-gate.md": {
+      "category": "template",
+      "hash": "dcf626af2d383de85580456ff35ddadf08e428fbc500c187290bdbe33c4626c3"
+    },
+    ".claude/library/process/client-executor-contract.md": {
+      "category": "template",
+      "hash": "81794294e30f2100880387adca6cc4bdb5161fed1d85267de2075fb46676540c"
+    },
+    ".claude/library/process/context-first.md": {
+      "category": "template",
+      "hash": "78258fbd1e15899241dea180232b05d0993a9a128d980cc9bc7c1cca7595e42c"
+    },
+    ".claude/library/process/plan-first.md": {
+      "category": "template",
+      "hash": "a841a392a56803ba817cb7f80bfd9c5d8e46d61f2532a274acc29574b8bc20be"
+    },
+    ".claude/library/process/product-goal-loop.md": {
+      "category": "template",
+      "hash": "a2e7558b42bc40a855e00b7ad5e13219c922cc7489720ec010cd056f61b54645"
+    },
+    ".claude/library/process/research-first.md": {
+      "category": "template",
+      "hash": "e4824dbfe5b04a4bcb2b318056bbb4e1da525d84d6117019c09ccf31f40f9cc0"
+    },
+    ".claude/library/process/risk-classification.md": {
+      "category": "template",
+      "hash": "e37f981fa9ab71d8b9da1812269c69d5313bed88d2ac8c80e7d27c52018f51e2"
+    },
+    ".claude/library/process/self-improvement.md": {
+      "category": "template",
+      "hash": "1fd0a88b684f9c47fb727e99b981a28374dec7e3b1af1830dc4790e6e9a93be3"
+    },
+    ".claude/library/process/self-verification.md": {
+      "category": "template",
+      "hash": "57ab4cab10d0a379679ea1040a9fcaef52acc59f63e26d4053c46676cdeb9a90"
+    },
+    ".claude/library/technical/architecture.md": {
+      "category": "template",
+      "hash": "acb660267140316b1cd156c1aa0718609821063014d825e41ff394d525e66bb7"
+    },
+    ".claude/library/technical/atomic-reuse.md": {
+      "category": "template",
+      "hash": "82d07c4953dcf34d29c6dca5dfad6afc2f2d2f538c0d8447c13e7a7b98947723"
+    },
+    ".claude/library/technical/code-style.md": {
+      "category": "template",
+      "hash": "0d54f0bb12d00ad06b061f71afe470e2a27d3c87ddd4a4d3b6e84d6c28cde645"
+    },
+    ".claude/library/technical/error-handling.md": {
+      "category": "template",
+      "hash": "cf1f5f6ae68adb472b95eb1f795f344fcc6d4f250e2b31e0964f78d52d4e2208"
+    },
+    ".claude/library/technical/git-workflow.md": {
+      "category": "template",
+      "hash": "3db842512e264d01fab8302845a24732881c1254f4a2dceeddc98ea40e178ee6"
+    },
+    ".claude/library/technical/russian-business-correspondence.md": {
+      "category": "template",
+      "hash": "9cd2f00cd97943383c92a3ba6c4f9b343f9ffc5a6ba5eda680449a0f722031b0"
+    },
+    ".claude/library/technical/russian-explanation-and-persuasion.md": {
+      "category": "template",
+      "hash": "4d050c7f0a6b23de507080029cfef4c68a211a93d814886271c904d212c854bc"
+    },
+    ".claude/library/technical/russian-writing-profile.md": {
+      "category": "template",
+      "hash": "73346d3583d0394739a3f09c1f61f3407cc217397a648702a9897b63388890cb"
+    },
+    ".claude/library/technical/technical-writing-profile.md": {
+      "category": "template",
+      "hash": "487ed552fa9b1696e8d39d644e42a3ad6257d673c844cf1c3c2ad378b55d19c2"
+    },
+    ".claude/library/technical/testing.md": {
+      "category": "template",
+      "hash": "9a2ea7525d86a1fda514190c4118d9f3d46181b56612abfd3d4cba31698ae606"
+    },
+    ".claude/library/technical/writing-editorial-board.md": {
+      "category": "template",
+      "hash": "20a47acbff56a744731fbf9a20ac3171c34809f8b774aaa77ac75e3b7709abd8"
+    },
+    ".claude/library/technical/writing-mode-profiles.md": {
+      "category": "template",
+      "hash": "0c879ef0ea24034967e87ce7266178ee84dffe5677ecce606696e3a7dc15cd1e"
+    },
+    ".claude/library/technical/writing-reference-registry.json": {
+      "category": "template",
+      "hash": "8dc260eb41b3df30f6402331cbf0ccb2fee401018f0f48c56451652b3b8bf8d5"
+    },
+    ".claude/library/technical/writing.md": {
+      "category": "template",
+      "hash": "e3f370c71d2beaabfd629d6055a61903ab74dacae1ab94941f041893826e1edd"
+    },
+    ".claude/library/meta/analysis.md": {
+      "category": "template",
+      "hash": "52cd10ecc33945b275abfd826528f622b21784b5eaef9b9bf70d126a2a8ee9ca"
+    },
+    ".claude/library/meta/critical-thinking.md": {
+      "category": "template",
+      "hash": "2f889f4477c1b0402bdcb3f852c4a0d13940820a1ba18ef6052e8b85a7dc9a8c"
+    },
+    ".claude/library/meta/strategic-thinking.md": {
+      "category": "template",
+      "hash": "f1f97736264b1f65c553ff94455001b4e28095fec224caf0cd49bbfce785577a"
+    },
+    ".claude/library/domain/domain-design-pipeline.md": {
+      "category": "template",
+      "hash": "76d262ebe8205f70d6928db1a8e4c56ef1d236fcedb60352d2d055fe0b1cb03f"
+    },
+    ".claude/library/domain/domain-design-system.md": {
+      "category": "template",
+      "hash": "fea02d6166c78bd4e392f7f326aa0633571c8f8dd0db928b41096d93adb27cb5"
+    },
+    ".claude/library/domain/domain-guards.md": {
+      "category": "template",
+      "hash": "e79557f8234ffba7043cdbc9527d3288687ff9a6e6b8fcd10ba689a6a745ef46"
+    },
+    ".claude/library/product/production-product-standard.md": {
+      "category": "template",
+      "hash": "785db06e5d9f6cb4f7436e13b85b8257c2c437203344fc573afb74a7ae9548e9"
+    },
+    ".claude/library/conflict/conflict-resolution.md": {
+      "category": "template",
+      "hash": "e59282d1b3d278db78c359466bce399c7f463d3704fbb7485a3c17d70aa35f15"
+    },
+    ".claude/agents/devops.md": {
+      "category": "template",
+      "hash": "2cf88fa9b715ae969bcb5134e9723449a99e281e4ed6da7c883dfb33a2e7cc61"
+    },
+    ".claude/agents/documenter.md": {
+      "category": "template",
+      "hash": "cfc3d2d8224299432cf96e5547356ab5571a2b9d62411e9728d6e595a9ad690a"
+    },
+    ".claude/agents/implementer.md": {
+      "category": "template",
+      "hash": "5e937bbc9720b304406b5e3e37a5fbfec7908c1ca513afe96729bb7c6a95413d"
+    },
+    ".claude/agents/profiler.md": {
+      "category": "template",
+      "hash": "8c0e9f504bfce3dd89a99c0866a6e826a2b7b1a31ae15e4e5dde2a8250cba05f"
+    },
+    ".claude/agents/PROTOCOL.md": {
+      "category": "template",
+      "hash": "c4e1989f8b27b6a3916c25f757350d1c5ebc98fdc842a938b7e952e2be7e5d32"
+    },
+    ".claude/agents/researcher.md": {
+      "category": "template",
+      "hash": "fb590fec8ab59b1d0e44a5f7477702488af129595a7ffc94cfc70fd6cb0a8116"
+    },
+    ".claude/agents/reviewer.md": {
+      "category": "template",
+      "hash": "f2fb7e86a9bcc06bde77a347d595d81416585112bf6e33514ea3e5241739fa1b"
+    },
+    ".claude/agents/security-auditor.md": {
+      "category": "template",
+      "hash": "b22edd537d576be51237ca272677714fe9163efd4ef71142926c7d892514327d"
+    },
+    ".claude/agents/simplifier.md": {
+      "category": "template",
+      "hash": "6350fb348215224dad980bddc9fdc29d4d63e8f2da364583321dac4f3a976bb4"
+    },
+    ".claude/agents/technical-writer.md": {
+      "category": "template",
+      "hash": "d9fc578152ab93764ac5b9037b1017c6d87f01de58482613df8c6d412f55102c"
+    },
+    ".claude/agents/test-engineer.md": {
+      "category": "template",
+      "hash": "404613603a84811881764755e4ffdb02c0f212ad2b0acef6671d2842b0fb457b"
+    },
+    ".claude/agents/writer.md": {
+      "category": "template",
+      "hash": "9125865163b9481f41b0a9b9f213e63d06385d66858c42efe6e7e0609021a08d"
+    },
+    ".claude/commands/audit-tools.md": {
+      "category": "template",
+      "hash": "fd38d48397b676fe3da4bf8138433a0026b09fcd347f1fe65f053bd4d2201870"
+    },
+    ".claude/commands/brain-sync.md": {
+      "category": "template",
+      "hash": "baca334558069c4220297cad270d6cff99be5c642d1b71823d5a993e1137236f"
+    },
+    ".claude/commands/commit-push-pr.md": {
+      "category": "template",
+      "hash": "3cde5cd447f88d2c4ca688ea6801f2b4ff3214e3c9ed686cbe5bb71b391e5cd5"
+    },
+    ".claude/commands/hotfix.md": {
+      "category": "template",
+      "hash": "ac5385881a4bc7e0881d02ecc881df05576cf3abc141bc325378a39c0fca32fe"
+    },
+    ".claude/commands/implement.md": {
+      "category": "template",
+      "hash": "378c3c3c3a90f1e8149b862a321ea0db031aecfb031126458ee61bed006d3452"
+    },
+    ".claude/commands/mode-code.md": {
+      "category": "template",
+      "hash": "7c5044eb1f693707c163107147b5f266d1890b7569d1e3b4d5e9d7ea408f1574"
+    },
+    ".claude/commands/mode-design.md": {
+      "category": "template",
+      "hash": "f52543791d6cc15253d38eb7f6f3b4346ef796831844c677b126461e3bc13334"
+    },
+    ".claude/commands/mode-fix.md": {
+      "category": "template",
+      "hash": "4b5e2a4be530444a85853c4fce800dfd87dc360348d09c8ba9014f71d906df4a"
+    },
+    ".claude/commands/mode-plan.md": {
+      "category": "template",
+      "hash": "e3a0e33a0d871841ca6ba260c61141ff3ed2dad51f9ca54fa58c91eb8a384bc8"
+    },
+    ".claude/commands/mode-research.md": {
+      "category": "template",
+      "hash": "8462f6c6010a2b62a80d86c3c03aee8fff985c26dcc7a05b9da6fc41291772b1"
+    },
+    ".claude/commands/mode-review.md": {
+      "category": "template",
+      "hash": "f02bdcd635b54890f2428096f7da5efce04c182774f0a9688accca2e044972eb"
+    },
+    ".claude/commands/mode-write.md": {
+      "category": "template",
+      "hash": "e748a780a24fffac24f76dcb5819e059e3afde78ddcae5fc8206ae2005c8b24c"
+    },
+    ".claude/commands/onboard.md": {
+      "category": "template",
+      "hash": "cf4f2f48a804336a576db7f60de3532eef3c3b61e003b188fbd69dab79499327"
+    },
+    ".claude/commands/refactor.md": {
+      "category": "template",
+      "hash": "2751c0b1500160624ff9f476c70dd7ac92e36bfd6759823cd327e1933981de5f"
+    },
+    ".claude/commands/retrospective.md": {
+      "category": "template",
+      "hash": "31ff6be7236452f1a424ba6659aed2e0775ca7bc5ad653f454ba89b97e19bb23"
+    },
+    ".claude/commands/review.md": {
+      "category": "template",
+      "hash": "048b922c3162a368505cde12f6439beae10d90ad260af89ad9d734f1623fe72f"
+    },
+    ".claude/commands/rollback.md": {
+      "category": "template",
+      "hash": "e627a9e1232609f6fc90b536b807d493e008b244adc3543b43bc140b9d190b7f"
+    },
+    ".claude/commands/setup-project.md": {
+      "category": "template",
+      "hash": "a61742503b64c2ce8707ef8ca6b09243d8a97812ac08831cfab288197d9348b2"
+    },
+    ".claude/commands/sprint.md": {
+      "category": "template",
+      "hash": "00a41c7473fbfadfc7818e258410e9086d4aa2068bf0b5ff74fb27b12f672272"
+    },
+    ".claude/commands/status.md": {
+      "category": "template",
+      "hash": "ba41cf5590e6bc079dd0ee0850b90349eac65a2e2802b079924acf37216df00d"
+    },
+    ".claude/commands/sync-all.md": {
+      "category": "template",
+      "hash": "ec2c2949cd7d91e022b57108846f4f4c2f00745f03bcb8731269ea44adf66bea"
+    },
+    ".claude/commands/update-template.md": {
+      "category": "template",
+      "hash": "296e0cb74e0e1932996bd7c2dec82d0a948791cbe65242c9f2e60e998933f62f"
+    },
+    ".claude/commands/weekly.md": {
+      "category": "template",
+      "hash": "287f35d203e0c835d32b31fa6cadb16d3bb9a4df43da4f4fd892bf20f9b169f9"
+    },
+    ".claude/hooks/check-encoding.sh": {
+      "category": "template",
+      "hash": "65fb9920b33dd7e17ca4c83ca5f7f3e49d2f8d496a1ec4a14415b084b8704379"
+    },
+    ".claude/hooks/deny-sensitive-paths.sh": {
+      "category": "template",
+      "hash": "0609bba608ba3695549f253308b73cb6b1867c7c987713948cfe8c9a61709ef1"
+    },
+    ".claude/hooks/format.sh": {
+      "category": "template",
+      "hash": "3e98477507f8f139cf65e6a62fb631163bd5a1d471327551077895535c943178"
+    },
+    ".claude/hooks/post-edit.sh": {
+      "category": "template",
+      "hash": "4c275075b3f4292b63d0b565917b8517fd0a8c2085fdd6c31b8784ccb98ed9a3"
+    },
+    ".claude/hooks/pre-bash-safety.sh": {
+      "category": "template",
+      "hash": "e5e256cb6b399d2e0122a7c58b293f6206be8b80afbd2429bc26861aa90c6225"
+    },
+    ".claude/hooks/pre-compact.sh": {
+      "category": "template",
+      "hash": "cbe8aa233744cfccbea3fdff98683a1424dbc80610494a5c6f4916934d41fbbe"
+    },
+    ".claude/hooks/pre-edit-safety.sh": {
+      "category": "template",
+      "hash": "35afa428ccab88b364fbb48452e26baf93502e6fa96a2231e9ed1d6e8c79a4f8"
+    },
+    ".claude/hooks/prompt-injection-defender.sh": {
+      "category": "template",
+      "hash": "1582c966e57d5cb4c7659b7c6a7d4e486a860c86b89c31485e49970963b54234"
+    },
+    ".claude/hooks/session-audit.sh": {
+      "category": "template",
+      "hash": "6842a963e42dcfc2085b76be44a200eacdd2168e95b9089661a8d6145178f73a"
+    },
+    ".claude/hooks/session-start.sh": {
+      "category": "template",
+      "hash": "90bd24eefdc0da8363ab746650ee86d9b31b827005437a47a42aa37029812f56"
+    },
+    ".claude/hooks/session-stop.sh": {
+      "category": "template",
+      "hash": "85413725d5b04a9df45c088cf43458f87ae8f9fd6d078b1d03a2462ba7e31ecb"
+    },
+    ".claude/hooks/verify-gate.sh": {
+      "category": "template",
+      "hash": "f9c65795fce266af13eb1edcef229aa2d722a5d9d535525178285007fa76aa35"
+    },
+    ".claude/pipelines/bugfix.md": {
+      "category": "template",
+      "hash": "7305fbfe96b2e35536992c798179ee13d0bc90acc5295c96f2cade884538f9dd"
+    },
+    ".claude/pipelines/feature.md": {
+      "category": "template",
+      "hash": "72338577e53e0c727c3b6cbf856ae9e963b1a2cf79a2465c553e056844967ae3"
+    },
+    ".claude/pipelines/security-patch.md": {
+      "category": "template",
+      "hash": "c40e231931fc926ef0a0e55e7336fa190429772182b02674791a8a2543ab3377"
+    },
+    "scripts/audit-reuse.sh": {
+      "category": "template",
+      "hash": "a8e8b440ae3bf270ca450c9ee8ee8dc042fe73ca480c8f7a7eb132c6086ad2d8"
+    },
+    "scripts/blast-radius.sh": {
+      "category": "template",
+      "hash": "6af3fcceece5f41f19a82c299e89524807c2d98a035cd656d80821bec07dd659"
+    },
+    "scripts/bootstrap-mcp.sh": {
+      "category": "template",
+      "hash": "39e659a92cf00a7975a23155f701d30dbf6f5225b96e6af901589599cd347a53"
+    },
+    "scripts/brain-search.sh": {
+      "category": "template",
+      "hash": "c083da18faf625e8ef83d608759b3afe9cb5bd14432943d7b7a0bc0e5f3dd6c4"
+    },
+    "scripts/build-release.ps1": {
+      "category": "template",
+      "hash": "4a2271ec1a5f8a9b8a9f4ac634feb4eb4eb5e2110cc55ea4aaa7e7141975e73d"
+    },
+    "scripts/check-banlist.sh": {
+      "category": "template",
+      "hash": "6e25a53490a8810b2c7e28fee479e468faa5d9dc2bcd51c44bf12d86ca56f6cf"
+    },
+    "scripts/check-chat-composer-performance.mjs": {
+      "category": "template",
+      "hash": "517e0e2b8f3626edc00579eca8b849c47ee97eae9abf18e6e8f9c490cb1f3d9f"
+    },
+    "scripts/check-chat-noise-rail-ui.mjs": {
+      "category": "template",
+      "hash": "264064fa537f9b252e3aa21cb9b623156962c20399843aa49136e5e33245bb79"
+    },
+    "scripts/check-chat-persistent-feedback.mjs": {
+      "category": "template",
+      "hash": "1bb93d2ce1c8e20ac37680186471c15c0681ac29ecde6cfee1e53e2248907fb8"
+    },
+    "scripts/check-click-wiring.mjs": {
+      "category": "template",
+      "hash": "5f2011bcc5f247c2ec64a1a30a5ce98a378322e8a530956630986846eb09a6d2"
+    },
+    "scripts/check-code-context-ui.mjs": {
+      "category": "template",
+      "hash": "4a42849269da890dadaf8272ba895781fbf374cb1b0a46cdaabba30dad2eca32"
+    },
+    "scripts/check-delegation-state-stability.mjs": {
+      "category": "template",
+      "hash": "17050e13e9f582968fa14a109e4d7611ec2f5250ce3fce42ca3f51123279f123"
+    },
+    "scripts/check-delegation-workspace-ui.mjs": {
+      "category": "template",
+      "hash": "7a96c46c2398d8fc8c83350602b11e4fa26730579c58865c54aef3bfc5d2f5ca"
+    },
+    "scripts/check-drift.sh": {
+      "category": "template",
+      "hash": "07c688a63ac9a68675d4dba924402ba5246076a080d529e478d5e1e31569909e"
+    },
+    "scripts/check-execution-map-ux.mjs": {
+      "category": "template",
+      "hash": "72ee240e7e18c44f0d17b2ad01694d7617cd700b0056b645d179996815be3951"
+    },
+    "scripts/check-mojibake.mjs": {
+      "category": "template",
+      "hash": "c35ddcc1143e962297d656b4649a53ba307c5211eae9149984617dec25a1e086"
+    },
+    "scripts/check-notification-center-ui.mjs": {
+      "category": "template",
+      "hash": "820d61a8d01ac9845239ad4a1f26e5df46540631b4e2db2984aaf8562547af4e"
+    },
+    "scripts/check-onboarding-plan-ui.mjs": {
+      "category": "template",
+      "hash": "6603e2c161e9ac5b96e77cdc3d7ea2d0d80685a64d24ca6f9f27e2694142b5cc"
+    },
+    "scripts/check-route-context-ui.mjs": {
+      "category": "template",
+      "hash": "d2fe2fe0688717036d1738b91b54087446211a81c1d96b4c9e3178bb6346fd64"
+    },
+    "scripts/check-run-state.mjs": {
+      "category": "template",
+      "hash": "52f697853cb6a4ce6e9bdbe88e39ef5214716a9946b720971d434bee7977a621"
+    },
+    "scripts/check-settings-provider-ui.mjs": {
+      "category": "template",
+      "hash": "38fed24373e3bb75b12a624417b37c3e70d174a7cc8e624d29ab856f722c4186"
+    },
+    "scripts/check-startup-nonblocking-ui.mjs": {
+      "category": "template",
+      "hash": "65a30aac6f41e1b9590c1b5dd27ccb478141a20372597541cf5b809470e7f593"
+    },
+    "scripts/check-store-imports.mjs": {
+      "category": "template",
+      "hash": "6b381f17f73b620024ba7f0308acf89526f1ecd5a6921feff74d18a650a25bba"
+    },
+    "scripts/check-stream-performance.mjs": {
+      "category": "template",
+      "hash": "3961c5eb99ac6eb343e27678fbae61ed2e7ef819eff46b64841526749d51ba21"
+    },
+    "scripts/check-ui-architecture-boundaries.mjs": {
+      "category": "template",
+      "hash": "b5142e51dccf16efe71cc9ed046f5abaec7c27a4f7231cd58507efd7d2ef1f2f"
+    },
+    "scripts/check-ui-overflow.mjs": {
+      "category": "template",
+      "hash": "857b9f5b19c4ef84a4b0f2fada75cdde369ecf8ef13a2f5139facf2572226a6c"
+    },
+    "scripts/check-ui-resilience.mjs": {
+      "category": "template",
+      "hash": "0a01db7d494a7df9060f86e5ed8917d6cfb2ced4bf805d360fe010e68054650a"
+    },
+    "scripts/check-updater-ui.mjs": {
+      "category": "template",
+      "hash": "132b5fd773daf1476a1b5eec2c1037dabc0f1944d03d3464dbda127e6aad1a7f"
+    },
+    "scripts/clean-build-cache.ps1": {
+      "category": "template",
+      "hash": "52431820815d6b5b8dca8fe222f20447d1d510a04ef7f02c9d075f2912e81362"
+    },
+    "scripts/code-intelligence-tools.js": {
+      "category": "template",
+      "hash": "6e4223067f3c2a22ce0b437e93b6d098b992c7f2922994fe967a3c5ce1b232c3"
+    },
+    "scripts/codex-agent-policy.js": {
+      "category": "template",
+      "hash": "285e6e3a43f4cc8e2d455c550eceb6146e37ba2e4ea64b26a01fd1aabb9d5c72"
+    },
+    "scripts/codex-hook-adapter.sh": {
+      "category": "template",
+      "hash": "29c2946a26a6ea5759c997ba3bf131e0bdf2e6b790a74b1835349e33fc9ae951"
+    },
+    "scripts/codex-route-config.js": {
+      "category": "template",
+      "hash": "0f9b4050a8c1ee2e65857975a23ba04543e4964c6468a19d2659d36829ab88c1"
+    },
+    "scripts/codex-route-task.js": {
+      "category": "template",
+      "hash": "9e6cf5902288454c888fca32ef40f8f2c494dff043a99816aa4b817f404c2ed8"
+    },
+    "scripts/codex-routing-cases-a.js": {
+      "category": "template",
+      "hash": "df77bfaab626f6454a79a2ccebb341d2e733bc462607bd59347881a40c7bad5b"
+    },
+    "scripts/codex-routing-cases-b.js": {
+      "category": "template",
+      "hash": "772d5380aa88b9b90403cbe73f8c9abe1f8ef2c033a3db52916893ae95820d02"
+    },
+    "scripts/collect-hang-diagnostics.ps1": {
+      "category": "template",
+      "hash": "b66b9144ecc07a15dc45f94b37d785aba002416109268f9aa9aec6a875420799"
+    },
+    "scripts/configure-codex-mcp.js": {
+      "category": "template",
+      "hash": "43da86d10577d3988f7ad52963f7e00206334ab20062ff299496e41bb8dc2dc5"
+    },
+    "scripts/connect-project.ps1": {
+      "category": "template",
+      "hash": "526638229b1990f82d21f2e42342b35fea6da36f8d75f80ad500b9eb7a630e62"
+    },
+    "scripts/context-restore.sh": {
+      "category": "template",
+      "hash": "fccde7775eb118327515f260994791f00119f4cb053ef94af732a506efc3d311"
+    },
+    "scripts/downstream-census.sh": {
+      "category": "template",
+      "hash": "504ad5c16954c6bdfa6d50ddff985d614475d2ce1d54610f86060646bf7efced"
+    },
+    "scripts/generate-project-spec.sh": {
+      "category": "template",
+      "hash": "f2bab62c1c52685159856680831a71cb5764be69237fd9f8786300e43322c1e7"
+    },
+    "scripts/import-graph.sh": {
+      "category": "template",
+      "hash": "2c5857de229e0fef23bca4f92d602f91d5b67d4bc22ba11b88f3ce89984d98c0"
+    },
+    "scripts/init-spec-kit.sh": {
+      "category": "template",
+      "hash": "e2ed72d8fb4adb9318843d2d150d6d7d698becfcbf0efab10bdee9280baa0f23"
+    },
+    "scripts/measure-context.sh": {
+      "category": "template",
+      "hash": "b98dd87232e4bbf912279591ff2f6cfa6a87831b9b269eddd145c17c307b8cfa"
+    },
+    "scripts/plan-scaffold.sh": {
+      "category": "template",
+      "hash": "89b674953f098f3402509ab675c57fe6e60058cee51948f0d9ae5bd771e81539"
+    },
+    "scripts/progressive-status.js": {
+      "category": "template",
+      "hash": "fe313ebd9b2fda7546d53a114bf30deeff8c956c791df0e80d47485da6a60563"
+    },
+    "scripts/research.sh": {
+      "category": "template",
+      "hash": "d1031709bb64372f5e1fc4b05f6322ef6c94daac50ead2870bfca94dfc161e1d"
+    },
+    "scripts/route-task.sh": {
+      "category": "template",
+      "hash": "e4db5b5f3127a04ce835027c45561f8819207e199aafa468207e3176b1fe70da"
+    },
+    "scripts/scan-project.sh": {
+      "category": "template",
+      "hash": "c94112e773f5238ed44f0af905439b80e6d20e3523d6f4636b0c159fdad88059"
+    },
+    "scripts/scan-projects.sh": {
+      "category": "template",
+      "hash": "90ff8cdf52054d3fbfba63ba17e3391f69e029768c2f394a30d6634019bb436e"
+    },
+    "scripts/scan-repo.sh": {
+      "category": "template",
+      "hash": "15835789b7006bc47bec0b89ca218a873b53b097505d5c5bc413d4193d0bc0ce"
+    },
+    "scripts/session-metrics.sh": {
+      "category": "template",
+      "hash": "527b65f88a15cfb4b576c4549348120cf977a7a9a16b2a5deec5984c8fbc6bb1"
+    },
+    "scripts/set-mode.sh": {
+      "category": "template",
+      "hash": "050cf85c103b0eee5f2f9e72a296f4390f02e63ec70ae2e6f1ab694d17f14e5e"
+    },
+    "scripts/smoke-chat-render.mjs": {
+      "category": "template",
+      "hash": "1f400641c4999f492f08c62a83ddc6732a5149f2fc0b2c481187c8b86f6a980d"
+    },
+    "scripts/smoke-code-context-send.mjs": {
+      "category": "template",
+      "hash": "de896bda2193b73055a7bd14832a1c559471557f3904fbf63ec6c96d711ac0cc"
+    },
+    "scripts/smoke-desktop-lifecycle.ps1": {
+      "category": "template",
+      "hash": "000bc2edef650be15862078b904ce0375b62ae00c1eee8bf9f211642b0c1fcf9"
+    },
+    "scripts/smoke-execution-map-noise.mjs": {
+      "category": "template",
+      "hash": "94e792820bdebdb5535f62f4710788fdc525973a354f80f5865a40cebc40740f"
+    },
+    "scripts/smoke-ui-e2e.ps1": {
+      "category": "template",
+      "hash": "878261d1598bad1a88af7bdc3125ab6ed500b949775635fc4a11b46f91d453c4"
+    },
+    "scripts/sync-agents.sh": {
+      "category": "template",
+      "hash": "1ba1c6536ceb3ba1cbe9d747e7cdc8efeecf340f1bc66108ff067d7aefe897bb"
+    },
+    "scripts/sync-all.sh": {
+      "category": "template",
+      "hash": "aef3c6c1ddd0b8dc68684db72660d9e19ccbedfae656af429b02855971078b49"
+    },
+    "scripts/sync-spec-kit.sh": {
+      "category": "template",
+      "hash": "619fe58d1038c249fb064c07e5fec7a19f36c783ae4a695d90dcfa5cca5d80f0"
+    },
+    "scripts/task-brief.sh": {
+      "category": "template",
+      "hash": "80a54841aad088b75e870efe155c4b3cbdf26e364e0db89e30349862eb908f61"
+    },
+    "scripts/test-change-strategy.js": {
+      "category": "template",
+      "hash": "98ab96df58072075a8affe6f7bfca91d4b71073ece8d2f3ea76909fc35d27e3f"
+    },
+    "scripts/test-code-intelligence-tools.js": {
+      "category": "template",
+      "hash": "1928bb13e8f742b5a468354a495df9abd95efe6da8b72bed560db711db3d4575"
+    },
+    "scripts/test-codex-agent-policy.js": {
+      "category": "template",
+      "hash": "3d59df8d97e93d3adceb56e8dfd3f7790921ad2634213730e94373ece2666f17"
+    },
+    "scripts/test-codex-mcp-config.js": {
+      "category": "template",
+      "hash": "33034d60574a151f3f7f930110985ec6cbf0ffb7572d0b7ad0f90a80e678219a"
+    },
+    "scripts/test-codex-routing.js": {
+      "category": "template",
+      "hash": "984a6ee713bb5ad5fa0a7137b5315527af0398fa9050213b6f665c515868d6d1"
+    },
+    "scripts/test-codex-subagents-live.sh": {
+      "category": "template",
+      "hash": "510924c251bbb4d198a5259af2dbe65cc59a7e977e4fdc636fb7d982cd9da1bd"
+    },
+    "scripts/test-design-policy.js": {
+      "category": "template",
+      "hash": "2866a99139ef9da46cca111936b7333c1935f29f075ceb827ddbf81e3025b66e"
+    },
+    "scripts/test-hooks.sh": {
+      "category": "template",
+      "hash": "85b145a8861d8c3feb58f07e9ac9df9a9faa311223410a60c86ade6f3429c566"
+    },
+    "scripts/test-progressive-plan.js": {
+      "category": "template",
+      "hash": "88f97bb941f64eb9ae8198f61da9bfbdb2662594db6f44288eab9e849f5b7b2f"
+    },
+    "scripts/test-subagent-trace.js": {
+      "category": "template",
+      "hash": "abcb1ddcbc549c9d133c32f770c8db1f575d71aa3086de7ce3c048675006d4c4"
+    },
+    "scripts/test-template.sh": {
+      "category": "template",
+      "hash": "4a3292088fc900f74c9521a1a0828da02a32d279f11204aaf6adc923f4214b1c"
+    },
+    "scripts/test-writing-intent.js": {
+      "category": "template",
+      "hash": "86d65c642adfe6ae41cca6b2f3847798471408fda69266848fb31c2ca24adf68"
+    },
+    "scripts/test-writing-references.js": {
+      "category": "template",
+      "hash": "322e688fa4c43725ac3c81c90f8591c0f5398d1b289b3ea9dadb1c9ccb6f2203"
+    },
+    "scripts/update-template.sh": {
+      "category": "template",
+      "hash": "c5ae284e7635f3684bf502958dbc32ac9e216cd50265217068f0e514cd2b89e1"
+    },
+    "scripts/validate-agent-sot.js": {
+      "category": "template",
+      "hash": "145de7389d60b428d67304345eef24b657918eb6759ffc1598da87e6227487f7"
+    },
+    "scripts/validate-change-strategy.js": {
+      "category": "template",
+      "hash": "8dd1720a22a01881518a5bf599fb2f651dce2462f60c5c0df3a8d3deabc2167d"
+    },
+    "scripts/validate-codex-agents.js": {
+      "category": "template",
+      "hash": "c5efe6ba5607dc85beb01ab107ecb5e1958a89ad5b5feb6f73e52681e167b2a0"
+    },
+    "scripts/validate-codex-skills.js": {
+      "category": "template",
+      "hash": "317b74bdc807590a75777dad607de3d03d53bfec5665cad9cb98d208f4b21f0e"
+    },
+    "scripts/validate-design-policy.js": {
+      "category": "template",
+      "hash": "d41401ded65709604e233af271a5585a120a3b0f7bedf23476f874a9ef3b404e"
+    },
+    "scripts/validate-production-standard.js": {
+      "category": "template",
+      "hash": "fc88b66706df2904f9bb2d3ed53b690c3cb1ed5249a81a7e8a15f224a09d5310"
+    },
+    "scripts/validate-progressive-plan.js": {
+      "category": "template",
+      "hash": "d8b712048f436794dcb516ea7e3512a07edb80e570f482a8c8f7a626420d2400"
+    },
+    "scripts/validate-spec-kit.js": {
+      "category": "template",
+      "hash": "9c708219526da1b2d1d639133ce0a192d427777b66aa1d3b642cb3dc7976fc0f"
+    },
+    "scripts/validate-subagent-trace.js": {
+      "category": "template",
+      "hash": "75338d69aa9d6aaa486994034992d6599a5795ef774ab67ba40d2c6d27a24b54"
+    },
+    "scripts/validate-template.sh": {
+      "category": "template",
+      "hash": "e5b37a9a174d556757bc2edb0c2fc89bb123787adee24bd43d161317bdbc9479"
+    },
+    "scripts/validate-text-policy.js": {
+      "category": "template",
+      "hash": "8abb4b66cc2532c9204f42e20551469ba963fa1b72b65e22ce1dec52c3055393"
+    },
+    "scripts/validate-writing-references.js": {
+      "category": "template",
+      "hash": "4aeeba19f0fbcf8ea104dbf5563725f28106a3baf8086b9da1dedc8cd10aff11"
+    },
+    "scripts/verify-check.sh": {
+      "category": "template",
+      "hash": "981965782fe5cdd437250504d10f8b0446c3501029065b49f91bfcbee85174f8"
+    },
+    "scripts/lib/cache.sh": {
+      "category": "template",
+      "hash": "1629b1d0d723fdb960b8bdc9d01e48dea5c772b7d0be64a76569e6b2626dbb08"
+    },
+    "scripts/lib/change-strategy-policy.js": {
+      "category": "template",
+      "hash": "1c9285c997a3592de52bdc56c327c7b884f3ce7b25278344e0afc4a41fc2e1c6"
+    },
+    "scripts/lib/code-intelligence-policy.js": {
+      "category": "template",
+      "hash": "62165fa6874ba4c5df3ae104fa1785ec393c069a123d8dffa61cb402986e52e2"
+    },
+    "scripts/lib/codex-discovery-reroute.js": {
+      "category": "template",
+      "hash": "96ba78d98d576ab2dd355a9f1dceb9e14daf7ff117fa276d4e2e6d6f2281e89d"
+    },
+    "scripts/lib/codex-route-cli.js": {
+      "category": "template",
+      "hash": "5fa2ec40db261c65ee3c7f0b28751dfb5df0667e610a549631527ea63dadc4ce"
+    },
+    "scripts/lib/codex-route-intents.js": {
+      "category": "template",
+      "hash": "5a7601f8d081b17647262f75361c004b01b67b439960884c60384a320ccac0a4"
+    },
+    "scripts/lib/codex-route-summary.js": {
+      "category": "template",
+      "hash": "0c963b32267e980f4745bc2ac3656216d199a6d39a87e5e99a7da2ca48d4d077"
+    },
+    "scripts/lib/platform.sh": {
+      "category": "template",
+      "hash": "7b8a932c989de35dfd5d21c0dc66e011c648ad66f38482f3432b0833f06666d2"
+    },
+    "scripts/lib/progressive-plan.js": {
+      "category": "template",
+      "hash": "e468ece7a56fd9bd8cd49fdca97fa3b6edc9422451c9f339d096ebcb0ef2bb86"
+    },
+    "scripts/lib/subagent-trace.js": {
+      "category": "template",
+      "hash": "cb5a3e4207d2b6ad7206f7bf5718ba48a4f0853c8f487d20f22e7c746477db2a"
+    },
+    "scripts/lib/writing-external-tool-policy.js": {
+      "category": "template",
+      "hash": "c059b15894c986892fe7d355fd6c301fc23ab113bff63b1689298a15de892d31"
+    },
+    "scripts/lib/writing-intent.js": {
+      "category": "template",
+      "hash": "12f3ba5a146acdcaae64c9fddbb76d569c269928d7349cc1f9208d9a5ec16c35"
+    },
+    "scripts/lib/writing-path-policy.js": {
+      "category": "template",
+      "hash": "2befb435517eb1cdc8dfc37f56fb84eb01044ad4a657b43bb48e02a0fa8d597d"
+    },
+    "scripts/lib/writing-reference-policy.js": {
+      "category": "template",
+      "hash": "07ad423b55fb25b414989d232c4d81bb93cf2503f42443ca1767e411c12bd5c5"
+    },
+    "scripts/lib/writing-route-policy.js": {
+      "category": "template",
+      "hash": "ab113f8c9597a1c1c84ad368d49051927df943ac932f7632501c9b777057753d"
+    },
+    "mcp-servers/context-router/src/active-rules.ts": {
+      "category": "template",
+      "hash": "f5b7b0273cbf8093dcba396d1f97fbd9417c9a5f9976219a346ee0a2c6c3924d"
+    },
+    "mcp-servers/context-router/src/context.ts": {
+      "category": "template",
+      "hash": "2f69d8341d7fde58f3f6b0e3a88c1a91e2a4ca66e590d0655d22764e901a4100"
+    },
+    "mcp-servers/context-router/src/engram.ts": {
+      "category": "template",
+      "hash": "8c4e013bd0890fd437db478dc2ee58f4584cd0a2ee4e9043ca040050b758bd21"
+    },
+    "mcp-servers/context-router/src/index.ts": {
+      "category": "template",
+      "hash": "7ab3e66c765800d1768bfdf124571e1fed9009e27a99d91e32ba701fca909334"
+    },
+    "mcp-servers/context-router/src/n8n.ts": {
+      "category": "template",
+      "hash": "650f41bf0349f38e5769bea740905b8f79e6565845d50bdcf56196e33a3d1525"
+    },
+    "mcp-servers/context-router/src/research.ts": {
+      "category": "template",
+      "hash": "1201f4d13c93420b9d0efea0b5bcd3a3236a6678db30904e911501bd8d663105"
+    },
+    "mcp-servers/context-router/src/router.test.ts": {
+      "category": "template",
+      "hash": "f6822421f673aa872ab40ad041a4408e374a802ef589fde3ab1dc925258ddcd6"
+    },
+    "mcp-servers/context-router/src/router.ts": {
+      "category": "template",
+      "hash": "9b0d8f102c42d9f8324dcd113b2e9906a9493dd3c4eb680ac1df82413bc47300"
+    },
+    "mcp-servers/context-router/src/state.ts": {
+      "category": "template",
+      "hash": "16fe51db282713f4542b5dd55cb9ed31b597d292364c33147a1e16c36b4eb898"
+    },
+    "mcp-servers/context-router/src/types.ts": {
+      "category": "template",
+      "hash": "5777da9486ce2c6968b49bf6adaca6e34ac2b1a83ad1fc93861c83ebcb32ce62"
+    },
+    "mcp-servers/context-router/src/writing-contract.ts": {
+      "category": "template",
+      "hash": "46faf684373b9af38d9420fc76baf746531d6830ab77beeb0b67ea422f6c6787"
+    },
+    "tests/rules/domain-health.test.md": {
+      "category": "template",
+      "hash": "1da1d571d3dd993d33a5e0275e7aa1680ef16e14609ccc87e0a0f4b68e2d6a15"
+    },
+    "tests/rules/domain-software.test.md": {
+      "category": "template",
+      "hash": "af6dca028fc788e00f26eea1f5d6e73aec567626b386bffb8f4e5f1594986c60"
+    },
+    "tests/fixtures/design-policy/pass/basic.css": {
+      "category": "template",
+      "hash": "2060b8e4db795edde06bd53174bcbf81086a0da41f0760540f6863e3c927ba63"
+    },
+    "tests/fixtures/design-policy/fail/gradient-text.css": {
+      "category": "template",
+      "hash": "e4438dede04a7b3a76553019c7acf6990598d392970a2942b48c967644b5e8d7"
+    },
+    "tests/fixtures/writing-tools/external-tool-adapter.fixture.js": {
+      "category": "template",
+      "hash": "68fadc4408c663f25c6411c1b26ef9f657d78938007a11cfab666a3dda20aae6"
+    },
+    "tests/fixtures/change-strategy/discovery-architecture-mismatch.json": {
+      "category": "template",
+      "hash": "7b88312e25dfa27bdf45d721d967053264e0ec370e0b0731352beb6191828a5d"
+    },
+    "brain/03-knowledge/communication/client-executor-anti-sycophancy-research.md": {
+      "category": "project",
+      "hash": "3413959bf16e679dfdcb8607284093f6572d043cad6a563911356bd966304337"
+    },
+    "brain/03-knowledge/communication/ilyakhov-planning-principles.md": {
+      "category": "project",
+      "hash": "0987dc97c0bd6d2851c5ab062117f010110a15dd3578ecb75fa987d923449c19"
+    },
+    "_reference/code-intelligence-tools.json": {
+      "category": "template",
+      "hash": "1ea3ab3f125173150c2b78775f0103053d67f5bf966bdbbac8f2c40e9b6f003a"
+    },
+    "_reference/codex-mcp-config.toml": {
+      "category": "template",
+      "hash": "a40abd1450b75d68280f0adaeb68bd7f25eea945c8665546bca65cf5f9d0df8c"
+    },
+    "_reference/README.md": {
+      "category": "template",
+      "hash": "88a42410360558b583874f6cd45ea9d1dbf9cbcbfe449a918a615d8a4fa6a77d"
+    },
+    "_reference/tool-registry.md": {
+      "category": "template",
+      "hash": "776439c9ac4bfeea92353ba9e572876a920cf41af5a15afdcd0280740be18d81"
+    },
+    ".github/ci.yml.template": {
+      "category": "template",
+      "hash": "46f51b5bc708e87cbedd72d75ebba25c6156653d42ee187af563d8ee5272b4e4"
+    },
+    ".github/workflows/ci.yml": {
+      "category": "template",
+      "hash": "29422694c256d89d09ff6a0163c3ca7d75551f48aadcd006886946d27446094f"
+    },
+    ".github/workflows/release.yml": {
+      "category": "template",
+      "hash": "ec70add2a645b35808be3c4c39ba0d878e3fc7867e2e947d2e3f4ba8c84166af"
+    },
+    ".github/workflows/validate-template.yml": {
+      "category": "template",
+      "hash": "e096cb0498960f6e14cefafcc3fb238bf18e04c28dab02b673beb8572243705e"
+    },
+    ".codex/config.toml": {
+      "category": "hybrid",
+      "hash": "a75979425d8b076d9d5f3f27bb4451b06fd8fabd64d5a63fb623de21292ea397"
+    },
+    ".codex/hooks.json": {
+      "category": "template",
+      "hash": "07e9b26b8895c5f1c263d08b21fa230da168526fe4873f86cede967183a16d69"
+    },
+    ".codex/agents/design-reviewer.toml": {
+      "category": "template",
+      "hash": "e52625c01e419442c42d103f9149d73b3e7c659fa17e4f28d708e622e5b65fe6"
+    },
+    ".codex/agents/docs-researcher.toml": {
+      "category": "template",
+      "hash": "23afb09c6edbbdfa7d02fe93afd336c36e98cf5bd059fb46d84454b6af1ec9ec"
+    },
+    ".codex/agents/implementer.toml": {
+      "category": "template",
+      "hash": "aaf367ca4a8fb1cd997081671720c1898c587ef6aa30451cbaa8d0248c350ea9"
+    },
+    ".codex/agents/log-analyst.toml": {
+      "category": "template",
+      "hash": "deaf49f03ef6062cb12e7e3d3438a8a47dcf9b64b3d06bb18fc394ed2b6ead8f"
+    },
+    ".codex/agents/pr-explorer.toml": {
+      "category": "template",
+      "hash": "a214b74b98e8c54b33550618a9f72fbb6521266859dbb6a89e12ff9ebd6e634b"
+    },
+    ".codex/agents/product-reviewer.toml": {
+      "category": "template",
+      "hash": "2ce8301a4e93437895f322b1dc281522d0d231f1aaf183a969aa83431a4e0c3f"
+    },
+    ".codex/agents/reviewer.toml": {
+      "category": "template",
+      "hash": "143bd2d1de4825a79478617df156b2e797b943c07fc5e0b8c154708706b7e1a2"
+    },
+    ".codex/agents/scout.toml": {
+      "category": "template",
+      "hash": "c9de1c857def4179f552780e3916bdf8666027b5aa35f142d725522d3196dd8b"
+    },
+    ".codex/agents/security-reviewer.toml": {
+      "category": "template",
+      "hash": "3c3f3328e0cc99e7a472ca69dc0137a901bb87f0250d086006ae5e9ca9b07485"
+    },
+    ".codex/agents/summarizer.toml": {
+      "category": "template",
+      "hash": "f7394e7ba1cabf83a1c925df921109ff7c8d93ee722af87ed5d45ddfde6a4132"
+    },
+    ".codex/agents/systems-reviewer.toml": {
+      "category": "template",
+      "hash": "e8532a80e9ca184cc6900c267687806e2f05d209de2cc9706aade4e4c855d8a3"
+    },
+    ".codex/agents/tester.toml": {
+      "category": "template",
+      "hash": "53f929414f72416f8da05740a84e7df0ddf7561ede4f3ee2aca5b58bf3e3fb75"
+    },
+    "integrations/spec-kit/README.md": {
+      "category": "template",
+      "hash": "9a67f4747b353c18fea37a51bd88625857d2d641aa9b55023dda5f255ee6f4e1"
+    },
+    "_reference/agent-sot/originals/ai-agent-spec-v3-final.md": {
+      "category": "template",
+      "hash": "1a3e65302b965232df93639790025e71b04648dc9b2e71906ba38048dca03468"
+    },
+    "_reference/agent-sot/README.md": {
+      "category": "template",
+      "hash": "389264abfe13ba38fc7add4d9772310d1965303202ed0bd45d7e3bedc7eb7b33"
+    },
+    "_reference/agent-sot/sources.json": {
+      "category": "template",
+      "hash": "e2940b2302482a0ff2e77063c240943b6551accf74f7db34cc6d57339a238e98"
+    },
+    "_reference/agent-sot/top-works.md": {
+      "category": "template",
+      "hash": "d1d6ef68d170aa6a88ec979356c7a313228f9cb475d37864bba8335dc5f08a30"
+    },
+    "_reference/spec-kit/manifest.json": {
+      "category": "template",
+      "hash": "0992c1437b55dda0fb2cdcd635bf00a324776ac4e092ac4bf4f8f5a903012a67"
+    },
+    "_reference/spec-kit/README.md": {
+      "category": "template",
+      "hash": "ec97342ed3a284393f0691ebbacf5b3dd5add615577eadf92a0bf5307aa703b7"
+    },
+    "_reference/spec-kit/upstream/docs/installation.md": {
+      "category": "template",
+      "hash": "d60fcd2f52d9421522480ed90fdcc8461be1b9884ef8ad9c9aa18b2115cf92af"
+    },
+    "_reference/spec-kit/upstream/docs/quickstart.md": {
+      "category": "template",
+      "hash": "a1c627dd192c8f2d9289ce5911d22a7ecce3bac95a59dfb2009887313ac5d127"
+    },
+    "_reference/spec-kit/upstream/docs/reference/core.md": {
+      "category": "template",
+      "hash": "fe947487833f60a506192f5f5fc138af628f97e39e18624905d98b148c5a272e"
+    },
+    "_reference/spec-kit/upstream/docs/reference/extensions.md": {
+      "category": "template",
+      "hash": "9093fddaf6605562ffbf0e5b0ad22dbe3df51d269d731b7b59bdee3f7dbe63b7"
+    },
+    "_reference/spec-kit/upstream/docs/reference/integrations.md": {
+      "category": "template",
+      "hash": "9fe6c295a5258ffb7cce7a45f3a1bc052672bc3f8560d8c44eda62d45d30eaf7"
+    },
+    "_reference/spec-kit/upstream/docs/reference/presets.md": {
+      "category": "template",
+      "hash": "ab7e2260a282fcec11958b8b450277a01fabecb143da154e8d71180541f52d3f"
+    },
+    "_reference/spec-kit/upstream/docs/upgrade.md": {
+      "category": "template",
+      "hash": "7e039c1134f29b8ef0deccf16cb1f424ce63fefe9278c828d99478909e99b479"
+    },
+    "_reference/spec-kit/upstream/integrations/catalog.community.json": {
+      "category": "template",
+      "hash": "217fa305377bdf798a168795416593c514035b7978683b34f070131fcea9b5d3"
+    },
+    "_reference/spec-kit/upstream/integrations/catalog.json": {
+      "category": "template",
+      "hash": "ba52ea07a342f363ac31a6fcbe48bc4126138ac6b7857f9ec075e51929e43b85"
+    },
+    "_reference/spec-kit/upstream/LICENSE": {
+      "category": "template",
+      "hash": "c59d8dd3991fc1eb310b0478ea35adbe55a7afb6bac8734c2f0ac6fbda5aaa36"
+    },
+    "_reference/spec-kit/upstream/README.md": {
+      "category": "template",
+      "hash": "a4a5257423bcbf5c3ab20a5752aa1daf4deb4e5034de053bc8cd4fa9f6cf5351"
+    },
+    "_reference/spec-kit/upstream/scripts/bash/check-prerequisites.sh": {
+      "category": "template",
+      "hash": "aff361639c504b95a2901493f5022788adc01a6792fd37f132de8f57782e4b80"
+    },
+    "_reference/spec-kit/upstream/scripts/bash/common.sh": {
+      "category": "template",
+      "hash": "dd638316259e699fd466542c77ef16af5eb198efe0447c081f86b890db414ba8"
+    },
+    "_reference/spec-kit/upstream/scripts/bash/create-new-feature.sh": {
+      "category": "template",
+      "hash": "bcf4964ca0c6c78717bb42d9e66b8c7e5ee82779cd96afc5aa7b08b75abe5790"
+    },
+    "_reference/spec-kit/upstream/scripts/bash/setup-plan.sh": {
+      "category": "template",
+      "hash": "0d1d7a66de157b0be1385bb91aa71e5bf95550217abf47a73270dab0dc52895a"
+    },
+    "_reference/spec-kit/upstream/scripts/bash/setup-tasks.sh": {
+      "category": "template",
+      "hash": "e8d050c63c5afb664a8b671b0b0155513fb9cab0567b335e16b9eb035482aad2"
+    },
+    "_reference/spec-kit/upstream/scripts/powershell/check-prerequisites.ps1": {
+      "category": "template",
+      "hash": "08b1872f165889e89a06e0b43fe0c6ea1aa3540f6c4989a41ab9e731604407a6"
+    },
+    "_reference/spec-kit/upstream/scripts/powershell/common.ps1": {
+      "category": "template",
+      "hash": "798cc255e851a360aa7a3acf5fd8ee3076bcc69db5efb916d6a511d9d47ecdd8"
+    },
+    "_reference/spec-kit/upstream/scripts/powershell/create-new-feature.ps1": {
+      "category": "template",
+      "hash": "6c700a29769bf08cd35d43bac13823018e1d5329a685c5dfbef9e4751273b5d9"
+    },
+    "_reference/spec-kit/upstream/scripts/powershell/setup-plan.ps1": {
+      "category": "template",
+      "hash": "1697a2f5fa64f590488e2841e9ba6871652406813fbffd242880276e1a042b5e"
+    },
+    "_reference/spec-kit/upstream/scripts/powershell/setup-tasks.ps1": {
+      "category": "template",
+      "hash": "4d338d072b2cbfe1b897e2d34f98623cb0a143aa04c402613e5443db540b9b96"
+    },
+    "_reference/spec-kit/upstream/spec-driven.md": {
+      "category": "template",
+      "hash": "4cc69282f0f868345e7d2bcf438a4d1b01c169dbb230b8d7f17c4046072920a4"
+    },
+    "_reference/spec-kit/upstream/templates/checklist-template.md": {
+      "category": "template",
+      "hash": "dcf816e3a031a7d489773aa77a7144bf70e0bcaf91bd44a59671911dad5dbe58"
+    },
+    "_reference/spec-kit/upstream/templates/commands/analyze.md": {
+      "category": "template",
+      "hash": "33641d1bdf7e8d1534a4e2a1a83458d580a43d6975f72cc7455b4c71b6fb1c5e"
+    },
+    "_reference/spec-kit/upstream/templates/commands/checklist.md": {
+      "category": "template",
+      "hash": "9240ea6861ed7642e32cba88ee2934e69ad6952d69fa898af4de5e8553595857"
+    },
+    "_reference/spec-kit/upstream/templates/commands/clarify.md": {
+      "category": "template",
+      "hash": "b8a7518eaa599872ad513182e5e40817b748981724e9da5ff4a285edfa1a8f18"
+    },
+    "_reference/spec-kit/upstream/templates/commands/constitution.md": {
+      "category": "template",
+      "hash": "58d35eb026f56bb7364d91b8b0382d5dd1249ded6c1449a2b69546693afb85f7"
+    },
+    "_reference/spec-kit/upstream/templates/commands/implement.md": {
+      "category": "template",
+      "hash": "73ea3dad69a5d910eb5b20367a7b447e7f44abbdf574988ec193fbfb3c62be33"
+    },
+    "_reference/spec-kit/upstream/templates/commands/plan.md": {
+      "category": "template",
+      "hash": "eaeb022a427cecbd28e503944020d092a3162a858646972197088680fb72573f"
+    },
+    "_reference/spec-kit/upstream/templates/commands/specify.md": {
+      "category": "template",
+      "hash": "c2fb719a962a27b64820bcbcffde0a0b5669b6312de48898c80fc5466beb329d"
+    },
+    "_reference/spec-kit/upstream/templates/commands/tasks.md": {
+      "category": "template",
+      "hash": "acb2c4ad00a237810b02da36669ff38b4548d8f19a26441975d9c0aab51e49b1"
+    },
+    "_reference/spec-kit/upstream/templates/commands/taskstoissues.md": {
+      "category": "template",
+      "hash": "a8f9a927a48b5eb74d28b59cf49bb3c63d701e9b6695e2e1755f3fc2ed055224"
+    },
+    "_reference/spec-kit/upstream/templates/constitution-template.md": {
+      "category": "template",
+      "hash": "ce7549540fa45543cca797a150201d868e64495fdff39dc38246fb17bd4024b3"
+    },
+    "_reference/spec-kit/upstream/templates/plan-template.md": {
+      "category": "template",
+      "hash": "342848d1ca70680146da5558ae5792c3749bc07946e2685f04f91d1887d18571"
+    },
+    "_reference/spec-kit/upstream/templates/spec-template.md": {
+      "category": "template",
+      "hash": "3945437fc35cd30a5b2bf7beea680337c3516826d3efa5a6b92c4a7eca1ba28e"
+    },
+    "_reference/spec-kit/upstream/templates/tasks-template.md": {
+      "category": "template",
+      "hash": "1e448e9153462e8c5b5a55231a54c756d870a82950d4dd9425a2bf5b7008a0d9"
+    },
+    "_reference/spec-kit/upstream/templates/vscode-settings.json": {
+      "category": "template",
+      "hash": "c6782d67fc76b9128803b03247ddd015d542a574ee80a4fe0aca2429aa7bfe08"
+    },
+    ".editorconfig": {
+      "category": "template",
+      "hash": "a869de0a335a868e88c15dd44188a50ce191c40ea2c389cf28ce48226fb298ca"
+    },
+    ".env.example": {
+      "category": "template",
+      "hash": "e4f0591640159d82cd9d5632b669374a29daa9ab4a7af7fa4b527e18e85d0130"
+    },
+    ".gitattributes": {
+      "category": "template",
+      "hash": "df50ab23c1123b005d4c263fb18ee2c28188ad95a8f216632cf0e72c01aef3bc"
+    },
+    "Makefile": {
+      "category": "template",
+      "hash": "d73df71a39d42856a6c33915e9c295d7e4452f6e1b054d43542c50067907d0ed"
+    },
+    "SECURITY.md": {
+      "category": "template",
+      "hash": "3b87c59132245a3127dc992f315c86f43011859d08e3d345674b76f5ed77b859"
+    },
+    "CONTRIBUTING.md": {
+      "category": "template",
+      "hash": "1c0b8076e95a3a63f67d6626a16da04c18a9ae094277004b4920e41345d80348"
+    },
+    "AGENTS.md": {
+      "category": "template",
+      "hash": "17a0f834dbd2c9fadb77834075b437a6a13b01c3fc69fb327f7387dbbd3dc6e5"
+    },
+    "README.md": {
+      "category": "template",
+      "hash": "5ae1d2f75ef55503e98cd4cfb4d312ad7d2d4bde4e05e2c75e056c8e4a98af9c"
+    },
+    "SETUP_GUIDE.md": {
+      "category": "template",
+      "hash": "85283cb1ab67fbf63caea28276f6b275129bcdc143a781ca9e0b5657c86856e2"
+    },
+    "setup.sh": {
+      "category": "template",
+      "hash": "5f1f87849cffd1103343e0833a0184f385263e240d6093ce916e0a56eed0796c"
+    },
+    "upgrade-project.sh": {
+      "category": "template",
+      "hash": "54918b6bfadbf71e0a400be2cd1b2905a029d6571f5fdb9c4ab17a076c2fdec2"
+    },
+    ".mcp.json": {
+      "category": "hybrid",
+      "hash": "39e8eef3d8d74591db81cf03ce2cba75f44b1562ab993784a05f0e9babedcb7d"
+    },
+    "PROJECT_SPEC.md": {
+      "category": "project",
+      "hash": "405410ec87ece6ed1beeef2236c316c9131914bda94f3c0c53af1f6e5c8c6a18"
+    },
+    "docs/AGENT_CONTEXT_SOT.md": {
+      "category": "template",
+      "hash": "79b8eebd257a63f6c9949b9e8e49f0f15373e661ea0418872fc8288b2f8569c5"
+    },
+    "docs/AGENT_PIPELINES.md": {
+      "category": "template",
+      "hash": "d8447849d6b5382725d4393dd831e03a6b2784d966838b84e320ce3414bd8e34"
+    },
+    "docs/CODEX_FANOUT_PATTERNS.md": {
+      "category": "template",
+      "hash": "fc8cdb993d7da2b6ef0f1052f137297f014421387c9086a2c4c3fa4ffa851e95"
+    },
+    "docs/CODEX_SKILLS_AUDIT.md": {
+      "category": "template",
+      "hash": "4da4d1b23727c18cbf1c586aa07958eb651ce5cb2aa21a1aa1074955e21ac6ed"
+    },
+    "docs/CODEX_SUBAGENTS_AUDIT.md": {
+      "category": "template",
+      "hash": "2c50a7228c63682e01a9603e6538e75042026315fb019f7b50d1ad15479f8ab6"
+    },
+    "docs/CODE_INTELLIGENCE_TOOLCHAIN.md": {
+      "category": "template",
+      "hash": "db6dc125cbe2099ba762a012939f037adf191e98c7fbce380d4150c8dbfc5c59"
+    },
+    "docs/MIGRATION_MATRIX.md": {
+      "category": "template",
+      "hash": "dce881383c8177d0b76d6f9ff279cbe8de592f26e8029589c2fd5ed850dccd51"
+    },
+    "docs/OPENAI_MODEL_GUIDANCE.md": {
+      "category": "template",
+      "hash": "6baf74a6f7e4778a168472b0d8306bff3580d36d943f384f0dc3bd4bb9a6dfd0"
+    },
+    "docs/PRODUCT_BOUNDARY.md": {
+      "category": "template",
+      "hash": "d1f48a63d2fc855a6d3a245615990ff4572c95fe749b8272ed44621402db65c7"
+    },
+    "docs/RELEASE_CHECKLIST.md": {
+      "category": "template",
+      "hash": "5c46f2bb5c2b3009ad24363cd80b5d47fdd388b912ce135a94ef2246af197855"
+    },
+    "docs/TEMPLATE_RELEASES.md": {
+      "category": "template",
+      "hash": "7daf448fa4c02f56f6c36dcd950a00190ff63f5bf82c1644e03038a78ca002d1"
+    },
+    "docs/SAFE_DEFAULTS.md": {
+      "category": "template",
+      "hash": "91aee441580e4c6466d415ddd3c9df7ce41d4b3a678847dfa0eeba6b329ce8ca"
+    },
+    "docs/SHARED_CONVENTIONS.md": {
+      "category": "template",
+      "hash": "5418ff07a6aafd3793e9bea551a53fdec5e5928ed84615ac1cbde16939f016b3"
+    },
+    "docs/SUPPORTED_ENVIRONMENTS.md": {
+      "category": "template",
+      "hash": "1eeb1240188e4e85901a4712370e7c32746b166ea8af9d6f5ed965c3cb63e62a"
+    },
+    "docs/API_CONTRACTS.md.template": {
+      "category": "template",
+      "hash": "5795a4908054dc2c12507bf16c373733b081cceb6c72b7d68fa69207e4f1150a"
+    },
+    "docs/ARCHITECTURE.md.template": {
+      "category": "template",
+      "hash": "febcb4dfa4231efefcf1c07dfa6297237c0c0547471cd9d7bbc146da7dd672ab"
+    },
+    "docs/DATA_DESIGN.md.template": {
+      "category": "template",
+      "hash": "9f5843e3d80aa5b23303058a31dbf7b83dc3b922539f004a2d57c584c6382d93"
+    },
+    "docs/DECISIONS.md.template": {
+      "category": "template",
+      "hash": "c19eb4b7ecab6829ce57fca8efc24cab759542c6b21da63fbec16d02f7f73a92"
+    },
+    ".claude/skills/add-feature/SKILL.md": {
+      "category": "template",
+      "hash": "384c4a6f9abb4d6cb4ae73af145a884d5825e51998d7b35a134f62e87cfc2703"
+    },
+    ".claude/skills/agent-metrics/SKILL.md": {
+      "category": "template",
+      "hash": "314097def8ae63e614af98339f6d3785bc989f72f7cb12e957e110e6c8a57b9b"
+    },
+    ".claude/skills/agent-router/SKILL.md": {
+      "category": "template",
+      "hash": "c1d26539ed51bfbe6f21e7e23a0f0a25df9dd75373f5d02ee5ff61e8678e2f7d"
+    },
+    ".claude/skills/api-contract/SKILL.md": {
+      "category": "template",
+      "hash": "529acc3dc652a8684c78ad5ff65ed7104793ee4d85e7e97a43e3c8904992054f"
+    },
+    ".claude/skills/audit/SKILL.md": {
+      "category": "template",
+      "hash": "9df277d7c4b45c2cd0791912900ef5b64b051b8d8e990011f6f882fc5ce1000c"
+    },
+    ".claude/skills/coverage/SKILL.md": {
+      "category": "template",
+      "hash": "118196207a3e7101b7dc54451334ead53132abcb345a7f946365bc524e5faf1f"
+    },
+    ".claude/skills/daily-brief/SKILL.md": {
+      "category": "template",
+      "hash": "2009e38623c49ca4443f1abc84b8ba04f9e1146a353c8b5ed9adaaa6a3d039d6"
+    },
+    ".claude/skills/debug/SKILL.md": {
+      "category": "template",
+      "hash": "b1521759f4b3e2ce441d8243f449c25accaaeadc7e2863d7202228a4ad7d3c03"
+    },
+    ".claude/skills/decompose/SKILL.md": {
+      "category": "template",
+      "hash": "17daf389c3dfbdcb7f7ecd4c1bf6d635e1f84c32cbbde98ab753ca42a7431533"
+    },
+    ".claude/skills/domain-business-review/SKILL.md": {
+      "category": "template",
+      "hash": "a98b032fb0b889e4e93ac6d6bc85781bd2ff622244ae31ea98c9da3c2c2874f4"
+    },
+    ".claude/skills/domain-communication-review/SKILL.md": {
+      "category": "template",
+      "hash": "d21f077bdfa3fb85d07835117d7c5115debecdfbc54807637e5be635ffea576a"
+    },
+    ".claude/skills/domain-design-review/SKILL.md": {
+      "category": "template",
+      "hash": "cf88ac99b5f54253213cd92e3eff30598851a34b1e9e9824a0ef74813c122b90"
+    },
+    ".claude/skills/domain-health-review/SKILL.md": {
+      "category": "template",
+      "hash": "5c6933fd7999e72702bbead47550d6334069c8f37042342a872c13805dbde649"
+    },
+    ".claude/skills/domain-science-review/SKILL.md": {
+      "category": "template",
+      "hash": "6467f5dccc7f2b5f2413bfbcbf16235135d3ac5be133471fef8f79db7235e3fa"
+    },
+    ".claude/skills/domain-software-review/SKILL.md": {
+      "category": "template",
+      "hash": "12ab3aa4d3c1535479c83b4df9dee22aed9c4b6c23a0117592d197db71c42f71"
+    },
+    ".claude/skills/health-check/SKILL.md": {
+      "category": "template",
+      "hash": "d3d5216a61aadd2f3e49a54015cb8c7eb50e20b3831623ffca294f48274f0c32"
+    },
+    ".claude/skills/memory-router/SKILL.md": {
+      "category": "template",
+      "hash": "001ac3be360c2c70cbb42856dbcecd76c0e46b29facc518134bcdc94c1b9309b"
+    },
+    ".claude/skills/migrate/SKILL.md": {
+      "category": "template",
+      "hash": "849597edd25c4c53a6b46a34d0a292fe461cfe26d530394d2af87277f04bb275"
+    },
+    ".claude/skills/modify-api/SKILL.md": {
+      "category": "template",
+      "hash": "59213140b682bca25598ee002d8dc7fd8494195bc4994d05b66c4f8a7a192216"
+    },
+    ".claude/skills/pipeline/SKILL.md": {
+      "category": "template",
+      "hash": "0f7d74cc88d5db5b812ae7aea70b84e63761f67a39b356c0d8380b3d36792a7b"
+    },
+    ".claude/skills/security-audit/SKILL.md": {
+      "category": "template",
+      "hash": "e7b7700d183be12277add6d9e801baa78eada16d536af30b1bcb57713d2b76db"
+    },
+    ".claude/skills/self-update/SKILL.md": {
+      "category": "template",
+      "hash": "a6b5823e7d6a925360ed89085a4d580c8638b80ff97fb4f2265e0276e06709f7"
+    },
+    ".claude/skills/setup-integrations/SKILL.md": {
+      "category": "template",
+      "hash": "39f5292325d802e35069e36e78c8ead00dfd002d16c9a1cdb2a554dceb46aed4"
+    },
+    ".claude/skills/setup-project/SKILL.md": {
+      "category": "template",
+      "hash": "3e58d3f8052621f15815e2f8739292fc6ea63880d8055d64a8e034381ae8d676"
+    },
+    ".claude/skills/setup-telegram/SKILL.md": {
+      "category": "template",
+      "hash": "ef0c601bfd63d9311421b5590b6fe234d540ce28d0ad5eb42768740b11fe008f"
+    },
+    ".claude/skills/sprint/SKILL.md": {
+      "category": "template",
+      "hash": "3dc9fdc4d7402d84b712b73d44018f447a992a343d541e0db59078eb28cd700e"
+    },
+    ".claude/skills/strategic-review/SKILL.md": {
+      "category": "template",
+      "hash": "b8789345ab76c9f52c816dc9f512ce20af1b74cd39bb7b7d62be965e315c87d7"
+    },
+    ".claude/skills/task-queue/SKILL.md": {
+      "category": "template",
+      "hash": "d3866e546a74d55256126417e7e68b30f859b264ed9cd7c3dfa1ba536b3d591d"
+    },
+    ".claude/skills/technical-writing/SKILL.md": {
+      "category": "template",
+      "hash": "7893742e9acd5ed71833e0612eda76b194b91fdb621b7109d14648c1841274bd"
+    },
+    ".claude/skills/technical-writing-review/SKILL.md": {
+      "category": "template",
+      "hash": "3ae8b2ed8b3174c214b620572d068968a31e03669e777a344af6c6a4601066d7"
+    },
+    ".claude/skills/test-rules/SKILL.md": {
+      "category": "template",
+      "hash": "975eed12b4bd04367448e216296db9f628c088b8449976ad34347c406dcb5903"
+    },
+    ".claude/skills/update-deps/SKILL.md": {
+      "category": "template",
+      "hash": "5c51568e37043fc07ee42d4b4ee562219ff73820b840c71eca1139e7af541bc6"
+    },
+    ".claude/skills/writing-workflow/SKILL.md": {
+      "category": "template",
+      "hash": "308902813813b810cba268a83f40a739af84d640739e01501829a1ff27aeff7b"
+    },
+    ".agents/skills/codex-agent-metrics/SKILL.md": {
+      "category": "template",
+      "hash": "09909a3196faaac3549099077454bd81e1d458f3c4f43b165d6969670c98b41c"
+    },
+    ".agents/skills/codex-agent-metrics/agents/openai.yaml": {
+      "category": "template",
+      "hash": "33ce0752357c73d971e28a40130acbae5afe0251706fa24b3af21ccd5dd5056e"
+    },
+    ".agents/skills/codex-agent-router/SKILL.md": {
+      "category": "template",
+      "hash": "9106f6848712ea8b65498c66a97860b581de4592eb52023c0fd4e431ca5190f6"
+    },
+    ".agents/skills/codex-agent-router/agents/openai.yaml": {
+      "category": "template",
+      "hash": "d4b9e304be26b8c21fcfc5e45e1ecee3c7e44f3d6276be6178fbe8e226078a59"
+    },
+    ".agents/skills/codex-api-contract/SKILL.md": {
+      "category": "template",
+      "hash": "d6cb5d0051b09369563193b276c9b6ff4e87524b50a49a4e826d92939009795a"
+    },
+    ".agents/skills/codex-api-contract/agents/openai.yaml": {
+      "category": "template",
+      "hash": "0de05deb2fcfca33d30e83e53b945834f5fd3070a3d9c74f3bd43f284ddd14e1"
+    },
+    ".agents/skills/codex-audit/SKILL.md": {
+      "category": "template",
+      "hash": "38873548daf9fce4740f63a1f5f117086721b51ee91372e38b37ab3e2b9e9d80"
+    },
+    ".agents/skills/codex-audit/agents/openai.yaml": {
+      "category": "template",
+      "hash": "be411a92a07f62bb03084b10eb55254d0c91a5b2eadf6dde330cf146665f14bc"
+    },
+    ".agents/skills/codex-change-strategy/SKILL.md": {
+      "category": "template",
+      "hash": "f0fd2dede4b7175c650d1349430b0a7abc8a1a59c7fffb8721692b9f062ab7b0"
+    },
+    ".agents/skills/codex-change-strategy/agents/openai.yaml": {
+      "category": "template",
+      "hash": "7413b20df1f9138f4e8415bcfdafb707c00ea5d76741ca951cda5d87b7ff1dda"
+    },
+    ".agents/skills/codex-coverage/SKILL.md": {
+      "category": "template",
+      "hash": "163b36e11a99ed40c200b65927422ebb4d2efb2c2a4fade8a9de74a566f43e66"
+    },
+    ".agents/skills/codex-coverage/agents/openai.yaml": {
+      "category": "template",
+      "hash": "cc0d3cdc1c07bcfce34c4914b57994569b0af88de4559aa1d0843399ea81dd13"
+    },
+    ".agents/skills/codex-cross-project-lessons/SKILL.md": {
+      "category": "template",
+      "hash": "8a428291e9c561f905b90585ae7e21f86eb596646a9bb17889644052831f6c02"
+    },
+    ".agents/skills/codex-cross-project-lessons/agents/openai.yaml": {
+      "category": "template",
+      "hash": "9e4d11997c0ceaa20225b31e03aad9a4334d878f8872110a390eb81d5fcb204f"
+    },
+    ".agents/skills/codex-daily-brief/SKILL.md": {
+      "category": "template",
+      "hash": "add1c592e9318a8494fdfa464f8ad4393f2804690481c0c0ddcdfa975790a04a"
+    },
+    ".agents/skills/codex-daily-brief/agents/openai.yaml": {
+      "category": "template",
+      "hash": "d190be831ac64101b279ad3cb7cbdfbde54f44837ad45a2963696e11ffb7c923"
+    },
+    ".agents/skills/codex-debug/SKILL.md": {
+      "category": "template",
+      "hash": "2135a8dd6d55017ecfe0e0f606d9a871ba8abbf1545aaf236adeaf8baeea38cb"
+    },
+    ".agents/skills/codex-debug/agents/openai.yaml": {
+      "category": "template",
+      "hash": "9a425d18798b54ed2ab88d909929987a3bd071e070a3724d54d81d855d9d3322"
+    },
+    ".agents/skills/codex-decompose/SKILL.md": {
+      "category": "template",
+      "hash": "a684e689d9fa775738fa2fcbd8818ecda7427b36fda0374ac4b7f502cd9d76cc"
+    },
+    ".agents/skills/codex-decompose/agents/openai.yaml": {
+      "category": "template",
+      "hash": "d0a1ad138677a2580e9e22d423e9340114606acae1328b36c6756917e9406f06"
+    },
+    ".agents/skills/codex-design-system-workflow/SKILL.md": {
+      "category": "template",
+      "hash": "c380ef071d763d08cd0615d17d6dd3d2346435de7bd70d017f0db9bf01368543"
+    },
+    ".agents/skills/codex-design-system-workflow/agents/openai.yaml": {
+      "category": "template",
+      "hash": "9cc19000588760de370e04e80c785fc949fca598a2f6aec13937e435d0521586"
+    },
+    ".agents/skills/codex-design-workflow/SKILL.md": {
+      "category": "template",
+      "hash": "fbacea7b15f0f1e31eb458ec3b0d620b798ae0ceb2bf011afa902b7ba465476d"
+    },
+    ".agents/skills/codex-design-workflow/agents/openai.yaml": {
+      "category": "template",
+      "hash": "29221c070bbf80a57f5cb5cd81ecf14ee36d1ad300025828e4a62792cfab0230"
+    },
+    ".agents/skills/codex-design-workflow/references/design-checks.md": {
+      "category": "template",
+      "hash": "b1b7b79355f077f9f0d602e85798dd5ab0efe72e1750d564c70cf995f5e071ab"
+    },
+    ".agents/skills/codex-design-workflow/references/design-command-modes.md": {
+      "category": "template",
+      "hash": "d2e9abcc6a20588e8d181a45c993ac2d936f258952f4d73aa31f7eae3987d65c"
+    },
+    ".agents/skills/codex-domain-business-review/SKILL.md": {
+      "category": "template",
+      "hash": "b3571578b6a08e2fb5e5bcca5c686ac83b36b359d3ec4874c5fbf91e4e4d8a09"
+    },
+    ".agents/skills/codex-domain-business-review/agents/openai.yaml": {
+      "category": "template",
+      "hash": "dc3fc1bc2590103c1c995b4d4d28b3797d2ecf4a2ec8fdd0b3af2a595d49ce75"
+    },
+    ".agents/skills/codex-domain-communication-review/SKILL.md": {
+      "category": "template",
+      "hash": "3164d98d3505c46b1d99bedb5525abe560cbf06f3dab6aa83a5e5d8a1d7f26c7"
+    },
+    ".agents/skills/codex-domain-communication-review/agents/openai.yaml": {
+      "category": "template",
+      "hash": "1372d86c8df615d780a17748d1e855eab8918d171a4da5c1fe189aac01f8edb6"
+    },
+    ".agents/skills/codex-domain-design-review/SKILL.md": {
+      "category": "template",
+      "hash": "1f754e2e8294f6e903def674c605263fb51203e16c18a3138b81701cb5d081f6"
+    },
+    ".agents/skills/codex-domain-design-review/agents/openai.yaml": {
+      "category": "template",
+      "hash": "9e826f212898fef913b6850959a944f2dadab82e8358435dcee7a0dff3b145f6"
+    },
+    ".agents/skills/codex-domain-health-review/SKILL.md": {
+      "category": "template",
+      "hash": "da6b5b70fbed0cbc12a56feda095dffdc90b3898811d88dbb057629a1c6c9a1e"
+    },
+    ".agents/skills/codex-domain-health-review/agents/openai.yaml": {
+      "category": "template",
+      "hash": "d9e3795397c207b0579f536a22f9db379af072b5cb243de62d67bd838caec0bf"
+    },
+    ".agents/skills/codex-domain-science-review/SKILL.md": {
+      "category": "template",
+      "hash": "087b6899557277afcee51940f8895cc9399537c6c61b79004fa97f7786a3cd2b"
+    },
+    ".agents/skills/codex-domain-science-review/agents/openai.yaml": {
+      "category": "template",
+      "hash": "d19bac2d5c7c35546148891759a8a5106e9aace46d515b7ca5efac8eaae82d82"
+    },
+    ".agents/skills/codex-domain-software-review/SKILL.md": {
+      "category": "template",
+      "hash": "e28fca654318e339741631a9a95e20481e620a9b57a33c4623d77276ffc0319a"
+    },
+    ".agents/skills/codex-domain-software-review/agents/openai.yaml": {
+      "category": "template",
+      "hash": "94e46ed7c2c7368289c1f588492ad305c43d6e6e9a9c7552e26cc684051dd2d9"
+    },
+    ".agents/skills/codex-feature-workflow/SKILL.md": {
+      "category": "template",
+      "hash": "af1ed19580d43bf933714a66fadacf0d6ee77ae57d5f7dfb2b8adc9050eb6028"
+    },
+    ".agents/skills/codex-feature-workflow/agents/openai.yaml": {
+      "category": "template",
+      "hash": "30399c91b1c47e26e31dddd32bf84ab211f413432296a7d68f9a55d6de40842b"
+    },
+    ".agents/skills/codex-figma-workflow/SKILL.md": {
+      "category": "template",
+      "hash": "e3880e22300a8399580e42efbead4b2f97f094c46f99518a34aeabbd690af259"
+    },
+    ".agents/skills/codex-figma-workflow/agents/openai.yaml": {
+      "category": "template",
+      "hash": "9cc788a2487c7ba6e1ba0aee79d771d674ff0a201b58abdb3559913d36945076"
+    },
+    ".agents/skills/codex-figma-workflow/references/figma-checks.md": {
+      "category": "template",
+      "hash": "b511974935adffd4c1fa23aff998212bf3642e46581fd0c16190951e0814342c"
+    },
+    ".agents/skills/codex-health-check/SKILL.md": {
+      "category": "template",
+      "hash": "b89c3fd1540a29ce6c25cfe280b6fcfe9b646f0e40f7c22ebd4cbbfaa99f2a5d"
+    },
+    ".agents/skills/codex-health-check/agents/openai.yaml": {
+      "category": "template",
+      "hash": "f5362f2e5e0833a624a7e41b0a56627d7f5a4ee0ab8ea5cd8ebe391c012470ef"
+    },
+    ".agents/skills/codex-memory-router/SKILL.md": {
+      "category": "template",
+      "hash": "5c63460d6e35ce156d1788749c4e2d868ec0cefcf13f0d6594947f4368e8b2d3"
+    },
+    ".agents/skills/codex-memory-router/agents/openai.yaml": {
+      "category": "template",
+      "hash": "bb94778741ea878c1efca65d6283eaa665fe2867cc093571c52440421f18bb55"
+    },
+    ".agents/skills/codex-mermaid-board-workflow/SKILL.md": {
+      "category": "template",
+      "hash": "941c3214d42e2d97064fc02725853d1814dbdc2b675195c11ff0a4004839d6db"
+    },
+    ".agents/skills/codex-mermaid-board-workflow/agents/openai.yaml": {
+      "category": "template",
+      "hash": "1105a8f8d1a05d4c85fc5da1bdad6032246bf0af305e737b2e580f78944e43c0"
+    },
+    ".agents/skills/codex-mermaid-board-workflow/references/mermaid-board-patterns.md": {
+      "category": "template",
+      "hash": "b549a32e0a48e795c258c2c7b3648a8ac695e83b49cc3015d334804333f3816f"
+    },
+    ".agents/skills/codex-mermaid-board-workflow/references/mermaid-viewer-ux.md": {
+      "category": "template",
+      "hash": "ee50e2a4c9320be9ea2821f3efaeec17458df49a5411124a1eb11b44a811ef80"
+    },
+    ".agents/skills/codex-migrate/SKILL.md": {
+      "category": "template",
+      "hash": "c80bd91bd939e449cce391b08a1dd7717de4742841f04cc470f06ce2793689ad"
+    },
+    ".agents/skills/codex-migrate/agents/openai.yaml": {
+      "category": "template",
+      "hash": "e0778a1d503a95b7b5a46fb60a9e8745666997790712235c7e838e660253a507"
+    },
+    ".agents/skills/codex-modify-api/SKILL.md": {
+      "category": "template",
+      "hash": "7f0a35502749958a7060b49d4e3bfac4eb08c61c0982272119d80d61577677f3"
+    },
+    ".agents/skills/codex-modify-api/agents/openai.yaml": {
+      "category": "template",
+      "hash": "2863182f34576d8ecc25156366011aa2f38601b58052b0f58025112588d32c33"
+    },
+    ".agents/skills/codex-openai-model-guidance/SKILL.md": {
+      "category": "template",
+      "hash": "3394892ad5c0af5ad225aca3ffa959e408b3521fd9991a96fb6de54ca50d2996"
+    },
+    ".agents/skills/codex-openai-model-guidance/agents/openai.yaml": {
+      "category": "template",
+      "hash": "bd115a78b0352bbfe12f2adb13040251349537ef74dbf9851111ec7f103649b4"
+    },
+    ".agents/skills/codex-pipeline-workflow/SKILL.md": {
+      "category": "template",
+      "hash": "6ac02c9c085d9f738c5fa91001285690d459ce7e946c0e2c9b2a0cf54185c13b"
+    },
+    ".agents/skills/codex-pipeline-workflow/agents/openai.yaml": {
+      "category": "template",
+      "hash": "c1ac1753e7801a8ba8c280c758ccb8aa889f3a90667b2cb1442fbd83ab620d26"
+    },
+    ".agents/skills/codex-pipeline-workflow/references/pipelines.md": {
+      "category": "template",
+      "hash": "7bc4db679cae4ae6d6663e3b0fc58e2515dbdc3744cc75675511e186de4a4cc2"
+    },
+    ".agents/skills/codex-product-goal/SKILL.md": {
+      "category": "template",
+      "hash": "d4dd729346503c813504d52ca785c3aa25ee5e336a39c7fe4b53324c3f924011"
+    },
+    ".agents/skills/codex-product-goal/agents/openai.yaml": {
+      "category": "template",
+      "hash": "639d4fe728ddffeb8b99e249a50c16f416212fbd5b796a0792384333dcf6d9dd"
+    },
+    ".agents/skills/codex-product-ux-audit/SKILL.md": {
+      "category": "template",
+      "hash": "267722fca7338bacb4653d9e918eb4202e817c1724869b912674e54b19bc0c19"
+    },
+    ".agents/skills/codex-product-ux-audit/agents/openai.yaml": {
+      "category": "template",
+      "hash": "de4b2407ee0edfd165f933fa857ac2b274029531090929172adb16100aae267d"
+    },
+    ".agents/skills/codex-progressive-jpeg-planner/SKILL.md": {
+      "category": "template",
+      "hash": "2712fb1eaabf216b92ed3b05e257d69104a4a3b6036cb906bd0bd736649e1bdc"
+    },
+    ".agents/skills/codex-progressive-jpeg-planner/agents/openai.yaml": {
+      "category": "template",
+      "hash": "9c0a8645cbbada48feed130e86b4bb1a75e93e13cc4e4f02cd7ba2514651e33b"
+    },
+    ".agents/skills/codex-progressive-jpeg-planner/references/domain-examples.md": {
+      "category": "template",
+      "hash": "9847145693ef80e8bf6030266013dfbd08dcecad9f2310d4257632a212430d16"
+    },
+    ".agents/skills/codex-security-audit/SKILL.md": {
+      "category": "template",
+      "hash": "da327a1b66495f6d3bfd07b4640304258381f5f01a9165ff9265a4feccd5a081"
+    },
+    ".agents/skills/codex-security-audit/agents/openai.yaml": {
+      "category": "template",
+      "hash": "f6b21b8c492b1df50c24028ed0b0d8ee512f5ba8ac4f8b75386e76620c4845db"
+    },
+    ".agents/skills/codex-self-update/SKILL.md": {
+      "category": "template",
+      "hash": "ac5bbf1736373df9dea47c7e57df205b41058b9daff61094f96b1aeb35a5e284"
+    },
+    ".agents/skills/codex-self-update/agents/openai.yaml": {
+      "category": "template",
+      "hash": "b7692eb159e66024236e253e5483370ada94685878c8aefc709477af1f784d25"
+    },
+    ".agents/skills/codex-setup-integrations/SKILL.md": {
+      "category": "template",
+      "hash": "450011c3cb9c77124f345419bd310c0359e88b9ae464a6dca20c6ed824eed602"
+    },
+    ".agents/skills/codex-setup-integrations/agents/openai.yaml": {
+      "category": "template",
+      "hash": "6abe88b91a505b117e456860c70087283d9906c3eade13dc640f678461b3856e"
+    },
+    ".agents/skills/codex-setup-project/SKILL.md": {
+      "category": "template",
+      "hash": "62c926fbada75cff37e10c36b50d2c639988ffc4356c01fe2839446629bc4dc0"
+    },
+    ".agents/skills/codex-setup-project/agents/openai.yaml": {
+      "category": "template",
+      "hash": "1117d460e84cbfa195e0c46ae43aed2d38d37d8996d08785b07958374b747570"
+    },
+    ".agents/skills/codex-setup-telegram/SKILL.md": {
+      "category": "template",
+      "hash": "bedd8e7cb412adc343fade5557b7bb8b7e9956afd570459041ae76c8676dfae6"
+    },
+    ".agents/skills/codex-setup-telegram/agents/openai.yaml": {
+      "category": "template",
+      "hash": "7ed5404b226d093f7f40d0f6e4fc4a90da185ace3321432f3801d8e24d526f31"
+    },
+    ".agents/skills/codex-skill-maintenance/SKILL.md": {
+      "category": "template",
+      "hash": "ad58af921d55de855d9e63e632f5c5ae6bc00b68a2e7d7e162f6fe20c27f23db"
+    },
+    ".agents/skills/codex-skill-maintenance/agents/openai.yaml": {
+      "category": "template",
+      "hash": "cdd9803ddb813b841e5e64e99e221bf47faf47c5059c89e05906386f50424dec"
+    },
+    ".agents/skills/codex-sprint/SKILL.md": {
+      "category": "template",
+      "hash": "e98b95d2a7ae11b40cb930058d93c7542a6b978216d240b57d75950e8e46b4af"
+    },
+    ".agents/skills/codex-sprint/agents/openai.yaml": {
+      "category": "template",
+      "hash": "ab2d723a0d8d7032bcfd1baa7e2b2878473e697a26c62ad2eebed9f7fc0d02c4"
+    },
+    ".agents/skills/codex-strategic-review/SKILL.md": {
+      "category": "template",
+      "hash": "bb6b020f15c72812c1c5b96785f2352f3eca4a0bebe68a8c67582f0ff65ee229"
+    },
+    ".agents/skills/codex-strategic-review/agents/openai.yaml": {
+      "category": "template",
+      "hash": "e604aa73a545128649b19c4205920a63943a9c9abedd8717172be89d90c9e1fd"
+    },
+    ".agents/skills/codex-subagent-orchestration/SKILL.md": {
+      "category": "template",
+      "hash": "f253c974e5d6bab965dd740335fc12d0a68deb14093061d7643a62fef5145264"
+    },
+    ".agents/skills/codex-subagent-orchestration/agents/openai.yaml": {
+      "category": "template",
+      "hash": "7984c74895c47d50da44d832c9ed314503be547d8be02ac6644617a05e41ef12"
+    },
+    ".agents/skills/codex-task-queue/SKILL.md": {
+      "category": "template",
+      "hash": "923dda5cf91e6d98effab6f33d6e5296167ee02c3f601755c315b13f440a95fe"
+    },
+    ".agents/skills/codex-task-queue/agents/openai.yaml": {
+      "category": "template",
+      "hash": "3c1dc2309313e1eec3abe20f36e6f2c2ce2225798317852f7fd15f3ebcbb7053"
+    },
+    ".agents/skills/codex-technical-writing/SKILL.md": {
+      "category": "template",
+      "hash": "37ca0eaeb68c312dd68d08239ced029f894d76e049b9e0a1bf89f751985c5e53"
+    },
+    ".agents/skills/codex-technical-writing/agents/openai.yaml": {
+      "category": "template",
+      "hash": "6c7a53ae32f549c3f707ee625b88759f9bfb75665ec7404edd2dde03186050da"
+    },
+    ".agents/skills/codex-technical-writing-review/SKILL.md": {
+      "category": "template",
+      "hash": "c1eb9bb4a7dfe75eee224db4b61c7eccf2c88b334c1906e39f944c4538fb15c0"
+    },
+    ".agents/skills/codex-technical-writing-review/agents/openai.yaml": {
+      "category": "template",
+      "hash": "acf1c485ee7591550e728f4308d30cc8299d51094bc49a1cb2aa434b77f63f38"
+    },
+    ".agents/skills/codex-template-sync/SKILL.md": {
+      "category": "template",
+      "hash": "843eaceaedf90ed15dde544073466fea3b0eec5a549589a32899eba876949b4e"
+    },
+    ".agents/skills/codex-template-sync/agents/openai.yaml": {
+      "category": "template",
+      "hash": "6f6b144d1ee4fdc7c8bd4f1f99b4464dae36548c73458b99bb5ca4c2006fe4d1"
+    },
+    ".agents/skills/codex-test-rules/SKILL.md": {
+      "category": "template",
+      "hash": "484af595196e4ff27f9ad727d3a7606344061449d2c17002cc1039f5dc2e787b"
+    },
+    ".agents/skills/codex-test-rules/agents/openai.yaml": {
+      "category": "template",
+      "hash": "7c41713d392dddcfd5a5e9f830b8b1368ae60d64bd7434ce0572ff64db1daba0"
+    },
+    ".agents/skills/codex-update-deps/SKILL.md": {
+      "category": "template",
+      "hash": "de8788965b00f72996793ecd27f0af117c70b3de7531b4bc08d52813c5938caf"
+    },
+    ".agents/skills/codex-update-deps/agents/openai.yaml": {
+      "category": "template",
+      "hash": "b9bfcc28c3b5c6ea60736f5245dceae1518e08283cf1a3d730fb97865f7e71ff"
+    },
+    ".agents/skills/codex-writing-workflow/SKILL.md": {
+      "category": "template",
+      "hash": "3dece97c1bee72b01451e13d730b29ccd0a5c769333fd1ab5b08f7eb889996da"
+    },
+    ".agents/skills/codex-writing-workflow/agents/openai.yaml": {
+      "category": "template",
+      "hash": "5667d0ee92b527735eb0880e6c1141e0edc755e80020a4df0403f007737f66db"
+    },
+    ".agents/skills/coverage/SKILL.md": {
+      "category": "template",
+      "hash": "c3b4bafc8bc80307733d34a6ab886f1fcae2e95597edd2945fe1a28cbeeb1d6e"
+    }
+  }
+}

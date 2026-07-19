@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Product Goal"
+  short_description: "Keep final product intent and current step aligned"
+  default_prompt: "Use $codex-product-goal to preserve the final product goal, quality bar, current step, dependencies, client-executor accountability, and verification evidence."
+policy:
+  allow_implicit_invocation: true

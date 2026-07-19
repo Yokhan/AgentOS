@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Sprint"
+  short_description: "Run a gated work loop"
+  default_prompt: "Use $codex-sprint to work through the approved queue with verification gates."
+policy:
+  allow_implicit_invocation: true

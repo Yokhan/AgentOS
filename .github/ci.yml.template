@@ -1,0 +1,86 @@
+# CI/CD Pipeline Template
+# Rename to ci.yml and customize for your stack during /setup-project
+# Remove .template extension when ready
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # === UNCOMMENT FOR YOUR STACK ===
+
+      # --- Node.js / TypeScript ---
+      # - uses: actions/setup-node@v6
+      #   with:
+      #     node-version: '24'
+      #     cache: 'npm'
+      # - run: npm ci
+      # - name: Type Check
+      #   run: npx tsc --noEmit
+      # - name: Lint
+      #   run: npm run lint
+      # - name: Unit Tests
+      #   run: npm test
+      # - name: Architecture Check
+      #   run: npx dependency-cruiser src --output-type err
+      # - name: Security Audit
+      #   run: npm audit --audit-level=high
+
+      # --- Python ---
+      # - uses: actions/setup-python@v5
+      #   with:
+      #     python-version: '3.12'
+      # - run: pip install -r requirements.txt
+      # - name: Type Check
+      #   run: mypy src/
+      # - name: Lint
+      #   run: ruff check src/
+      # - name: Unit Tests
+      #   run: pytest tests/
+      # - name: Security Audit
+      #   run: pip audit
+
+      # --- Rust ---
+      # - uses: actions-rs/toolchain@v1
+      #   with:
+      #     toolchain: stable
+      # - name: Check
+      #   run: cargo check
+      # - name: Lint
+      #   run: cargo clippy -- -D warnings
+      # - name: Test
+      #   run: cargo test
+      # - name: Security Audit
+      #   run: cargo audit
+
+      # --- Go ---
+      # - uses: actions/setup-go@v5
+      #   with:
+      #     go-version: '1.22'
+      # - name: Vet
+      #   run: go vet ./...
+      # - name: Test
+      #   run: go test ./...
+      # - name: Security
+      #   run: govulncheck ./...
+
+      # === DRIFT DETECTION (always active) ===
+      - name: Drift Detection
+        run: bash scripts/check-drift.sh
+
+      # === SECRETS SCAN (always active) ===
+      - name: Secret Scan
+        run: |
+          if grep -rE '(sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36}|-----BEGIN.*(RSA|EC|DSA))' src/ 2>/dev/null; then
+            echo "::error::Potential secrets detected in source code!"
+            exit 1
+          fi

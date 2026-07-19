@@ -1,49 +1,137 @@
-# Build artifacts
-src-tauri/target/
-node_modules/
+# Environment - NEVER commit these
+.env
+.env.local
+.env.*.local
 
-# Runtime data
+# Project-local Claude Code settings (not synced with template)
+.claude/settings.local.json
+
+# n8n local config (user-specific paths)
+n8n/config.json
+
+# Memory MCP local state
+.memory/
+
+# Session cache (runtime, regenerated)
+.session-cache/
+
+# MCP server dependencies (installed per-project)
+mcp-servers/*/node_modules/
+mcp-servers/*/dist/
+
+# Active rules state (project-local, set by route-task.sh)
+tasks/.active-rules
+tasks/.active-codex-route.json
+tasks/.mode
+.engram/
+.codebase-memory/
+.memcp/
+.anima/
+ia-memory/
+tasks/.memory-fallback.md
+repomix-output.*
+
+# Beads local DB
+.beads/beads.db
+
+# IDE
+.idea/
+.vscode/*.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*.suo
+.DS_Store
+Thumbs.db
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.pnp.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Go
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Rust
+/target/
+src-tauri/target/
+Cargo.lock.bak
+
+# General build artifacts
+dist/
+out/
+.cache/
+*.log
+coverage/
+.coverage
+htmlcov/
+
+# Dashboard runtime (per-machine, regenerated)
 tasks/chats/
-tasks/audit/
 tasks/plans/
 tasks/.chat-history.jsonl
 tasks/.delegation-archive.jsonl
+tasks/.delegation-log.jsonl
+tasks/.delegations.json
+tasks/.audit-log.jsonl
+tasks/.notifications.jsonl
+tasks/.operations.jsonl
+tasks/.project-sessions.json
 tasks/.session-events.jsonl
 tasks/.sessions.json
-tasks/.project-sessions.json
+tasks/.signals.jsonl
+tasks/.strategies.json
+tasks/.ui-diagnostics.jsonl
 tasks/.work-items.json
 tasks/.file-leases.json
 tasks/.stream-*.jsonl
 tasks/.running-tasks.json
 tasks/.running-tasks.tmp
-tasks/.delegations.json
-tasks/.delegation-log.jsonl
-tasks/.audit-log.jsonl
-tasks/.operations.jsonl
-tasks/.notifications.jsonl
-tasks/.signals.jsonl
-tasks/.ui-diagnostics.jsonl
-tasks/.strategies.json
+tasks/.current.md.bak
 tasks/agent-os.log
-tasks/pa-memory.jsonl
-tasks/goals.md
-tasks/queue.md
 tasks/attachments/
 tasks/diagnostics/
+tasks/goals.md
+tasks/queue.md
+tasks/pa-memory.jsonl
 
-# OS
-.DS_Store
-Thumbs.db
+# Maintainer-local notes and audit logs
+brain/01-daily/*
+!brain/01-daily/.gitkeep
+brain/03-knowledge/research/*
+brain/03-knowledge/audits/*
+tasks/audit/*
 
-# Secrets
-.env
-.env.*
-*.pem
-*.key
+# Local bootstrap/smoke fixtures
+codex-phase2-*-fixture/
+codex-phase2-win-fixture/
+codex-setup-smoke-*/
+payload-fix-*/
+template-leak-smoke-*/
 
-# IDE
-.idea/
-.vscode/
-*.swp
-build-updater.log
-.claude/
+# Temporary repro/debug artifacts
+tmp-*

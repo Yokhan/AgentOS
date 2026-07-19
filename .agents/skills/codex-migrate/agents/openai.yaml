@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Migrate"
+  short_description: "Handle migrations safely"
+  default_prompt: "Use $codex-migrate for database, schema, data, or storage migration work with rollback and verification gates."
+policy:
+  allow_implicit_invocation: true

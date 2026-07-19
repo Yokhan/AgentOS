@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-07-19",
+  "policy": {
+    "arsenal_size": 10,
+    "default_profile": "full",
+    "profiles": ["core", "auto", "full"],
+    "prohibited_version_labels": ["latest", "main", "master", "next"],
+    "prohibited_default_licenses": ["PolyForm-Noncommercial-1.0.0"],
+    "benchmark_gate": {
+      "minimum_answer_recall": 0.9,
+      "minimum_median_token_reduction": 0.5,
+      "minimum_median_tool_call_reduction": 0.3,
+      "maximum_median_latency_regression": 0.2
+    },
+    "runtime_dependencies": {
+      "uv": {
+        "version": "0.11.29",
+        "source": "https://github.com/astral-sh/uv",
+        "license": "Apache-2.0 OR MIT"
+      }
+    }
+  },
+  "tools": [
+    {
+      "id": "ripgrep",
+      "name": "ripgrep",
+      "version": "15.2.0",
+      "license": "MIT OR Unlicense",
+      "source": "https://github.com/BurntSushi/ripgrep",
+      "role": "Fast literal and regular-expression fallback with ignore-file support.",
+      "command": "rg",
+      "health_args": ["--version"],
+      "install": {
+        "kind": "github-release-binary",
+        "repository": "BurntSushi/ripgrep",
+        "tag": "15.2.0",
+        "asset": "ripgrep-{version}-{target}.{ext}",
+        "checksums_asset": "ripgrep-{version}-{target}.{ext}.sha256",
+        "targets": { "linux-x64": "x86_64-unknown-linux-musl" },
+        "binary": "rg"
+      },
+      "activation": { "mode": "always", "stacks": [] },
+      "core": true,
+      "mcp": false
+    },
+    {
+      "id": "engram",
+      "name": "Engram",
+      "version": "1.19.0",
+      "license": "MIT",
+      "source": "https://github.com/Gentleman-Programming/engram",
+      "role": "Persistent cross-session decisions and agent memory; not a code graph.",
+      "command": "engram",
+      "health_args": ["--version"],
+      "install": { "kind": "existing-bootstrap", "package": "engram", "version": "1.19.0" },
+      "activation": { "mode": "always", "stacks": [] },
+      "core": true,
+      "mcp": true
+    },
+    {
+      "id": "codebase-memory",
+      "name": "codebase-memory-mcp",
+      "version": "0.9.0",
+      "license": "MIT",
+      "source": "https://github.com/DeusData/codebase-memory-mcp",
+      "role": "Persistent Tree-sitter and hybrid-LSP knowledge graph, architecture, call paths, and change impact.",
+      "command": "codebase-memory-mcp",
+      "health_args": ["--version"],
+      "install": { "kind": "npm-global", "package": "codebase-memory-mcp", "version": "0.9.0" },
+      "activation": { "mode": "code", "stacks": [] },
+      "core": true,
+      "mcp": true
+    },
+    {
+      "id": "probe",
+      "name": "Probe",
+      "version": "0.6.0-rc325",
+      "license": "ISC",
+      "source_license": "Apache-2.0",
+      "license_note": "The published npm package declares ISC while the source repository displays Apache-2.0; keep the exact package pin and recheck before promotion from RC.",
+      "source": "https://github.com/probelabs/probe",
+      "role": "Zero-index Tree-sitter search that returns bounded code blocks when the graph is absent, stale, or unnecessary.",
+      "command": "probe",
+      "health_args": ["--version"],
+      "health_version": "0.6.0",
+      "install": { "kind": "npm-global", "package": "@probelabs/probe", "version": "0.6.0-rc325" },
+      "activation": { "mode": "on-demand", "stacks": [] },
+      "core": false,
+      "mcp": false,
+      "stability": "release-candidate"
+    },
+    {
+      "id": "serena",
+      "name": "Serena",
+      "version": "1.6.0",
+      "license": "MIT",
+      "source": "https://github.com/oraios/serena",
+      "role": "LSP-backed symbol lookup, references, semantic editing, and refactoring.",
+      "command": "serena",
+      "health_args": ["--version"],
+      "health_timeout_ms": 20000,
+      "install": { "kind": "uv-tool", "package": "serena-agent", "version": "1.6.0", "python": "3.13" },
+      "activation": { "mode": "on-demand", "stacks": ["javascript", "typescript", "python", "go", "rust", "csharp"] },
+      "core": false,
+      "mcp": false
+    },
+    {
+      "id": "ast-grep",
+      "name": "ast-grep",
+      "version": "0.44.1",
+      "license": "MIT",
+      "source": "https://github.com/ast-grep/ast-grep",
+      "role": "Tree-sitter structural search, outlines, lint rules, and auditable rewrites.",
+      "command": "ast-grep",
+      "health_args": ["--version"],
+      "install": { "kind": "npm-global", "package": "@ast-grep/cli", "version": "0.44.1" },
+      "activation": { "mode": "code", "stacks": [] },
+      "core": true,
+      "mcp": false
+    },
+    {
+      "id": "repomix",
+      "name": "Repomix",
+      "version": "1.16.1",
+      "license": "MIT",
+      "source": "https://github.com/yamadashy/repomix",
+      "role": "Reproducible compressed repository snapshots and token-count trees.",
+      "command": "repomix",
+      "health_args": ["--version"],
+      "install": { "kind": "npm-global", "package": "repomix", "version": "1.16.1" },
+      "activation": { "mode": "code", "stacks": [] },
+      "core": true,
+      "mcp": false
+    },
+    {
+      "id": "dependency-cruiser",
+      "name": "dependency-cruiser",
+      "version": "18.1.0",
+      "license": "MIT",
+      "source": "https://github.com/sverweij/dependency-cruiser",
+      "role": "JavaScript and TypeScript dependency-boundary validation, cycles, and focused graphs.",
+      "command": "depcruise",
+      "health_args": ["--version"],
+      "health_timeout_ms": 20000,
+      "install": { "kind": "npm-global", "package": "dependency-cruiser", "version": "18.1.0" },
+      "activation": { "mode": "stacks", "stacks": ["javascript", "typescript"] },
+      "core": false,
+      "mcp": false
+    },
+    {
+      "id": "semgrep",
+      "name": "Semgrep Community Edition",
+      "version": "1.170.0",
+      "license": "LGPL-2.1",
+      "source": "https://github.com/semgrep/semgrep",
+      "role": "On-demand structural policy, security patterns, and migration guards; not a whole-program context graph.",
+      "command": "semgrep",
+      "health_args": ["--version"],
+      "health_timeout_ms": 20000,
+      "install": { "kind": "uv-tool", "package": "semgrep", "version": "1.170.0" },
+      "activation": { "mode": "on-demand", "stacks": [] },
+      "core": false,
+      "mcp": false
+    },
+    {
+      "id": "gitleaks",
+      "name": "Gitleaks",
+      "version": "8.30.0",
+      "license": "MIT",
+      "source": "https://github.com/gitleaks/gitleaks",
+      "role": "Deterministic secret detection for the working tree and Git history before handoff, commit, or release.",
+      "command": "gitleaks",
+      "health_args": ["version"],
+      "install": {
+        "kind": "github-release-binary",
+        "repository": "gitleaks/gitleaks",
+        "tag": "v8.30.0",
+        "asset": "gitleaks_{version}_{os}_{arch}.{ext}",
+        "checksums_asset": "gitleaks_{version}_checksums.txt",
+        "binary": "gitleaks"
+      },
+      "activation": { "mode": "on-demand", "stacks": [] },
+      "core": false,
+      "mcp": false
+    }
+  ]
+}

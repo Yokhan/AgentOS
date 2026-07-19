@@ -9,6 +9,11 @@ Rust backend (Axum API + Tauri commands) + Preact frontend (inline SPA + extract
 - AgentOS should consume child-project state from shipped project artifacts (`.template-manifest.json`, `tasks/current.md`, `PROJECT_SPEC.md`, `scripts/check-drift.sh`) instead of re-embedding template logic.
 - If AgentOS needs new bootstrap or update behavior, change it in `agent-project-template` first and keep AgentOS as the orchestrator that calls that contract.
 
+## Agent Template v4.9 Compatibility
+- Agent infrastructure SOT: before changing `AGENTS.md`, `CLAUDE.md`, skills, subagents, hooks, routing, or template sync behavior, read `docs/AGENT_CONTEXT_SOT.md` and check `_reference/agent-sot/sources.json`.
+- SOT conflict protocol: if two plausible sources conflict, name both sources, classify authority, ask for a decision when authority is ambiguous or product/safety/data/release/architecture changes, and record the chosen SOT in AgentOS state or project task files.
+- Thinking tools gate: for M+, HIGH-risk, ambiguous, architecture, template, design, product, marketing, or repeated-failure work, map the system, contradiction, terrain, plan reality, next verifiable checkpoint, and replan trigger before editing.
+
 ## Stack
 - **Backend**: Rust, Tauri 2, Axum 0.8, Tokio, Serde
 - **Frontend**: Preact (vendor bundle), vanilla CSS (design tokens), inline `<script type="module">`

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Security Audit"
+  short_description: "Security review and patch gates"
+  default_prompt: "Use $codex-security-audit to assess and patch this security issue."
+policy:
+  allow_implicit_invocation: true

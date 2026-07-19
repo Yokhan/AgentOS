@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Health Review"
+  short_description: "Review health claims safely"
+  default_prompt: "Use $codex-domain-health-review to evaluate this health claim safely."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Progressive JPEG Planner"
+  short_description: "Plan truthful purpose-solving product iterations"
+  default_prompt: "Use $codex-progressive-jpeg-planner to plan whole-product iterations where every implementation slice fulfills the product purpose end to end without fake readiness."

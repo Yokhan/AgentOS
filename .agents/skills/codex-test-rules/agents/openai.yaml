@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Test Rules"
+  short_description: "Validate rule and skill changes"
+  default_prompt: "Use $codex-test-rules to validate template rules, skills, hooks, AGENTS instructions, and regression fixtures."
+policy:
+  allow_implicit_invocation: true

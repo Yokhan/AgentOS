@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex OpenAI Model Guidance"
+  short_description: "Use current OpenAI model docs"
+  default_prompt: "Use $codex-openai-model-guidance to choose the current OpenAI model and settings."
+policy:
+  allow_implicit_invocation: true

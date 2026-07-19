@@ -1,0 +1,168 @@
+name: Validate Template
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    name: Validation (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Run validation scripts
+        run: |
+          bash scripts/validate-template.sh
+          bash scripts/check-drift.sh
+          bash scripts/test-hooks.sh
+          bash scripts/test-template.sh
+          bash scripts/sync-agents.sh
+
+      - name: Smoke generated metadata scripts
+        run: |
+          bash scripts/generate-project-spec.sh >/dev/null
+          bash scripts/scan-project.sh --report >/dev/null
+          bash scripts/downstream-census.sh --no-sync --json "$PWD" >/dev/null
+
+      - name: Validate writing and MCP contracts
+        run: |
+          node scripts/test-writing-references.js
+          node scripts/validate-writing-references.js
+          node scripts/test-writing-intent.js
+          node scripts/test-codex-routing.js
+          npm --prefix mcp-servers/context-router ci
+          npm --prefix mcp-servers/context-router test
+          npm --prefix mcp-servers/context-router run build
+
+  bootstrap-smoke-linux:
+    name: Bootstrap Smoke (Linux)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Create fresh project from setup.sh
+        run: |
+          rm -rf ci-bootstrap-smoke
+          printf 'sentinel\n' > docs/.ci-untracked-sentinel.txt
+          bash setup.sh ci-bootstrap-smoke
+          test -f ci-bootstrap-smoke/scripts/task-brief.sh
+          test -f ci-bootstrap-smoke/brain/01-daily/.gitkeep
+          test ! -f ci-bootstrap-smoke/tasks/debug-recovery-log.md
+          test ! -f ci-bootstrap-smoke/docs/.ci-untracked-sentinel.txt
+          test ! -d ci-bootstrap-smoke/mcp-servers/context-router/node_modules
+          rm -f docs/.ci-untracked-sentinel.txt
+
+      - name: Validate generated Linux project
+        run: |
+          cd ci-bootstrap-smoke
+          bash scripts/test-hooks.sh
+          bash scripts/bootstrap-mcp.sh --dry-run
+          bash scripts/sync-template.sh "$GITHUB_WORKSPACE" --dry-run
+
+  bootstrap-smoke-windows:
+    name: Bootstrap Smoke (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Create fresh project from setup.bat
+        shell: cmd
+        run: |
+          if exist ci-bootstrap-win rmdir /s /q ci-bootstrap-win
+          echo sentinel>docs\.ci-untracked-sentinel.txt
+          (echo ci-bootstrap-win) | setup.bat
+          del docs\.ci-untracked-sentinel.txt
+
+      - name: Validate generated Windows project
+        shell: bash
+        run: |
+          test -f ci-bootstrap-win/scripts/task-brief.sh
+          test -f ci-bootstrap-win/brain/01-daily/.gitkeep
+          test ! -f ci-bootstrap-win/tasks/debug-recovery-log.md
+          test ! -f ci-bootstrap-win/docs/.ci-untracked-sentinel.txt
+          test -d ci-bootstrap-win/mcp-servers/context-router/node_modules
+          cd ci-bootstrap-win
+          bash scripts/test-hooks.sh
+          bash scripts/bootstrap-mcp.sh --dry-run
+          bash scripts/sync-template.sh "$GITHUB_WORKSPACE" --dry-run
+
+      - name: Validate generated Windows writing contract
+        shell: pwsh
+        run: |
+          Set-Location ci-bootstrap-win
+          node scripts/test-writing-references.js
+          node scripts/validate-writing-references.js
+          node scripts/test-writing-intent.js
+          node scripts/test-codex-routing.js
+          node scripts/validate-production-standard.js
+          node scripts/validate-text-policy.js
+          npm.cmd --prefix mcp-servers/context-router test
+          npm.cmd --prefix mcp-servers/context-router run build
+
+  code-intelligence-full-smoke:
+    name: Full Toolchain And Codex MCP (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install and health-check all ten tools
+        run: |
+          bash scripts/bootstrap-mcp.sh --install --tool-profile=full
+          bash scripts/bootstrap-mcp.sh --check --tool-profile=full
+
+      - name: Verify Codex loads the managed project MCPs
+        run: |
+          npm install --global @openai/codex@0.125.0
+          node -e 'const fs=require("fs"),os=require("os"),path=require("path"); const root=fs.realpathSync(process.cwd()); const key=process.platform==="win32"?root.toLowerCase():root; const home=process.env.CODEX_HOME||path.join(os.homedir(),".codex"); fs.mkdirSync(home,{recursive:true}); fs.appendFileSync(path.join(home,"config.toml"),`\n[projects.${JSON.stringify(key)}]\ntrust_level = "trusted"\n`);'
+          codex mcp list | tee codex-mcp-list.txt
+          grep -q 'context-router' codex-mcp-list.txt
+          grep -q 'engram' codex-mcp-list.txt
+          grep -q 'codebase-memory-mcp' codex-mcp-list.txt
+
+      - name: Verify AgentOS ownership routing
+        run: node scripts/test-codex-routing.js

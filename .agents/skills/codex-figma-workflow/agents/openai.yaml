@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Figma Workflow"
+  short_description: "Figma MCP design workflow"
+  default_prompt: "Use $codex-figma-workflow to update this Figma design through components and tokens."
+policy:
+  allow_implicit_invocation: true

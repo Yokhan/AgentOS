@@ -1,0 +1,6 @@
+interface:
+  display_name: "Technical Writing Review"
+  short_description: "Verify technical docs against product behavior"
+  default_prompt: "Use $codex-technical-writing-review to audit this documentation against the product, execute its procedures, and report findings before rewrites."
+policy:
+  allow_implicit_invocation: true

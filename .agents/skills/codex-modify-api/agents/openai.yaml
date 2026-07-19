@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Modify API"
+  short_description: "Change API endpoints safely"
+  default_prompt: "Use $codex-modify-api to update this endpoint without breaking the contract."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,33 @@
+# Architecture
+
+<!-- TODO: Fill in during /setup-project -->
+
+## Overview
+[One paragraph describing the system]
+
+## Module Map
+
+```
+src/
+├── shared/     — [Description]
+├── core/       — [Description]
+└── features/
+    ├── [feature-1]/  — [Description]
+    └── [feature-2]/  — [Description]
+```
+
+## Dependency Rules
+- `shared/` depends on nothing
+- `core/` depends only on `shared/`. NO IO.
+- `features/` depends on `shared/` and `core/`
+
+## Data Flow
+[Describe how data flows through the system]
+
+## External Dependencies
+| Dependency | Purpose | Module |
+|-----------|---------|--------|
+| | | |
+
+## Key Decisions
+See `docs/DECISIONS.md` and `brain/04-decisions/` for architectural decision records.

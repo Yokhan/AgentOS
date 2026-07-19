@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Product UX Audit"
+  short_description: "Audit whether product flows are useful"
+  default_prompt: "Use $codex-product-ux-audit to verify entry paths, useful destinations, dead ends, auth/session states, and responsive behavior."
+policy:
+  allow_implicit_invocation: true

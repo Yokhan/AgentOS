@@ -1,0 +1,29 @@
+# Data Design
+
+<!-- TODO: Fill in during /setup-project -->
+
+## Core Data Structures
+
+### [Entity Name]
+```
+{
+  id: string
+  // ...fields
+  createdAt: timestamp
+  updatedAt: timestamp
+}
+```
+
+## Data Flow
+[How data moves through the system: input → validation → processing → storage → output]
+
+## Validation Rules
+| Field | Rule | Error |
+|-------|------|-------|
+| | | |
+
+## Storage
+[Where and how data is persisted]
+
+## Migrations
+[How schema changes are handled]

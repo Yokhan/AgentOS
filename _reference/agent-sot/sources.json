@@ -1,0 +1,393 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-07-11",
+  "policy": {
+    "refresh_after_days": 30,
+    "do_not_vendor_third_party_docs": true,
+    "official_sources_override_community_sources": true
+  },
+  "sources": [
+    {
+      "id": "local-ai-agent-spec-v3",
+      "kind": "local-original",
+      "trust": "project-sot",
+      "title": "AI agent development spec v3.1",
+      "local_path": "_reference/agent-sot/originals/ai-agent-spec-v3-final.md",
+      "sha256": "1a3e65302b965232df93639790025e71b04648dc9b2e71906ba38048dca03468",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Use three context tiers: hot instructions, specialist skills/agents, cold references. Prefer hooks and validators for deterministic behavior."
+    },
+    {
+      "id": "openai-codex-agents-md",
+      "kind": "official-docs",
+      "trust": "primary",
+      "title": "OpenAI Codex AGENTS.md guide",
+      "url": "https://developers.openai.com/codex/guides/agents-md",
+      "last_checked": "2026-07-18",
+      "requires_fresh_check": true,
+      "local_conclusion": "AGENTS.md is project guidance discovered by Codex with a 32 KiB default limit; keep it concise and route to deeper docs."
+    },
+    {
+      "id": "openai-codex-skills",
+      "kind": "official-docs",
+      "trust": "primary",
+      "title": "OpenAI Codex skills",
+      "url": "https://developers.openai.com/codex/skills",
+      "last_checked": "2026-07-18",
+      "requires_fresh_check": true,
+      "local_conclusion": "Repo skills live in .agents/skills; SKILL.md has name and description plus optional scripts, references, assets, and agents."
+    },
+    {
+      "id": "openai-codex-hooks",
+      "kind": "official-docs",
+      "trust": "primary",
+      "title": "OpenAI Codex hooks",
+      "url": "https://developers.openai.com/codex/hooks",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": true,
+      "local_conclusion": "Codex hooks use nested event matchers. PreToolUse can guard Bash, apply_patch/file edits, and MCP tool calls, but is not a complete enforcement boundary."
+    },
+    {
+      "id": "openai-codex-subagents",
+      "kind": "official-docs",
+      "trust": "primary",
+      "title": "OpenAI Codex subagents",
+      "url": "https://developers.openai.com/codex/subagents",
+      "last_checked": "2026-07-19",
+      "requires_fresh_check": true,
+      "local_conclusion": "Project custom agents are standalone .codex/agents TOML files identified by their name field. Current local Codex can delegate after a direct request or when applicable AGENTS.md or skill instructions request it, so project-authorized proactive delegation does not require a separate user request. Explicit opt-out wins; keep max_depth at 1, prefer independent read-only lanes, and verify real child activity instead of parent markers."
+    },
+    {
+      "id": "openai-gpt-5-6-release",
+      "kind": "official-docs",
+      "trust": "primary",
+      "title": "OpenAI GPT-5.6 release",
+      "url": "https://openai.com/index/gpt-5-6/",
+      "last_checked": "2026-07-11",
+      "requires_fresh_check": true,
+      "local_conclusion": "GPT-5.6 Sol is the quality tier, Terra is the balanced support tier, and multi-agent gains depend on cleanly parallel work rather than agent count alone."
+    },
+    {
+      "id": "openai-gpt-5-6-guidance",
+      "kind": "official-docs",
+      "trust": "primary",
+      "title": "OpenAI GPT-5.6 model guidance",
+      "url": "https://developers.openai.com/api/docs/guides/latest-model",
+      "last_checked": "2026-07-11",
+      "requires_fresh_check": true,
+      "local_conclusion": "Tune GPT-5.6 by representative evals, use shorter outcome-focused prompts, and choose reasoning effort intentionally. The template caps recommendations at xhigh."
+    },
+    {
+      "id": "zed-external-agents",
+      "kind": "official-docs",
+      "trust": "primary",
+      "title": "Zed external agents",
+      "url": "https://zed.dev/docs/ai/external-agents",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": true,
+      "local_conclusion": "Zed runs Codex CLI through ACP. Zed is the UI transport, not the source of Codex instruction semantics."
+    },
+    {
+      "id": "claude-code-extend",
+      "kind": "official-docs",
+      "trust": "primary",
+      "title": "Claude Code extension overview",
+      "url": "https://code.claude.com/docs/en/features-overview",
+      "last_checked": "2026-07-19",
+      "requires_fresh_check": true,
+      "local_conclusion": "Claude separates persistent context, skills, subagents, hooks, MCP, and plugins. Match the tool to the kind of context or enforcement needed."
+    },
+    {
+      "id": "claude-code-skills",
+      "kind": "official-docs",
+      "trust": "primary",
+      "title": "Claude Code skills",
+      "url": "https://code.claude.com/docs/en/skills",
+      "last_checked": "2026-07-18",
+      "requires_fresh_check": true,
+      "local_conclusion": "Claude skills load only when used; move repeated procedures and long reference material out of CLAUDE.md into skills."
+    },
+    {
+      "id": "claude-code-hooks",
+      "kind": "official-docs",
+      "trust": "primary",
+      "title": "Claude Code hooks",
+      "url": "https://code.claude.com/docs/en/hooks",
+      "last_checked": "2026-07-18",
+      "requires_fresh_check": true,
+      "local_conclusion": "Hooks are lifecycle automation with nested event/matcher/handler structure. Prefer command hooks for production enforcement."
+    },
+    {
+      "id": "claude-code-subagents",
+      "kind": "official-docs",
+      "trust": "primary",
+      "title": "Claude Code custom subagents",
+      "url": "https://code.claude.com/docs/en/sub-agents",
+      "last_checked": "2026-07-18",
+      "requires_fresh_check": true,
+      "local_conclusion": "Claude subagents are specialized workers with their own prompts, tools, permissions, and optional skills."
+    },
+    {
+      "id": "github-spec-kit",
+      "kind": "official-project-docs",
+      "trust": "primary",
+      "title": "GitHub Spec Kit",
+      "url": "https://github.github.io/spec-kit/",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": true,
+      "local_conclusion": "Use Spec -> Plan -> Tasks -> Implement artifacts when task intent and work graph need to be explicit and agent-agnostic."
+    },
+    {
+      "id": "local-spec-kit-snapshot",
+      "kind": "local-snapshot",
+      "trust": "project-sot",
+      "title": "Managed local GitHub Spec Kit snapshot",
+      "url": "https://github.com/github/spec-kit",
+      "local_path": "_reference/spec-kit/manifest.json",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": true,
+      "local_conclusion": "Keep a reviewed stable Spec Kit snapshot in the template and deploy projects through the official CLI at the pinned manifest ref."
+    },
+    {
+      "id": "trailofbits-claude-code-config",
+      "kind": "public-implementation",
+      "trust": "secondary",
+      "title": "Trail of Bits claude-code-config",
+      "url": "https://github.com/trailofbits/claude-code-config",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Treat agent setup as a continuous improvement loop: add rules, hooks, or skills only after real failures or repeated workflows."
+    },
+    {
+      "id": "humanlayer-claude-md",
+      "kind": "public-guidance",
+      "trust": "secondary",
+      "title": "HumanLayer - Writing a good CLAUDE.md",
+      "url": "https://www.humanlayer.dev/blog/writing-a-good-claude-md",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "CLAUDE.md/AGENTS.md is high leverage because it enters every session; keep it intentional and project-specific."
+    },
+    {
+      "id": "nx-ai-agent-skills",
+      "kind": "public-implementation",
+      "trust": "secondary",
+      "title": "Nx AI agent skills",
+      "url": "https://nx.dev/blog/nx-ai-agent-skills",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Move procedural monorepo knowledge into skills and keep MCP focused on live external systems."
+    },
+    {
+      "id": "anthropic-building-effective-agents",
+      "kind": "official-engineering",
+      "trust": "primary",
+      "title": "Anthropic - Building effective agents",
+      "url": "https://www.anthropic.com/engineering/building-effective-agents",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": true,
+      "local_conclusion": "Start simple, use workflows before autonomous agents, add parallelization/orchestrator-workers/evaluator loops only when they measurably improve the task."
+    },
+    {
+      "id": "anthropic-effective-context-engineering",
+      "kind": "official-engineering",
+      "trust": "primary",
+      "title": "Anthropic - Effective context engineering for AI agents",
+      "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents",
+      "last_checked": "2026-07-19",
+      "requires_fresh_check": true,
+      "local_conclusion": "Treat context as finite infrastructure: curate, isolate, compact, and give agents structured notes instead of dumping everything into one prompt."
+    },
+    {
+      "id": "anthropic-multi-agent-research-system",
+      "kind": "official-engineering",
+      "trust": "primary",
+      "title": "Anthropic - How we built our multi-agent research system",
+      "url": "https://www.anthropic.com/engineering/multi-agent-research-system",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": true,
+      "local_conclusion": "Use lead-agent orchestration with parallel specialized workers for broad research, then aggregate in the parent with explicit stop conditions and source quality checks."
+    },
+    {
+      "id": "martinfowler-context-engineering-coding-agents",
+      "kind": "public-guidance",
+      "trust": "primary",
+      "title": "Birgitta Boeckeler - Context Engineering for Coding Agents",
+      "url": "https://martinfowler.com/articles/exploring-gen-ai/context-engineering-coding-agents.html",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Separate principles, reference docs, how-tos, rules, and tool-fed dynamic context; developer experience now depends heavily on context enrichment."
+    },
+    {
+      "id": "martinfowler-harness-engineering",
+      "kind": "public-guidance",
+      "trust": "primary",
+      "title": "Birgitta Boeckeler - Harness engineering for coding agent users",
+      "url": "https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "A coding-agent harness combines feedforward guidance and feedback sensors. Improve the harness after repeated failures instead of relying on longer prompts."
+    },
+    {
+      "id": "thoughtworks-context-engineering-radar",
+      "kind": "public-guidance",
+      "trust": "secondary",
+      "title": "Thoughtworks Technology Radar - Context engineering",
+      "url": "https://www.thoughtworks.com/en-ca/radar/techniques/context-engineering",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Progressive context disclosure, structured external memory, subtask isolation, and just-in-time retrieval are now mainstream engineering practices."
+    },
+    {
+      "id": "arxiv-codified-context",
+      "kind": "research-paper",
+      "trust": "primary",
+      "title": "Vasilopoulos - Codified Context: Infrastructure for AI Agents in a Complex Codebase",
+      "url": "https://arxiv.org/abs/2602.20478",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Use a three-tier context system: hot-memory constitution, specialized agents, and cold-memory specification documents, validated across long-running sessions."
+    },
+    {
+      "id": "openreview-agentic-context-engineering",
+      "kind": "research-paper",
+      "trust": "primary",
+      "title": "Zhang et al. - Agentic Context Engineering",
+      "url": "https://openreview.net/forum?id=9EPY8DDQYv",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Context can evolve through generation, reflection, and curation, but systems need safeguards against brevity bias and context collapse."
+    },
+    {
+      "id": "steve-yegge-beads",
+      "kind": "public-implementation",
+      "trust": "secondary",
+      "title": "Steve Yegge - Introducing Beads",
+      "url": "https://steve-yegge.medium.com/introducing-beads-a-coding-agent-memory-system-637d7d92514a",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Use git-backed structured task graphs, dependencies, priorities, and compaction instead of decaying markdown plans for long agent work."
+    },
+    {
+      "id": "boris-tane-claude-code-workflow",
+      "kind": "public-guidance",
+      "trust": "secondary",
+      "title": "Boris Tane - How I Use Claude Code",
+      "url": "https://boristane.com/blog/how-i-use-claude-code/",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Use a research artifact, a real plan artifact, human annotations, and then uninterrupted execution with checks. The plan is the human-agent contract."
+    },
+    {
+      "id": "ian-bull-sinks-not-pipes",
+      "kind": "public-guidance",
+      "trust": "secondary",
+      "title": "Ian Bull - Sinks, Not Pipes",
+      "url": "https://ianbull.com/posts/software-architecture",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Agent-ready code favors deep modules, honest interfaces, discoverable boundaries, and contained side effects over hidden cascades."
+    },
+    {
+      "id": "ian-bull-working-memory-cliff",
+      "kind": "public-guidance",
+      "trust": "secondary",
+      "title": "Ian Bull - Finding the Working Memory Cliff",
+      "url": "https://ianbull.com/posts/working-memory-cliff",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Agents degrade when tracking too many independent items. Use tools, chunking, task decomposition, and external state instead of asking the model to remember everything."
+    },
+    {
+      "id": "ian-bull-planning-bottleneck",
+      "kind": "public-guidance",
+      "trust": "secondary",
+      "title": "Ian Bull - Planning Is Becoming the Bottleneck",
+      "url": "https://ianbull.com/posts/planning",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "When code gets cheap, judgment, sequencing, integration, and deciding what not to build become the bottleneck."
+    },
+    {
+      "id": "ian-bull-change-reviews",
+      "kind": "public-guidance",
+      "trust": "secondary",
+      "title": "Ian Bull - Code Reviews Are the Wrong Abstraction",
+      "url": "https://ianbull.com/posts/change-reviews",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Review intent, impact, risk, reversibility, and shared understanding, not just diff style. Automated style checks should move left."
+    },
+    {
+      "id": "humanlayer-12-factor-agents",
+      "kind": "public-implementation",
+      "trust": "secondary",
+      "title": "Dex Horthy / HumanLayer - 12 Factor Agents",
+      "url": "https://github.com/humanlayer/12-factor-agents",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Production agents should own prompts, own context, expose control flow, keep state explicit, use small focused loops, and pause/resume cleanly."
+    },
+    {
+      "id": "vuong-ngo-scaffolding-monorepo",
+      "kind": "public-guidance",
+      "trust": "secondary",
+      "title": "Vuong Ngo - Scaling AI-Assisted Development with Scaffolding",
+      "url": "https://dev.to/vuong_ngo/scaling-ai-assisted-development-how-scaffolding-solved-my-monorepo-chaos-1g1k",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Scaffolding and generators beat repeated prose instructions for enforcing conventions across large monorepos."
+    },
+    {
+      "id": "boris-cherny-customization-tips",
+      "kind": "public-guidance",
+      "trust": "secondary",
+      "title": "Boris Cherny - Claude Code customization tips summary",
+      "url": "https://www.mintlify.com/shanraisshan/claude-code-best-practice/tips/boris-cherny-tips",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "High-throughput agent work uses parallel sessions, custom agents, MCP/tools, hooks, permissions, status feedback, and deliberate model/effort selection."
+    },
+    {
+      "id": "arxiv-spec-kit-agents",
+      "kind": "research-paper",
+      "trust": "primary",
+      "title": "Spec Kit Agents: Context-Grounded Agentic Workflows",
+      "url": "https://arxiv.org/abs/2604.05278",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Spec-driven phases need repository-grounding hooks and validation hooks so agents do not produce context-blind specs, plans, or tasks."
+    },
+    {
+      "id": "arxiv-dive-into-claude-code",
+      "kind": "research-paper",
+      "trust": "primary",
+      "title": "Dive into Claude Code: The Design Space of Today's and Future AI Agent Systems",
+      "url": "https://arxiv.org/abs/2604.14228",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Modern coding agents are mostly harness: permissions, compaction, extensibility, delegation, storage, and isolation around a tool-using loop."
+    },
+    {
+      "id": "arxiv-agentic-context-description-language",
+      "kind": "research-paper",
+      "trust": "primary",
+      "title": "A Language for Describing Agentic LLM Contexts",
+      "url": "https://arxiv.org/abs/2605.01920",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Complex agents benefit from explicit descriptions of context structure and dynamics rather than informal, implicit prompt assembly."
+    },
+    {
+      "id": "arxiv-efficient-agents",
+      "kind": "research-paper",
+      "trust": "primary",
+      "title": "Efficient Agents: Building Effective Agents While Reducing Cost",
+      "url": "https://arxiv.org/abs/2508.02694",
+      "last_checked": "2026-05-26",
+      "requires_fresh_check": false,
+      "local_conclusion": "Agent design must track efficiency-effectiveness tradeoffs. Use cheaper deterministic steps, smaller agents, and selective high-effort reasoning."
+    }
+  ]
+}

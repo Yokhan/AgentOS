@@ -1,0 +1,20 @@
+{
+  "_comment": "Project-specific overrides. This file is NEVER touched by template sync.",
+  "_comment2": "Claude Code merges this with settings.json. Local settings take priority.",
+  "_comment3": "Add your project-specific hooks, permissions, and MCP servers here.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{
+          "type": "command",
+          "command": "echo 'Add your project-specific pre-edit hooks here'",
+          "timeout": 5
+        }]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": []
+  }
+}

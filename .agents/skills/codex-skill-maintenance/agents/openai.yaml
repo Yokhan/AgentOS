@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Skill Maintenance"
+  short_description: "Create and validate skills"
+  default_prompt: "Use $codex-skill-maintenance to create or repair this Codex skill."
+policy:
+  allow_implicit_invocation: true

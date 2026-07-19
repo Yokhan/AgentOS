@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Writing Workflow"
+  short_description: "Write in four purpose-specific semantic modes"
+  default_prompt: "Use $codex-writing-workflow to plan and produce a truthful purpose-solving text in the correct literary, marketing, informational, or communication mode."
+policy:
+  allow_implicit_invocation: true
