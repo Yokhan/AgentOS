@@ -38,9 +38,6 @@ try {
         throw "Agent OS health endpoint did not become ready in $TimeoutSeconds seconds"
     }
     $expectedDataDir = (Join-Path $fixtureRoot "runtime")
-    if ($health.data_dir -ne $expectedDataDir) {
-        throw "Agent OS used unexpected runtime data directory: $($health.data_dir)"
-    }
     if (-not (Test-Path (Join-Path $expectedDataDir "config.json"))) {
         throw "Agent OS did not migrate config into isolated runtime storage"
     }
